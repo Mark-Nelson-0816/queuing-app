@@ -13,13 +13,17 @@
 
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
+  --primary-light: #dbeafe;
 
   --success: #16a34a;
+  --success-light: #dcfce7;
   --warning: #f59e0b;
+  --warning-light: #fef3c7;
   --danger: #dc2626;
+  --danger-light: #fee2e2;
 
-  --shadow:
-    rgba(15, 23, 42, 0.08) 0 10px 25px;
+  --shadow: rgba(15, 23, 42, 0.08) 0 10px 25px;
+  --shadow-lg: rgba(15, 23, 42, 0.12) 0 15px 35px;
 
   --sans: "Segoe UI", Inter, system-ui, sans-serif;
 
@@ -33,7 +37,6 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
-
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -49,21 +52,23 @@
 
     --primary: #3b82f6;
     --primary-hover: #60a5fa;
+    --primary-light: #1e3a5f;
 
     --success: #22c55e;
+    --success-light: #14532d;
     --warning: #fbbf24;
+    --warning-light: #451a03;
     --danger: #ef4444;
+    --danger-light: #450a0a;
 
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 25px; */
+    --shadow: rgba(0, 0, 0, 0.4) 0 10px 25px;
+    --shadow-lg: rgba(0, 0, 0, 0.5) 0 15px 35px; */
   }
 }
-
 
 * {
   box-sizing: border-box;
 }
-
 
 body {
   margin: 0;
@@ -71,12 +76,10 @@ body {
   background: var(--bg);
 }
 
-
 #root {
   min-height: 100vh;
   width: 100%;
 }
-
 
 h1,
 h2,
@@ -86,7 +89,27 @@ h3 {
   font-weight: 600;
 }
 
-
 button {
   font-family: inherit;
+  cursor: pointer;
 }
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text);
+}
+
