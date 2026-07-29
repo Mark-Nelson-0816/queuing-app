@@ -43,11 +43,11 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
             + Add Player
           </button>
           <button
-      onClick={() => onStartMatch?.()}
-      className="px-5 py-2.5 rounded-xl bg-[var(--success)] text-white"
-    >
-      Start Match
-    </button>
+            onClick={() => onStartMatch?.()}
+            className="px-5 py-2.5 rounded-xl bg-[var(--success)] text-white"
+          >
+            Start Match
+          </button>
         </div>
       </div>
 

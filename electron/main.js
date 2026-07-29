@@ -14,6 +14,16 @@ import {
 } from "../database/queueQueries.js";
 import { addPlayer } from "../database/playerQueries.js";
 import { addPlayerToQueue } from "../database/queueQueries.js";
+import { createMatch } from "../database/matchQueries.js";
+import {
+  getAvailableCourt,
+  updateCourtStatus,
+  addCourt,
+  removeCourt
+} from "../database/courtQueries.js";
+import {
+  endMatch
+} from "../database/matchQueries.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,6 +69,19 @@ ipcMain.handle("get-courts", () => {
   return courts;
 });
 
+ipcMain.handle("add-court", (event, name)=>{
+
+    return addCourt(name);
+
+});
+
+
+ipcMain.handle("remove-court", (event, id)=>{
+
+    return removeCourt(id);
+
+});
+
 //queue
 ipcMain.handle("get-queue", () => {
 
@@ -94,6 +117,75 @@ ipcMain.handle("add-player", (event, name) => {
   return {
     success: true,
     id: playerId
+  };
+
+});
+
+//matches
+ipcMain.handle("create-match", () => {
+
+  const queue = getQueue();
+
+
+  // get only waiting players
+  const waitingPlayers = queue.filter(
+    player => player.status === "waiting"
+  );
+
+
+  if(waitingPlayers.length < 2){
+    return {
+      error: "Not enough players"
+    };
+  }
+
+
+  const court = getAvailableCourt();
+
+
+  if(!court){
+    return {
+      error: "No available court"
+    };
+  }
+
+
+  const player1 = waitingPlayers[0];
+  const player2 = waitingPlayers[1];
+
+
+  const match = createMatch({
+    courtId: court.id,
+    playerOne: player1.player_id,
+    playerTwo: player2.player_id
+  });
+
+
+  updateCourtStatus(
+    court.id,
+    "playing"
+  );
+
+
+  return {
+    success:true,
+    match
+  };
+
+});
+
+ipcMain.handle("end-match", (event, courtId)=>{
+
+  endMatch(courtId);
+
+  updateCourtStatus(
+    courtId,
+    "available"
+  );
+
+
+  return {
+    success:true
   };
 
 });

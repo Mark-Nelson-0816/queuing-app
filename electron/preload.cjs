@@ -14,7 +14,13 @@ contextBridge.exposeInMainWorld("api", {
 
   // Courts
   getCourts: () =>
-    ipcRenderer.invoke("get-courts"),
+      ipcRenderer.invoke("get-courts"),
+
+  addCourt: (name) =>
+      ipcRenderer.invoke("add-court", name),
+
+  removeCourt: (id) =>
+      ipcRenderer.invoke("remove-court", id),
 
 
 
@@ -28,5 +34,13 @@ contextBridge.exposeInMainWorld("api", {
   removeQueue: (id) =>
     ipcRenderer.invoke("remove-queue", id),
 
+  //matches
+  createMatch: () =>
+    ipcRenderer.invoke("create-match"),
+  endMatch:(courtId)=>
+    ipcRenderer.invoke(
+      "end-match",
+      courtId
+    )
 
 });

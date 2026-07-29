@@ -4,45 +4,120 @@ import CourtCard from "../components/CourtCard";
 export default function Courts() {
 
   const [courts, setCourts] = useState([]);
+  const [courtName, setCourtName] = useState("");
+  const [message, setMessage] = useState("");
+
+
+  async function loadCourts(){
+
+    const data = await window.api.getCourts();
+
+    console.log("Received courts:", data);
+
+    setCourts(data);
+
+  }
 
 
   useEffect(() => {
-
-    async function loadCourts(){
-
-      const data = await window.api.getCourts();
-
-      console.log("Received courts:", data);
-
-      setCourts(data);
-
-    }
 
     loadCourts();
 
   }, []);
 
 
-  const handleEndMatch = (courtId) => {
 
-    setCourts((prev) =>
-      prev.map((court) =>
-        court.id === courtId
-          ? {
-              ...court,
-              status: "available",
-              players: []
-            }
-          : court
-      )
-    );
+  const handleAddCourt = async()=>{
+
+    if(!courtName.trim()) return;
+
+
+    await window.api.addCourt(courtName);
+
+
+    setCourtName("");
+
+    loadCourts();
 
   };
+
+
+
+  const handleRemoveCourt = async(id)=>{
+
+    const court = courts.find(
+      c => c.id === id
+    );
+
+
+    if(court.status === "playing"){
+
+      setMessage("Cannot remove a court currently playing");
+
+      setTimeout(()=>{
+        setMessage("");
+      },3000);
+
+      return;
+    }
+
+
+    await window.api.removeCourt(id);
+
+
+    loadCourts();
+
+  };
+
+
+
+  const handleEndMatch = async(courtId)=>{
+
+    await window.api.endMatch(courtId);
+
+
+    loadCourts();
+
+  };
+
 
 
   return (
     <div className="space-y-6">
 
+
+      {
+        message &&
+        <div className="bg-red-500 text-white px-4 py-3 rounded-xl">
+          {message}
+        </div>
+      }
+
+
+
+      {/* Add Court */}
+      <div className="flex gap-3">
+
+        <input
+          value={courtName}
+          onChange={(e)=>setCourtName(e.target.value)}
+          placeholder="Enter court name"
+          className="px-4 py-2 rounded-xl border"
+        />
+
+
+        <button
+          onClick={handleAddCourt}
+          className="px-5 py-2 rounded-xl bg-green-500 text-white"
+        >
+          Add Court
+        </button>
+
+      </div>
+
+
+
+      {/* Stats */}
       <div className="flex items-center gap-4 flex-wrap">
 
         <div>
@@ -53,6 +128,7 @@ export default function Courts() {
           }
         </div>
 
+
         <div>
           Available: {
             courts.filter(
@@ -61,6 +137,7 @@ export default function Courts() {
           }
         </div>
 
+
         <div>
           Total Courts: {courts.length}
         </div>
@@ -68,17 +145,33 @@ export default function Courts() {
       </div>
 
 
+
+
+      {/* Court Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-        {courts.map((court) => (
-          <CourtCard
-            key={court.id}
-            court={court}
-            onEndMatch={handleEndMatch}
-          />
-        ))}
+
+        {
+          courts.map((court)=>(
+
+            <CourtCard
+
+              key={court.id}
+
+              court={court}
+
+              onEndMatch={handleEndMatch}
+
+              onRemoveCourt={handleRemoveCourt}
+
+            />
+
+          ))
+        }
+
 
       </div>
+
 
     </div>
   );

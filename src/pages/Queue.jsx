@@ -6,19 +6,12 @@ export default function Queue() {
 
   const [queue, setQueue] = useState([]);
 
-
   useEffect(() => {
-
     async function loadQueue(){
-
       const data = await window.api.getQueue();
-
       console.log("Queue data:", data);
-
       setQueue(data);
-
     }
-
 
     loadQueue();
 
@@ -41,14 +34,22 @@ export default function Queue() {
 
   const handleAddPlayer = async (name) => {
 
-  await window.api.addPlayer(name);
+    await window.api.addPlayer(name);
+    const updatedQueue = await window.api.getQueue();
+    setQueue(updatedQueue);
+  };
 
-
-  const updatedQueue = await window.api.getQueue();
-
-  setQueue(updatedQueue);
-
-};
+  const handleStartMatch = async()=>{
+    const result = await window.api.createMatch();
+    if(result.error){
+        alert(result.error);
+        return;
+    }
+    console.log(result);
+    const updatedQueue =
+        await window.api.getQueue();
+    setQueue(updatedQueue);
+  };
 
   return (
     <div className="space-y-6">
@@ -57,6 +58,7 @@ export default function Queue() {
         queue={queue}
         onAddPlayer={handleAddPlayer}
         onRemovePlayer={handleRemovePlayer}
+        onStartMatch={handleStartMatch}
       />
 
 
