@@ -1,29 +1,51 @@
+import { useEffect, useState } from "react";
 import PublicDisplay from "../components/PublicDisplay";
 
-const dummyCourts = [
-  { id: 1, number: 1, status: "Playing", players: ["John Smith", "Sarah Johnson"] },
-  { id: 2, number: 2, status: "Playing", players: ["Mike Chen", "Emma Wilson"] },
-  { id: 3, number: 3, status: "Available", players: [] },
-  { id: 4, number: 4, status: "Available", players: [] },
-  { id: 5, number: 5, status: "Available", players: [] },
-  { id: 6, number: 6, status: "Available", players: [] },
-];
-
-const dummyNextQueue = [
-  { id: 1, name: "David Lee", timeJoined: "10:32 AM" },
-  { id: 2, name: "Lisa Park", timeJoined: "10:35 AM" },
-  { id: 3, name: "James Brown", timeJoined: "10:38 AM" },
-  { id: 4, name: "Anna Martinez", timeJoined: "10:40 AM" },
-  { id: 5, name: "Tom Wilson", timeJoined: "10:42 AM" },
-  { id: 6, name: "Nina Patel", timeJoined: "10:45 AM" },
-  { id: 7, name: "Ryan Kim", timeJoined: "10:47 AM" },
-  { id: 8, name: "Olivia Taylor", timeJoined: "10:50 AM" },
-  { id: 9, name: "Kevin Nguyen", timeJoined: "10:52 AM" },
-];
-
 export default function PublicDisplayPage() {
-  return (
-    <PublicDisplay courts={dummyCourts} queueNext={dummyNextQueue} />
-  );
+  const [courts, setCourts] = useState([]);
+  const [queueNext, setQueueNext] = useState([]);
+
+  function formatTime(dateStr) {
+    if (!dateStr) return "";
+    const date = new Date(dateStr + "Z");
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [courtsData, queueData] = await Promise.all([
+          window.api.getCourts(),
+          window.api.getQueue(),
+        ]);
+
+        setCourts(courtsData);
+
+        // Map queue data to match PublicDisplay's expected format
+        const mappedQueue = queueData.map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          timeJoined: formatTime(entry.joined_at),
+        }));
+
+        setQueueNext(mappedQueue);
+      } catch (err) {
+        console.error("Failed to load public display data:", err);
+      }
+    }
+
+    // Load immediately
+    loadData();
+
+    // Refresh every 10 seconds to stay up-to-date
+    const interval = setInterval(loadData, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return <PublicDisplay courts={courts} queueNext={queueNext} />;
 }
 
