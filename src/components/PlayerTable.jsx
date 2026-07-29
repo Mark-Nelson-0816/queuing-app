@@ -22,7 +22,7 @@ export default function PlayerTable({ players }) {
           <tbody>
             {players.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-12 text-[var(--text)]">
+                <td colSpan={4} className="text-center py-12 text-[var(--text)]">
                   <div className="flex flex-col items-center gap-2">
                     <span className="text-3xl">👥</span>
                     <p className="text-sm font-medium">No players registered</p>
@@ -55,14 +55,14 @@ export default function PlayerTable({ players }) {
                   <td className="px-4 py-4">
                     <span
                       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
-                        player.status === "Active"
+                        player.status === "active"
                           ? "bg-[var(--success-light)] text-[var(--success)]"
                           : "bg-[var(--surface-hover)] text-[var(--text)]"
                       }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full ${
-                          player.status === "Waiting" ? "bg-[var(--success)]" : "bg-[var(--text)]"
+                          player.status === "waiting" ? "bg-[var(--success)]" : "bg-[var(--text)]"
                         }`}
                       />
                       {player.status}

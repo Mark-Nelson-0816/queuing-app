@@ -17,9 +17,8 @@ export default function CourtCard({
       border
       border-[var(--border)]
       p-5
-      transition-all
-      duration-200
-      hover:shadow-[var(--shadow)]
+      flex
+      flex-col
       "
     >
 
@@ -75,73 +74,49 @@ export default function CourtCard({
       {/* Players */}
 
       {
-        court.players &&
-        court.players.length > 0 ?
+        court.players && court.players.length > 0 ? (
+          <div className="flex-1 space-y-2 mb-4">
+            <p className="text-xs font-medium text-[var(--text)] uppercase">
+              Players
+            </p>
 
-        (
-
-        <div className="space-y-2 mb-4">
-
-          <p className="text-xs font-medium text-[var(--text)] uppercase">
-            Players
-          </p>
-
-
-          <div className="flex flex-wrap gap-2">
-
-
-            {
-              court.players.map((player,index)=>(
-
-                <span
-                  key={index}
-                  className="
-                  inline-flex items-center gap-2
-                  px-3 py-1.5
-                  bg-[var(--surface-hover)]
-                  rounded-lg
-                  text-sm
-                  "
-                >
-
+            <div className="flex flex-col gap-2">
+              {
+                court.players.map((player,index)=>(
                   <span
+                    key={index}
                     className="
-                    w-6 h-6
-                    rounded-full
-                    bg-[var(--primary)]
-                    text-white
-                    flex items-center justify-center
-                    text-xs
+                    inline-flex items-center gap-2
+                    px-3 py-1.5
+                    bg-[var(--surface-hover)]
+                    rounded-lg
+                    text-sm
                     "
                   >
-                    {player.charAt(0)}
+                    <span
+                      className="
+                      w-6 h-6
+                      rounded-full
+                      bg-[var(--primary)]
+                      text-white
+                      flex items-center justify-center
+                      text-xs
+                      "
+                    >
+                      {player.charAt(0)}
+                    </span>
+
+                    {player}
                   </span>
-
-
-                  {player}
-
-                </span>
-
-              ))
-            }
-
-
+                ))
+              }
+            </div>
           </div>
-
-        </div>
-
+        ) : (
+          <div className="flex-1 flex items-center justify-center mb-4 text-sm text-[var(--text)]">
+            No players assigned
+          </div>
         )
-
-        :
-
-        (
-
-        <div className="mb-4 py-3 text-center text-sm text-[var(--text)]">
-          No players assigned
-        </div>
-
-        )
-
       }
 
 
@@ -149,7 +124,7 @@ export default function CourtCard({
 
 
       {/* Timer */}
-
+{/* 
       {
         !isAvailable &&
 
@@ -166,7 +141,7 @@ export default function CourtCard({
 
         </div>
 
-      }
+      } */}
 
 
 

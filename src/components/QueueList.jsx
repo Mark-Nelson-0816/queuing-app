@@ -103,7 +103,7 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
                       <span className="text-sm font-medium text-[var(--text-h)]">{player.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-[var(--text)]">{player.timeJoined}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text)]">{player.joined_at}</td>
                   <td className="px-4 py-4">
                     <span
                       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
