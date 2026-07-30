@@ -175,7 +175,7 @@ export function endRoundRobinMatch(matchId, courtId) {
     // Free the court
     db.prepare(`
       UPDATE courts
-      SET status = 'available', current_match_id = NULL
+      SET status = 'available'
       WHERE id = ?
     `).run(courtId);
   });

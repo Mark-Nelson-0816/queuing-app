@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS courts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     status TEXT DEFAULT 'available',
-    current_match_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

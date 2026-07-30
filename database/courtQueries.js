@@ -8,17 +8,23 @@ export function getCourts(){
       courts.id,
       courts.name,
       courts.status,
-      GROUP_CONCAT(players.name) AS players
+      GROUP_CONCAT(DISTINCT players.name) AS players
 
     FROM courts
 
-    LEFT JOIN matches
-      ON matches.court_id = courts.id
-      AND matches.status = 'playing'
+    LEFT JOIN (
+      SELECT court_id, player_one AS player_id FROM matches WHERE status = 'playing'
+      UNION
+      SELECT court_id, player_two AS player_id FROM matches WHERE status = 'playing'
+      UNION
+      SELECT court_id, player_one_id AS player_id FROM round_robin_matches WHERE status = 'playing'
+      UNION
+      SELECT court_id, player_two_id AS player_id FROM round_robin_matches WHERE status = 'playing'
+    ) AS active_players
+      ON active_players.court_id = courts.id
 
     LEFT JOIN players
-      ON players.id = matches.player_one
-      OR players.id = matches.player_two
+      ON players.id = active_players.player_id
 
     GROUP BY courts.id
 
@@ -83,6 +89,11 @@ export function removeCourt(id){
         WHERE court_id = ?
     `).run(id);
 
+    db.prepare(`
+        UPDATE round_robin_matches
+        SET court_id = NULL, status = 'pending'
+        WHERE court_id = ?
+    `).run(id);
 
     return db.prepare(`
         DELETE FROM courts
