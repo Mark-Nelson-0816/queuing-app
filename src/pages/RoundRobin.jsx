@@ -94,6 +94,15 @@ export default function RoundRobin() {
     setTimeout(() => setMessage(""), 3000);
   }
 
+  // Build a set of player IDs that are currently playing (busy)
+  const busyPlayerIds = new Set();
+  matches
+    .filter((m) => m.status === "playing")
+    .forEach((m) => {
+      busyPlayerIds.add(m.player_one_id);
+      busyPlayerIds.add(m.player_two_id);
+    });
+
   const pendingCount = matches.filter((m) => m.status === "pending").length;
   const playingCount = matches.filter((m) => m.status === "playing").length;
   const completedCount = matches.filter((m) => m.status === "completed").length;
@@ -250,12 +259,23 @@ export default function RoundRobin() {
                     </td>
                     <td className="px-4 py-4 text-right">
                       {match.status === "pending" && (
-                        <button
-                          onClick={() => handleAssignToCourt(match.id)}
-                          className="px-3 py-1.5 rounded-lg bg-[var(--success)] text-white text-xs font-semibold hover:opacity-80 transition-opacity"
-                        >
-                          Assign to Court
-                        </button>
+                        (() => {
+                          const isPlayerBusy = busyPlayerIds.has(match.player_one_id) || busyPlayerIds.has(match.player_two_id);
+                          return (
+                            <button
+                              onClick={() => !isPlayerBusy && handleAssignToCourt(match.id)}
+                              disabled={isPlayerBusy}
+                              title={isPlayerBusy ? "One of the players is already playing. End that match first." : "Assign to an available court"}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity ${
+                                isPlayerBusy
+                                  ? "bg-[var(--surface-hover)] text-[var(--text)] cursor-not-allowed"
+                                  : "bg-[var(--success)] text-white hover:opacity-80"
+                              }`}
+                            >
+                              {isPlayerBusy ? "Player Busy" : "Assign to Court"}
+                            </button>
+                          );
+                        })()
                       )}
                       {match.status === "playing" && match.court_id && (
                         <button

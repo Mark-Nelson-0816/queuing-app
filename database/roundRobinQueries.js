@@ -82,6 +82,7 @@ export function getRoundRobinMatches() {
 /**
  * Assign a round robin match to a court
  * Sets status to 'playing' and records court_id
+ * Prevents assignment if either player is already playing in another match
  */
 export function assignMatchToCourt(matchId, courtId) {
   const court = db.prepare(`
@@ -93,11 +94,26 @@ export function assignMatchToCourt(matchId, courtId) {
   }
 
   const match = db.prepare(`
-    SELECT id, status FROM round_robin_matches WHERE id = ?
+    SELECT id, status, player_one_id, player_two_id FROM round_robin_matches WHERE id = ?
   `).get(matchId);
 
   if (!match || match.status !== "pending") {
     return { success: false, error: "Match is not pending" };
+  }
+
+  // Check if either player is already in a "playing" match
+  const activeMatch = db.prepare(`
+    SELECT id FROM round_robin_matches
+    WHERE status = 'playing'
+    AND (player_one_id = ? OR player_two_id = ? OR player_one_id = ? OR player_two_id = ?)
+    LIMIT 1
+  `).get(
+    match.player_one_id, match.player_one_id,
+    match.player_two_id, match.player_two_id
+  );
+
+  if (activeMatch) {
+    return { success: false, error: "One of the players is already playing in another match" };
   }
 
   const transaction = db.transaction(() => {
