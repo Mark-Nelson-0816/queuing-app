@@ -6,12 +6,19 @@ const statusColors = {
   completed: "bg-[var(--success-light)] text-[var(--success)]",
 };
 
+const levelStyles = {
+  Beginner: "bg-blue-100 text-blue-700",
+  Intermediate: "bg-amber-100 text-amber-700",
+  Advanced: "bg-purple-100 text-purple-700",
+};
+
 export default function RoundRobin() {
   const [players, setPlayers] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [matches, setMatches] = useState([]);
   const [courts, setCourts] = useState([]);
   const [message, setMessage] = useState("");
+  const [levelFilter, setLevelFilter] = useState("All");
 
   async function loadData() {
     const allPlayers = await window.api.getRRPlayers();
@@ -62,7 +69,6 @@ export default function RoundRobin() {
   }
 
   async function handleAssignToCourt(matchId) {
-    // Find the first available court
     const availableCourt = courts.find((c) => c.status === "available");
     if (!availableCourt) {
       setMessage("No available court. Please free up a court first.");
@@ -103,9 +109,17 @@ export default function RoundRobin() {
       busyPlayerIds.add(m.player_two_id);
     });
 
-  const pendingCount = matches.filter((m) => m.status === "pending").length;
-  const playingCount = matches.filter((m) => m.status === "playing").length;
-  const completedCount = matches.filter((m) => m.status === "completed").length;
+  // Filter matches by level
+  const filteredMatches = levelFilter === "All"
+    ? matches
+    : matches.filter((m) => m.player_one_level === levelFilter);
+
+  const pendingCount = filteredMatches.filter((m) => m.status === "pending").length;
+  const playingCount = filteredMatches.filter((m) => m.status === "playing").length;
+  const completedCount = filteredMatches.filter((m) => m.status === "completed").length;
+
+  // Get unique levels present in the matches
+  const matchLevels = ["All", ...new Set(matches.map((m) => m.player_one_level).filter(Boolean))];
 
   return (
     <div className="space-y-6">
@@ -119,7 +133,7 @@ export default function RoundRobin() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
-          <p className="text-2xl font-bold">{matches.length}</p>
+          <p className="text-2xl font-bold">{filteredMatches.length}</p>
           <p className="text-sm text-[var(--text)]">Total Matches</p>
         </div>
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
@@ -197,16 +211,30 @@ export default function RoundRobin() {
 
       {/* Matches List */}
       <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] overflow-hidden">
-        <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+        <div className="p-4 border-b border-[var(--border)] flex items-center justify-between flex-wrap gap-3">
           <h3 className="font-semibold text-[var(--text-h)]">Round Robin Matches</h3>
-          {matches.length > 0 && (
-            <button
-              onClick={handleClearMatches}
-              className="px-4 py-1.5 rounded-lg bg-[var(--danger-light)] text-[var(--danger)] text-xs font-semibold hover:opacity-80"
+          <div className="flex items-center gap-3">
+            {/* Level Filter */}
+            <select
+              value={levelFilter}
+              onChange={(e) => setLevelFilter(e.target.value)}
+              className="px-3 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-sm text-[var(--text)]"
             >
-              Clear Pending
-            </button>
-          )}
+              {matchLevels.map((level) => (
+                <option key={level} value={level}>
+                  {level === "All" ? "All Levels" : level}
+                </option>
+              ))}
+            </select>
+            {matches.length > 0 && (
+              <button
+                onClick={handleClearMatches}
+                className="px-4 py-1.5 rounded-lg bg-[var(--danger-light)] text-[var(--danger)] text-xs font-semibold hover:opacity-80"
+              >
+                Clear Pending
+              </button>
+            )}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -215,19 +243,24 @@ export default function RoundRobin() {
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">#</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Player 1</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Player 2</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Level</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {matches.length === 0 ? (
+              {filteredMatches.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="text-center py-12 text-[var(--text)]">
-                    <p className="text-sm">No matches generated yet. Select players and generate matches.</p>
+                  <td colSpan={6} className="text-center py-12 text-[var(--text)]">
+                    <p className="text-sm">
+                      {levelFilter === "All"
+                        ? "No matches generated yet. Select players and generate matches."
+                        : `No ${levelFilter} matches found.`}
+                    </p>
                   </td>
                 </tr>
               ) : (
-                matches.map((match, index) => (
+                filteredMatches.map((match, index) => (
                   <tr
                     key={match.id}
                     className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--surface-hover)]/50 transition-colors"
@@ -255,6 +288,15 @@ export default function RoundRobin() {
                     </td>
                     <td className="px-4 py-4">
                       <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          levelStyles[match.player_one_level] || "bg-[var(--surface-hover)] text-[var(--text)]"
+                        }`}
+                      >
+                        {match.player_one_level}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span
                         className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
                           statusColors[match.status] || "bg-[var(--surface-hover)] text-[var(--text)]"
                         }`}
@@ -263,14 +305,20 @@ export default function RoundRobin() {
                       </span>
                     </td>
                     <td className="px-4 py-4 text-right">
-                      {match.status === "pending" && (
+                      {match.status === "pending" &&
                         (() => {
-                          const isPlayerBusy = busyPlayerIds.has(match.player_one_id) || busyPlayerIds.has(match.player_two_id);
+                          const isPlayerBusy =
+                            busyPlayerIds.has(match.player_one_id) ||
+                            busyPlayerIds.has(match.player_two_id);
                           return (
                             <button
                               onClick={() => !isPlayerBusy && handleAssignToCourt(match.id)}
                               disabled={isPlayerBusy}
-                              title={isPlayerBusy ? "One of the players is already playing. End that match first." : "Assign to an available court"}
+                              title={
+                                isPlayerBusy
+                                  ? "One of the players is already playing. End that match first."
+                                  : "Assign to an available court"
+                              }
                               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity ${
                                 isPlayerBusy
                                   ? "bg-[var(--surface-hover)] text-[var(--text)] cursor-not-allowed"
@@ -280,8 +328,7 @@ export default function RoundRobin() {
                               {isPlayerBusy ? "Player Busy" : "Assign to Court"}
                             </button>
                           );
-                        })()
-                      )}
+                        })()}
                       {match.status === "playing" && match.court_id && (
                         <button
                           onClick={() => handleEndMatch(match.id, match.court_id)}
