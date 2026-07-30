@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT
 );
 
+
+CREATE TABLE IF NOT EXISTS round_robin_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_one_id INTEGER NOT NULL,
+    player_two_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending',
+    court_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (player_one_id) REFERENCES players(id),
+    FOREIGN KEY (player_two_id) REFERENCES players(id),
+    FOREIGN KEY (court_id) REFERENCES courts(id)
+);
+
 `);
 
 });

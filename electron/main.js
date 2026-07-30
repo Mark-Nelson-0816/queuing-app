@@ -22,6 +22,14 @@ import {
 import {
   endMatch
 } from "../database/matchQueries.js";
+import {
+  getAllPlayers,
+  generateRoundRobinMatches,
+  saveRoundRobinMatches,
+  getRoundRobinMatches,
+  assignMatchToCourt,
+  endRoundRobinMatch
+} from "../database/roundRobinQueries.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -143,6 +151,29 @@ ipcMain.handle("end-match", (event, courtId)=>{
     success:true
   };
 
+});
+
+// Round Robin
+ipcMain.handle("get-rr-players", () => {
+  return getAllPlayers();
+});
+
+ipcMain.handle("generate-rr-matches", (event, playerIds) => {
+  const matches = generateRoundRobinMatches(playerIds);
+  saveRoundRobinMatches(matches);
+  return { success: true };
+});
+
+ipcMain.handle("get-rr-matches", () => {
+  return getRoundRobinMatches();
+});
+
+ipcMain.handle("assign-rr-match", (event, matchId, courtId) => {
+  return assignMatchToCourt(matchId, courtId);
+});
+
+ipcMain.handle("end-rr-match", (event, matchId, courtId) => {
+  return endRoundRobinMatch(matchId, courtId);
 });
 
 app.whenReady().then(() => {

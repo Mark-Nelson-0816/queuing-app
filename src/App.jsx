@@ -3,6 +3,7 @@ import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import Dashboard from "./pages/Dashboard";
 import Queue from "./pages/Queue";
+import RoundRobin from "./pages/RoundRobin";
 import Courts from "./pages/Courts";
 import Players from "./pages/Players";
 import PublicDisplayPage from "./pages/PublicDisplayPage";
@@ -10,6 +11,7 @@ import PublicDisplayPage from "./pages/PublicDisplayPage";
 const pageTitles = {
   dashboard: "Dashboard",
   queue: "Queue Management",
+  roundrobin: "Round Robin",
   courts: "Court Management",
   players: "Player Management",
   public: "Public Display",
@@ -38,6 +40,8 @@ function App() {
         return <Dashboard />;
       case "queue":
         return <Queue />;
+      case "roundrobin":
+        return <RoundRobin />;
       case "courts":
         return <Courts />;
       case "players":

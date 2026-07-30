@@ -41,6 +41,18 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke(
       "end-match",
       courtId
-    )
+    ),
+
+  // Round Robin
+  getRRPlayers: () =>
+    ipcRenderer.invoke("get-rr-players"),
+  generateRRMatches: (playerIds) =>
+    ipcRenderer.invoke("generate-rr-matches", playerIds),
+  getRRMatches: () =>
+    ipcRenderer.invoke("get-rr-matches"),
+  assignRRMatch: (matchId, courtId) =>
+    ipcRenderer.invoke("assign-rr-match", matchId, courtId),
+  endRRMatch: (matchId, courtId) =>
+    ipcRenderer.invoke("end-rr-match", matchId, courtId)
 
 });
