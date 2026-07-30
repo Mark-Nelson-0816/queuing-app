@@ -37,7 +37,7 @@ export function isPlayerInQueue(playerId) {
 }
 
 export function addToQueue(playerId) {
-  // Prevent duplicate entries
+  
   if (isPlayerInQueue(playerId)) {
     return { success: false, error: "Player is already in the queue" };
   }

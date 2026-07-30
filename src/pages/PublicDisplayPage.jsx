@@ -24,7 +24,7 @@ export default function PublicDisplayPage() {
 
         setCourts(courtsData);
 
-        // Map queue data to match PublicDisplay's expected format
+        
         const mappedQueue = queueData.map((entry) => ({
           id: entry.id,
           name: entry.name,
@@ -37,10 +37,10 @@ export default function PublicDisplayPage() {
       }
     }
 
-    // Load immediately
+    
     loadData();
 
-    // Refresh every 10 seconds to stay up-to-date
+    
     const interval = setInterval(loadData, 10000);
 
     return () => clearInterval(interval);

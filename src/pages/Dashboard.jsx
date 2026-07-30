@@ -10,16 +10,15 @@ const summaryData = [
 export default function Dashboard() {
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryData.map((card) => (
           <DashboardCard key={card.id} {...card} />
         ))}
       </div>
 
-      {/* Quick Overview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity */}
+
         <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-6">
           <h3 className="text-lg font-bold text-[var(--text-h)] mb-4">Recent Activity</h3>
           <div className="space-y-4">
@@ -40,7 +39,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Court Status Overview */}
         <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-6">
           <h3 className="text-lg font-bold text-[var(--text-h)] mb-4">Court Status</h3>
           <div className="space-y-3">

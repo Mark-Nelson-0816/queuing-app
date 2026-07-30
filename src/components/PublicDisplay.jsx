@@ -23,22 +23,22 @@ const COURT_COLS = {
 };
 
 export default function PublicDisplay({ courts = demoCourts, queueNext = demoQueue }) {
-  // Normalize: handle both uppercase 'Playing' (old dummy data) and lowercase 'playing' (database)
+  
   const activeCourts = courts;
-  // const activeCourts = courts.filter((c) => {
-  //   const status = (c.status || "").toLowerCase();
-  //   return status === "playing";
-  // });
+  
+  
+  
+  
 
-  // Pick a column count that keeps everything on screen: 1 court -> 1 col,
-  // 2-4 courts -> 2 cols, 5-6 courts -> 3 cols (2 rows), giving each card
-  // more room to breathe as the grid fills up horizontally instead of
-  // stacking indefinitely and pushing content off screen.
+  
+  
+  
+  
   const courtColCount =
     activeCourts.length <= 1 ? 1 : activeCourts.length <= 4 ? 2 : 3;
   const courtGridCols = COURT_COLS[courtColCount];
 
-  // Compact card styles once we're past 4 courts, so 6 courts still fits.
+  
   const dense = activeCourts.length > 4;
 
   useEffect(() => {
@@ -57,7 +57,7 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
 
   return (
     <div className="h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)] p-5 flex flex-col gap-4">
-      {/* Header */}
+
       <div className="shrink-0 flex items-center justify-between border-b border-[var(--border)] pb-3">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold text-[var(--text-h)]">
@@ -83,7 +83,7 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
       </div>
 
       <div className="grid grid-cols-4 gap-4 flex-1 min-h-0">
-        {/* Current Matches */}
+
         <div className="col-span-3 min-h-0 flex flex-col gap-3">
           <h2 className="shrink-0 text-xl font-semibold uppercase tracking-wide text-[var(--text-h)]">
             Currently Playing
@@ -137,7 +137,7 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
                     }`}
                   >
                     {court.players?.length === 2 ? (
-                      // Singles: player / VS / player, stacked vertically.
+
                       <>
                         <div className="flex items-center gap-2 bg-[var(--surface-hover)] rounded-xl overflow-hidden p-2.5">
                           <span
@@ -214,7 +214,6 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
           )}
         </div>
 
-        {/* Queue */}
         <div className="min-h-0 flex flex-col gap-3">
           <h2 className="shrink-0 text-xl font-semibold uppercase tracking-wide text-[var(--text-h)]">
             Next Up

@@ -100,7 +100,7 @@ export default function RoundRobin() {
     setTimeout(() => setMessage(""), 3000);
   }
 
-  // Build a set of player IDs that are currently playing (busy)
+  
   const busyPlayerIds = new Set();
   matches
     .filter((m) => m.status === "playing")
@@ -109,7 +109,7 @@ export default function RoundRobin() {
       busyPlayerIds.add(m.player_two_id);
     });
 
-  // Filter matches by level
+  
   const filteredMatches = levelFilter === "All"
     ? matches
     : matches.filter((m) => m.player_one_level === levelFilter);
@@ -118,14 +118,8 @@ export default function RoundRobin() {
   const playingCount = filteredMatches.filter((m) => m.status === "playing").length;
   const completedCount = filteredMatches.filter((m) => m.status === "completed").length;
 
-  // Get unique levels present in the matches
   const matchLevels = ["All", ...new Set(matches.map((m) => m.player_one_level).filter(Boolean))];
 
-  // Groups matches into rounds using the round_number assigned at
-  // generation time by the backend's circle-method scheduler.
-  // This replaces the old approach of generating all matches first and
-  // then greedily reconstructing rounds from them, which produced
-  // uneven, incorrect round groupings.
   function groupMatchesByRound(matchList) {
     const roundsMap = new Map();
 
@@ -144,8 +138,6 @@ export default function RoundRobin() {
 
   const rounds = groupMatchesByRound(filteredMatches);
 
-  // Reorders matches within a single round so levels cycle
-  // Beginner -> Intermediate -> Advanced -> Beginner -> ... (display only)
   function interleaveByLevel(roundMatches) {
     const levelOrder = ["Beginner", "Intermediate", "Advanced"];
 
@@ -156,7 +148,6 @@ export default function RoundRobin() {
       groups[level].push(match);
     });
 
-    // Known levels first (in fixed order), then any unexpected levels after
     const levels = [
       ...levelOrder.filter((level) => groups[level]),
       ...Object.keys(groups).filter((level) => !levelOrder.includes(level)),
@@ -179,14 +170,12 @@ export default function RoundRobin() {
 
   return (
     <div className="space-y-6">
-      {/* Message */}
       {message && (
         <div className="bg-[var(--primary)] text-white px-4 py-3 rounded-xl text-sm">
           {message}
         </div>
       )}
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">{filteredMatches.length}</p>
@@ -206,7 +195,6 @@ export default function RoundRobin() {
         </div>
       </div>
 
-      {/* Player Selection */}
       <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] overflow-hidden">
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
           <h3 className="font-semibold text-[var(--text-h)]">Select Players for Round Robin</h3>
@@ -265,12 +253,10 @@ export default function RoundRobin() {
         )}
       </div>
 
-      {/* Matches List */}
       <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] overflow-hidden">
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between flex-wrap gap-3">
           <h3 className="font-semibold text-[var(--text-h)]">Round Robin Matches</h3>
           <div className="flex items-center gap-3">
-            {/* Level Filter */}
             <select
               value={levelFilter}
               onChange={(e) => setLevelFilter(e.target.value)}

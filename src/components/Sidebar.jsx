@@ -15,7 +15,6 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
         collapsed ? "w-16" : "w-64"
       }`}
     >
-      {/* Logo / Brand */}
       <div className="h-16 flex items-center px-4 border-b border-[var(--border)]">
         <div className="flex items-center gap-3 min-w-0">
           {!collapsed && (
@@ -24,7 +23,7 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
             </span>
           )}
         </div>
-        {/* Collapse toggle */}
+
         <button
           onClick={onToggle}
           className="ml-auto p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text)] transition-colors flex-shrink-0"
@@ -41,7 +40,6 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
         </button>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
         {navItems.map((item) => {
           const isActive = activePage === item.id;
@@ -63,7 +61,6 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
         })}
       </nav>
 
-      {/* Bottom section */}
       <div className="border-t border-[var(--border)] p-4">
         {!collapsed && (
           <div className="text-xs text-[var(--text)]">

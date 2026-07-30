@@ -16,11 +16,11 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
     ? queue
     : queue.filter(player => player.level === selectedLevel);
 
-  // Filter players that are NOT already in the queue
+  
   const queuePlayerIds = new Set(queue.map(p => p.player_id));
   const availablePlayers = players.filter(p => !queuePlayerIds.has(p.id));
 
-  // Apply search filter
+  
   const searchedPlayers = searchTerm.trim()
     ? availablePlayers.filter(p =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -43,7 +43,7 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
 
   return (
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] overflow-hidden">
-      {/* Add Player to Queue Bar */}
+
       <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-hover)]/50">
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
@@ -105,7 +105,6 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
         </div>
       </div>
 
-      {/* Queue Table */}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>

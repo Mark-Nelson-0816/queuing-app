@@ -38,7 +38,6 @@ export default function Players() {
   return (
     <div className="space-y-6">
 
-      {/* Add Player Form */}
       <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4">
         <h3 className="font-semibold text-[var(--text-h)] mb-3">Add New Player</h3>
         <div className="flex items-center gap-3">
@@ -69,7 +68,6 @@ export default function Players() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">

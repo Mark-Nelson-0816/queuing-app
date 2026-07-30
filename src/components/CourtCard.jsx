@@ -23,7 +23,6 @@ export default function CourtCard({
     >
 
 
-      {/* Header */}
 
       <div className="flex items-center justify-between mb-4">
 
@@ -69,9 +68,6 @@ export default function CourtCard({
       </div>
 
 
-
-
-      {/* Players */}
 
       {
         court.players && court.players.length > 0 ? (
@@ -122,32 +118,6 @@ export default function CourtCard({
 
 
 
-
-      {/* Timer */}
-{/* 
-      {
-        !isAvailable &&
-
-        <div className="p-3 mb-4 rounded-xl bg-[var(--surface-hover)]">
-
-          <p className="text-xs text-[var(--text)]">
-            Match Time
-          </p>
-
-
-          <p className="text-lg font-bold">
-            00:00
-          </p>
-
-        </div>
-
-      } */}
-
-
-
-
-
-      {/* Buttons */}
 
       {
         !isAvailable &&

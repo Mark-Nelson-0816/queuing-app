@@ -13,7 +13,7 @@ async function handleReset() {
 
     await window.api.resetAllData();
 
-    // await loadData();
+    
 }
 
 const pageTitles = {
@@ -61,14 +61,14 @@ function App() {
     }
   };
 
-  // For Public Display, render fullscreen without sidebar/header
+  
   if (activePage === "public") {
     return <PublicDisplayPage />;
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
-      {/* Sidebar */}
+
       <Sidebar
         activePage={activePage}
         onNavigate={setActivePage}
@@ -76,7 +76,6 @@ function App() {
         onToggle={() => setSidebarCollapsed((prev) => !prev)}
       />
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <Header title={pageTitles[activePage] || "Dashboard"} />
 

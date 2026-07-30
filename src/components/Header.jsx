@@ -24,14 +24,13 @@ export default function Header({ title, actions }) {
 
   return (
     <header className="h-16 bg-[var(--surface)] border-b border-[var(--border)] flex items-center justify-between px-6">
-      {/* Left: Page Title */}
+
       <div>
         <h1 className="text-xl font-bold text-[var(--text-h)]">
           {title}
         </h1>
       </div>
 
-      {/* Right: Date/Time + Actions */}
       <div className="flex items-center gap-4">
         <div className="text-right">
           <p className="text-sm font-medium text-[var(--text-h)]">

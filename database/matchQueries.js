@@ -3,7 +3,6 @@ import db from "./database.js";
 
 export function createMatch(){
 
-    // Get all waiting players ordered by queue time
     const waitingPlayers = db.prepare(`
         SELECT *
         FROM queue
@@ -20,19 +19,15 @@ export function createMatch(){
         };
     }
 
-
-    // Find two players with the same level (avoiding immediate rematches)
     let playerOne = null;
     let playerTwo = null;
 
-    // First pass: try to find a pair that hasn't just played each other
     for(let i = 0; i < waitingPlayers.length; i++){
 
         for(let j = i + 1; j < waitingPlayers.length; j++){
 
             if(waitingPlayers[i].level === waitingPlayers[j].level){
 
-                // Check if these two players just played each other recently
                 const recentMatch = db.prepare(`
                     SELECT id FROM matches
                     WHERE (
@@ -50,7 +45,7 @@ export function createMatch(){
                     waitingPlayers[i].player_id
                 );
 
-                // If they haven't just played each other, pair them
+                
                 if(!recentMatch){
                     playerOne = waitingPlayers[i];
                     playerTwo = waitingPlayers[j];
@@ -68,7 +63,7 @@ export function createMatch(){
 
     }
 
-    // Second pass (fallback): if no fresh pair found, allow any same-level pair (rematch)
+    
     if(!playerOne || !playerTwo){
 
         for(let i = 0; i < waitingPlayers.length; i++){
@@ -104,7 +99,7 @@ export function createMatch(){
 
 
 
-    // Find available court
+    
     const court = db.prepare(`
         SELECT *
         FROM courts
@@ -127,7 +122,7 @@ export function createMatch(){
 
 
 
-    // Create match
+    
     const result = db.prepare(`
         INSERT INTO matches
         (
@@ -146,7 +141,7 @@ export function createMatch(){
 
 
 
-    // Remove players from queue
+    
     db.prepare(`
         DELETE FROM queue
         WHERE player_id IN (?,?)
@@ -157,7 +152,7 @@ export function createMatch(){
 
 
 
-    // Update player status
+    
     db.prepare(`
         UPDATE players
         SET status='playing'
@@ -169,7 +164,7 @@ export function createMatch(){
 
 
 
-    // Update court status
+    
     db.prepare(`
         UPDATE courts
         SET status='playing'
@@ -192,7 +187,7 @@ export function createMatch(){
 }
 
 export function endMatch(courtId){
-    // Find active match
+    
     const match = db.prepare(`
         SELECT *
         FROM matches
@@ -204,7 +199,7 @@ export function endMatch(courtId){
         throw new Error("No active match found");
     }
 
-    // Finish match
+    
     db.prepare(`
         UPDATE matches
         SET 
@@ -213,7 +208,7 @@ export function endMatch(courtId){
         WHERE id = ?
     `).run(match.id);
 
-    // Update players
+    
     db.prepare(`
         UPDATE players
         SET 
@@ -225,7 +220,7 @@ export function endMatch(courtId){
         match.player_two
     );
 
-    // Re-add players to the back of the queue for rotation
+    
     const queueCount = db.prepare(`
         SELECT COUNT(*) as count FROM queue
     `).get().count;
@@ -240,7 +235,7 @@ export function endMatch(courtId){
         VALUES (?, ?)
     `).run(match.player_two, queueCount + 2);
 
-    // Free court
+    
     db.prepare(`
         UPDATE courts
         SET status = 'available'

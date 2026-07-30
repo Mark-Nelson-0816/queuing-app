@@ -1,8 +1,6 @@
 import db from "./database.js";
 import { generateRoundRobinSchedule } from "../electron/roundRobinScheduler.js";
 
-// Ensures the round_number column exists without requiring a manual migration.
-// Safe to call on every module load - it's a no-op once the column is there.
 function ensureRoundNumberColumn() {
   const columns = db.prepare(`PRAGMA table_info(round_robin_matches)`).all();
   const hasColumn = columns.some((col) => col.name === "round_number");
@@ -12,10 +10,6 @@ function ensureRoundNumberColumn() {
 }
 ensureRoundNumberColumn();
 
-/**
- * Get all players from the players table
- * for selection in round robin tournament
- */
 export function getAllPlayers() {
   return db.prepare(`
     SELECT id, name, level
@@ -24,28 +18,13 @@ export function getAllPlayers() {
   `).all();
 }
 
-/**
- * Generate a round-robin schedule from a list of player IDs.
- * Players are grouped by level (matches only ever happen within the same
- * level, same as before) and each group gets its own circle-method
- * schedule so that:
- *   - every player appears at most once per round,
- *   - no matchup repeats,
- *   - every player eventually plays everyone else in their level.
- *
- * Because level groups never share players, they can safely reuse the same
- * round_number - a given round can contain matches from multiple groups
- * without ever double-booking a player.
- */
 export function generateRoundRobinMatches(playerIds) {
   if (!playerIds || playerIds.length < 2) return [];
 
-  // Get levels for all selected players
   const players = db.prepare(`
     SELECT id, level FROM players WHERE id IN (${playerIds.map(() => '?').join(',')})
   `).all(...playerIds);
 
-  // Group players by level
   const levelGroups = {};
   for (const player of players) {
     if (!levelGroups[player.level]) {
@@ -58,7 +37,7 @@ export function generateRoundRobinMatches(playerIds) {
 
   for (const level in levelGroups) {
     const groupIds = levelGroups[level];
-    if (groupIds.length < 2) continue; // Skip groups with fewer than 2 players
+    if (groupIds.length < 2) continue; 
 
     const schedule = generateRoundRobinSchedule(groupIds);
 
@@ -77,10 +56,6 @@ export function generateRoundRobinMatches(playerIds) {
   return matches;
 }
 
-/**
- * Save generated round robin matches to the database
- * Clears any previous pending matches first
- */
 export function saveRoundRobinMatches(matches) {
   const insert = db.prepare(`
     INSERT INTO round_robin_matches (player_one_id, player_two_id, round_number, status)
@@ -88,16 +63,13 @@ export function saveRoundRobinMatches(matches) {
   `);
 
   const transaction = db.transaction(() => {
-    // Reset all previous round robin matches
     db.prepare(`DELETE FROM round_robin_matches`).run();
 
-    // Reset all courts back to available
     db.prepare(`
       UPDATE courts
       SET status = 'available'
     `).run();
 
-    // Insert new matches
     for (const match of matches) {
       insert.run(match.player_one, match.player_two, match.round_number);
     }
@@ -106,9 +78,6 @@ export function saveRoundRobinMatches(matches) {
   transaction();
 }
 
-/**
- * Get all round robin matches with player names
- */
 export function getRoundRobinMatches() {
   return db.prepare(`
     SELECT
@@ -130,11 +99,6 @@ export function getRoundRobinMatches() {
   `).all();
 }
 
-/**
- * Assign a round robin match to a court
- * Sets status to 'playing' and records court_id
- * Prevents assignment if either player is already playing in another match
- */
 export function assignMatchToCourt(matchId, courtId) {
   const court = db.prepare(`
     SELECT id, status FROM courts WHERE id = ?
@@ -152,7 +116,6 @@ export function assignMatchToCourt(matchId, courtId) {
     return { success: false, error: "Match is not pending" };
   }
 
-  // Check if either player is already in a "playing" match
   const activeMatch = db.prepare(`
     SELECT id FROM round_robin_matches
     WHERE status = 'playing'
@@ -168,14 +131,13 @@ export function assignMatchToCourt(matchId, courtId) {
   }
 
   const transaction = db.transaction(() => {
-    // Update match status
+
     db.prepare(`
       UPDATE round_robin_matches
       SET status = 'playing', court_id = ?
       WHERE id = ?
     `).run(courtId, matchId);
 
-    // Update court status
     db.prepare(`
       UPDATE courts
       SET status = 'playing'
@@ -188,20 +150,15 @@ export function assignMatchToCourt(matchId, courtId) {
   return { success: true };
 }
 
-/**
- * End a round robin match playing on a court
- * Sets match status to 'completed' and frees the court
- */
 export function endRoundRobinMatch(matchId, courtId) {
   const transaction = db.transaction(() => {
-    // Update match status
+
     db.prepare(`
       UPDATE round_robin_matches
       SET status = 'completed'
       WHERE id = ?
     `).run(matchId);
 
-    // Free the court
     db.prepare(`
       UPDATE courts
       SET status = 'available'
