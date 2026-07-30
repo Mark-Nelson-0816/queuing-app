@@ -88,8 +88,14 @@ export function saveRoundRobinMatches(matches) {
   `);
 
   const transaction = db.transaction(() => {
-    // Clear existing pending matches
-    db.prepare(`DELETE FROM round_robin_matches WHERE status = 'pending'`).run();
+    // Reset all previous round robin matches
+    db.prepare(`DELETE FROM round_robin_matches`).run();
+
+    // Reset all courts back to available
+    db.prepare(`
+      UPDATE courts
+      SET status = 'available'
+    `).run();
 
     // Insert new matches
     for (const match of matches) {
