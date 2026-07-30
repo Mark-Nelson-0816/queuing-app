@@ -121,45 +121,28 @@ export default function RoundRobin() {
   // Get unique levels present in the matches
   const matchLevels = ["All", ...new Set(matches.map((m) => m.player_one_level).filter(Boolean))];
 
-  function generateRounds(matches) {
-    const rounds = [];
+  // Groups matches into rounds using the round_number assigned at
+  // generation time by the backend's circle-method scheduler.
+  // This replaces the old approach of generating all matches first and
+  // then greedily reconstructing rounds from them, which produced
+  // uneven, incorrect round groupings.
+  function groupMatchesByRound(matchList) {
+    const roundsMap = new Map();
 
-    filteredMatches.forEach((match) => {
-      let added = false;
-
-      for (const round of rounds) {
-
-        const playersInRound = new Set();
-
-        round.forEach((m) => {
-          playersInRound.add(m.player_one_id);
-          playersInRound.add(m.player_two_id);
-        });
-
-
-        if (
-          !playersInRound.has(match.player_one_id) &&
-          !playersInRound.has(match.player_two_id)
-        ) {
-          round.push(match);
-          added = true;
-          break;
-        }
+    matchList.forEach((match) => {
+      const roundNumber = match.round_number ?? 1;
+      if (!roundsMap.has(roundNumber)) {
+        roundsMap.set(roundNumber, []);
       }
-
-
-      if (!added) {
-        rounds.push([match]);
-      }
-
+      roundsMap.get(roundNumber).push(match);
     });
 
-
-    return rounds;
+    return Array.from(roundsMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([roundNumber, roundMatches]) => ({ roundNumber, roundMatches }));
   }
 
-
-  const rounds = generateRounds(filteredMatches);
+  const rounds = groupMatchesByRound(filteredMatches);
 
   // Reorders matches within a single round so levels cycle
   // Beginner -> Intermediate -> Advanced -> Beginner -> ... (display only)
@@ -333,18 +316,18 @@ export default function RoundRobin() {
                   </td>
                 </tr>
               ) : (
-                rounds.map((round, roundIndex) => (
-                  <Fragment key={roundIndex}>
+                rounds.map(({ roundNumber, roundMatches }) => (
+                  <Fragment key={roundNumber}>
                     <tr>
                       <td
                         colSpan={6}
                         className="bg-[var(--surface-hover)] px-4 py-3 font-bold text-[var(--text-h)]"
                       >
-                        Round {roundIndex + 1}
+                        Round {roundNumber}
                       </td>
                     </tr>
 
-                    {interleaveByLevel(round).map((match, index) => {
+                    {interleaveByLevel(roundMatches).map((match, index) => {
                       const isBusy =
                         match.status === "pending" &&
                         (busyPlayerIds.has(match.player_one_id) ||

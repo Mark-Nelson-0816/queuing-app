@@ -1,4 +1,16 @@
 import db from "./database.js";
+import { generateRoundRobinSchedule } from "../electron/roundRobinScheduler.js";
+
+// Ensures the round_number column exists without requiring a manual migration.
+// Safe to call on every module load - it's a no-op once the column is there.
+function ensureRoundNumberColumn() {
+  const columns = db.prepare(`PRAGMA table_info(round_robin_matches)`).all();
+  const hasColumn = columns.some((col) => col.name === "round_number");
+  if (!hasColumn) {
+    db.prepare(`ALTER TABLE round_robin_matches ADD COLUMN round_number INTEGER`).run();
+  }
+}
+ensureRoundNumberColumn();
 
 /**
  * Get all players from the players table
@@ -13,9 +25,17 @@ export function getAllPlayers() {
 }
 
 /**
- * Generate all unique pairings from a list of player IDs
- * Groups players by level and only pairs within the same level
- * e.g. [1,2,3,4] with levels [A,A,B,B] -> [[1,2],[3,4]] (1 and 2 are same level, 3 and 4 are same level)
+ * Generate a round-robin schedule from a list of player IDs.
+ * Players are grouped by level (matches only ever happen within the same
+ * level, same as before) and each group gets its own circle-method
+ * schedule so that:
+ *   - every player appears at most once per round,
+ *   - no matchup repeats,
+ *   - every player eventually plays everyone else in their level.
+ *
+ * Because level groups never share players, they can safely reuse the same
+ * round_number - a given round can contain matches from multiple groups
+ * without ever double-booking a player.
  */
 export function generateRoundRobinMatches(playerIds) {
   if (!playerIds || playerIds.length < 2) return [];
@@ -36,16 +56,18 @@ export function generateRoundRobinMatches(playerIds) {
 
   const matches = [];
 
-  // Generate matches within each level group
   for (const level in levelGroups) {
     const groupIds = levelGroups[level];
     if (groupIds.length < 2) continue; // Skip groups with fewer than 2 players
 
-    for (let i = 0; i < groupIds.length; i++) {
-      for (let j = i + 1; j < groupIds.length; j++) {
+    const schedule = generateRoundRobinSchedule(groupIds);
+
+    for (const round of schedule) {
+      for (const pairing of round.matches) {
         matches.push({
-          player_one: groupIds[i],
-          player_two: groupIds[j],
+          player_one: pairing.player_one_id,
+          player_two: pairing.player_two_id,
+          round_number: round.round_number,
           status: "pending",
         });
       }
@@ -61,8 +83,8 @@ export function generateRoundRobinMatches(playerIds) {
  */
 export function saveRoundRobinMatches(matches) {
   const insert = db.prepare(`
-    INSERT INTO round_robin_matches (player_one_id, player_two_id, status)
-    VALUES (?, ?, 'pending')
+    INSERT INTO round_robin_matches (player_one_id, player_two_id, round_number, status)
+    VALUES (?, ?, ?, 'pending')
   `);
 
   const transaction = db.transaction(() => {
@@ -71,7 +93,7 @@ export function saveRoundRobinMatches(matches) {
 
     // Insert new matches
     for (const match of matches) {
-      insert.run(match.player_one, match.player_two);
+      insert.run(match.player_one, match.player_two, match.round_number);
     }
   });
 
@@ -87,6 +109,7 @@ export function getRoundRobinMatches() {
       rrm.id,
       rrm.status,
       rrm.court_id,
+      rrm.round_number,
       rrm.created_at,
       p1.name AS player_one_name,
       p1.id AS player_one_id,
@@ -97,7 +120,7 @@ export function getRoundRobinMatches() {
     FROM round_robin_matches rrm
     JOIN players p1 ON rrm.player_one_id = p1.id
     JOIN players p2 ON rrm.player_two_id = p2.id
-    ORDER BY rrm.id ASC
+    ORDER BY rrm.round_number ASC, rrm.id ASC
   `).all();
 }
 
@@ -184,4 +207,3 @@ export function endRoundRobinMatch(matchId, courtId) {
 
   return { success: true };
 }
-

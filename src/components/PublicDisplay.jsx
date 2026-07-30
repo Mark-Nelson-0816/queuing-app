@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 const demoCourts = [
   { id: 1, name: "Court 1", status: "playing", players: ["Alex", "Sam", "Jordan", "Casey"] },
   { id: 2, name: "Court 2", status: "playing", players: ["Riley", "Morgan"] },
@@ -38,6 +40,20 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
 
   // Compact card styles once we're past 4 courts, so 6 courts still fits.
   const dense = activeCourts.length > 4;
+
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === "Escape") {
+        window.location.reload();
+      }
+    };
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   return (
     <div className="h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)] p-5 flex flex-col gap-4">
@@ -243,9 +259,6 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-[var(--border)] pt-2 text-center text-sm text-[var(--text)] opacity-70">
-        Press F11 for full screen mode
-      </div>
     </div>
   );
 }

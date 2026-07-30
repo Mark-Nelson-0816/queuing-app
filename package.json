@@ -21,6 +21,9 @@
       "database/**/*",
       "package.json"
     ],
+    "nsis": {
+      "deleteAppDataOnUninstall": true
+    },
     "win": {
       "target": "nsis"
     }

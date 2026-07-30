@@ -1,4 +1,5 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, Menu } from "electron";
+import { globalShortcut } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -35,19 +36,22 @@ import { resetAllData } from "../database/resetQueries.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+let mainWindow;
+
 console.log("Preload path:", path.join(__dirname, "preload.cjs"));
 function createWindow() {
 
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    fullscreenable: true,
 
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
     },
   });
 
-  win.maximize();
+  mainWindow.maximize();
 
   const indexPath = path.join(
     app.getAppPath(),
@@ -55,14 +59,12 @@ function createWindow() {
     "index.html"
   );
 
-  win.loadFile(indexPath);
+  mainWindow.loadFile(indexPath);
 }
 
 //players
 ipcMain.handle("get-players", () => {
   const players = getPlayers();
-
-  console.log("Players from DB:", players);
 
   return players;
 });
@@ -93,8 +95,6 @@ ipcMain.handle("remove-court", (event, id)=>{
 ipcMain.handle("get-queue", () => {
 
   const queue = getQueue();
-
-  console.log("Queue:", queue);
 
   return queue;
 
@@ -183,6 +183,14 @@ ipcMain.handle("end-rr-match", (event, matchId, courtId) => {
 });
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
+
+  globalShortcut.register("F11", () => {
+    const isFullScreen = mainWindow.isFullScreen();
+    mainWindow.setFullScreen(!isFullScreen);
+  });
+
+
   createWindow();
 });
 

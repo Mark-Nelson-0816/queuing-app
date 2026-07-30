@@ -13,7 +13,7 @@ async function handleReset() {
 
     await window.api.resetAllData();
 
-    await loadData();
+    // await loadData();
 }
 
 const pageTitles = {
