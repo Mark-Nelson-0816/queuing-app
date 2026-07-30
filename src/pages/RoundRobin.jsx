@@ -183,7 +183,12 @@ export default function RoundRobin() {
                   onChange={() => togglePlayer(player.id)}
                   className="rounded"
                 />
-                <span className="truncate">{player.name}</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="truncate">{player.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--surface-hover)] text-[var(--text)] shrink-0">
+                    {player.level}
+                  </span>
+                </div>
               </label>
             ))}
           </div>

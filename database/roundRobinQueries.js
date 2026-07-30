@@ -14,21 +14,41 @@ export function getAllPlayers() {
 
 /**
  * Generate all unique pairings from a list of player IDs
- * e.g. [1,2,3,4] -> [[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]
+ * Groups players by level and only pairs within the same level
+ * e.g. [1,2,3,4] with levels [A,A,B,B] -> [[1,2],[3,4]] (1 and 2 are same level, 3 and 4 are same level)
  */
 export function generateRoundRobinMatches(playerIds) {
   if (!playerIds || playerIds.length < 2) return [];
 
+  // Get levels for all selected players
+  const players = db.prepare(`
+    SELECT id, level FROM players WHERE id IN (${playerIds.map(() => '?').join(',')})
+  `).all(...playerIds);
+
+  // Group players by level
+  const levelGroups = {};
+  for (const player of players) {
+    if (!levelGroups[player.level]) {
+      levelGroups[player.level] = [];
+    }
+    levelGroups[player.level].push(player.id);
+  }
+
   const matches = [];
 
-  // Generate all unique pairs (combinatorial)
-  for (let i = 0; i < playerIds.length; i++) {
-    for (let j = i + 1; j < playerIds.length; j++) {
-      matches.push({
-        player_one: playerIds[i],
-        player_two: playerIds[j],
-        status: "pending",
-      });
+  // Generate matches within each level group
+  for (const level in levelGroups) {
+    const groupIds = levelGroups[level];
+    if (groupIds.length < 2) continue; // Skip groups with fewer than 2 players
+
+    for (let i = 0; i < groupIds.length; i++) {
+      for (let j = i + 1; j < groupIds.length; j++) {
+        matches.push({
+          player_one: groupIds[i],
+          player_two: groupIds[j],
+          status: "pending",
+        });
+      }
     }
   }
 
@@ -70,8 +90,10 @@ export function getRoundRobinMatches() {
       rrm.created_at,
       p1.name AS player_one_name,
       p1.id AS player_one_id,
+      p1.level AS player_one_level,
       p2.name AS player_two_name,
-      p2.id AS player_two_id
+      p2.id AS player_two_id,
+      p2.level AS player_two_level
     FROM round_robin_matches rrm
     JOIN players p1 ON rrm.player_one_id = p1.id
     JOIN players p2 ON rrm.player_two_id = p2.id
