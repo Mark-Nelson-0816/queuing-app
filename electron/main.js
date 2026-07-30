@@ -12,8 +12,7 @@ import {
   addToQueue,
   removeFromQueue
 } from "../database/queueQueries.js";
-import { addPlayer } from "../database/playerQueries.js";
-import { addPlayerToQueue } from "../database/queueQueries.js";
+import { addPlayer, deletePlayer, updatePlayer } from "../database/playerQueries.js";
 import { createMatch } from "../database/matchQueries.js";
 import {
   addCourt,
@@ -119,14 +118,19 @@ ipcMain.handle("add-player", (event, name, level) => {
 
   const playerId = addPlayer(name, level);
 
-  addPlayerToQueue(playerId);
-
-
   return {
     success: true,
     id: playerId
   };
 
+});
+
+ipcMain.handle("delete-player", (event, id) => {
+  return deletePlayer(id);
+});
+
+ipcMain.handle("update-player", (event, id, name, level) => {
+  return updatePlayer(id, name, level);
 });
 
 //matches

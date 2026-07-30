@@ -28,16 +28,31 @@ export function getQueue() {
   `).all();
 }
 
+export function isPlayerInQueue(playerId) {
+  const existing = db.prepare(`
+    SELECT id FROM queue WHERE player_id = ?
+  `).get(playerId);
+
+  return !!existing;
+}
+
 export function addToQueue(playerId) {
+  // Prevent duplicate entries
+  if (isPlayerInQueue(playerId)) {
+    return { success: false, error: "Player is already in the queue" };
+  }
+
   const position = db.prepare(`
     SELECT COUNT(*) as count
     FROM queue
   `).get().count + 1;
 
-  return db.prepare(`
+  db.prepare(`
     INSERT INTO queue(player_id, position)
     VALUES (?, ?)
   `).run(playerId, position);
+
+  return { success: true };
 }
 
 export function removeFromQueue(id) {

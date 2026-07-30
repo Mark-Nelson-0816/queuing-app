@@ -6,19 +6,32 @@ const statusColors = {
   finished: "bg-[var(--success-light)] text-[var(--success)]",
 };
 
-export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartMatch }) {
-  const [newPlayerName, setNewPlayerName] = useState("");
+export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer, onStartMatch }) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const filteredQueue =
   selectedLevel === "All"
     ? queue
     : queue.filter(player => player.level === selectedLevel);
 
+  // Filter players that are NOT already in the queue
+  const queuePlayerIds = new Set(queue.map(p => p.player_id));
+  const availablePlayers = players.filter(p => !queuePlayerIds.has(p.id));
+
+  // Apply search filter
+  const searchedPlayers = searchTerm.trim()
+    ? availablePlayers.filter(p =>
+        p.name.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : availablePlayers;
+
   const handleAdd = () => {
-    if (newPlayerName.trim() && selectedLevel !== "All") {
-      onAddPlayer?.(newPlayerName.trim(), selectedLevel);
-      setNewPlayerName("");
+    if (selectedPlayerId) {
+      onAddToQueue?.(Number(selectedPlayerId));
+      setSelectedPlayerId("");
+      setSearchTerm("");
     }
   };
 
@@ -30,33 +43,58 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
 
   return (
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] overflow-hidden">
-      {/* Add Player Bar */}
+      {/* Add Player to Queue Bar */}
       <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-hover)]/50">
         <div className="flex items-center gap-3">
-          <input
-            type="text"
-            value={newPlayerName}
-            onChange={(e) => setNewPlayerName(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter player name..."
-            className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-h)] text-sm placeholder:text-[var(--text)]/50 focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-all"
-          />
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setSelectedPlayerId("");
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Search registered players..."
+              className="w-full px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-h)] text-sm placeholder:text-[var(--text)]/50 focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-all"
+            />
+            {searchTerm && searchedPlayers.length > 0 && (
+              <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                {searchedPlayers.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setSelectedPlayerId(p.id);
+                      setSearchTerm(p.name);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left hover:bg-[var(--surface-hover)] transition-colors"
+                  >
+                    <span className="w-7 h-7 rounded-full bg-[var(--primary)] text-white text-xs flex items-center justify-center font-medium">
+                      {p.name.charAt(0)}
+                    </span>
+                    <span className="text-[var(--text-h)]">{p.name}</span>
+                    <span className="text-xs text-[var(--text)] ml-auto">{p.level}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <select
             value={selectedLevel}
             onChange={(e) => setSelectedLevel(e.target.value)}
             className="px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)]"
           >
-            <option value="All">All</option>
+            <option value="All">All Levels</option>
             <option value="Beginner">Beginner</option>
             <option value="Intermediate">Intermediate</option>
             <option value="Advanced">Advanced</option>
           </select>
           <button
             onClick={handleAdd}
-            disabled={!newPlayerName.trim() || selectedLevel === "All"}
+            disabled={!selectedPlayerId}
             className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            + Add Player
+            + Add to Queue
           </button>
           <button
             onClick={() => onStartMatch?.()}
@@ -98,7 +136,7 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
                 <td colSpan={5} className="text-center py-12 text-[var(--text)]">
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-sm font-medium">Queue is empty</p>
-                    <p className="text-xs">Add players to start the queue</p>
+                    <p className="text-xs">Search and select a player above to add them to the queue</p>
                   </div>
                 </td>
               </tr>
@@ -153,4 +191,3 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
     </div>
   );
 }
-
