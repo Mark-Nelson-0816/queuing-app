@@ -30,6 +30,7 @@ import {
   assignMatchToCourt,
   endRoundRobinMatch
 } from "../database/roundRobinQueries.js";
+import { resetAllData } from "../database/resetQueries.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -47,6 +48,7 @@ function createWindow() {
     },
   });
 
+  win.maximize();
 
   const indexPath = path.join(
     app.getAppPath(),
@@ -178,4 +180,9 @@ ipcMain.handle("end-rr-match", (event, matchId, courtId) => {
 
 app.whenReady().then(() => {
   createWindow();
+});
+
+//datas
+ipcMain.handle("reset-all-data", () => {
+    return resetAllData();
 });

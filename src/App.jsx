@@ -8,10 +8,18 @@ import Courts from "./pages/Courts";
 import Players from "./pages/Players";
 import PublicDisplayPage from "./pages/PublicDisplayPage";
 
+async function handleReset() {
+    if (!confirm("Delete all data?")) return;
+
+    await window.api.resetAllData();
+
+    await loadData();
+}
+
 const pageTitles = {
   dashboard: "Dashboard",
-  queue: "Queue Management",
-  roundrobin: "Round Robin",
+  queue: "Rotation Queue Management",
+  roundrobin: "Round Robin Management",
   courts: "Court Management",
   players: "Player Management",
   public: "Public Display",
@@ -22,9 +30,7 @@ function SettingsPage() {
   return (
     <div className="flex items-center justify-center h-64">
       <div className="text-center">
-        <span className="text-5xl mb-4 block">⚙️</span>
-        <p className="text-lg font-medium text-[var(--text-h)]">Settings</p>
-        <p className="text-sm text-[var(--text)] mt-1">Coming soon...</p>
+        <button onClick={handleReset} className="bg-red-400 p-3">Reset all Datas.</button>
       </div>
     </div>
   );

@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld("api", {
   assignRRMatch: (matchId, courtId) =>
     ipcRenderer.invoke("assign-rr-match", matchId, courtId),
   endRRMatch: (matchId, courtId) =>
-    ipcRenderer.invoke("end-rr-match", matchId, courtId)
+    ipcRenderer.invoke("end-rr-match", matchId, courtId),
 
+  //datas
+  resetAllData: () => 
+    ipcRenderer.invoke("reset-all-data"),
 });

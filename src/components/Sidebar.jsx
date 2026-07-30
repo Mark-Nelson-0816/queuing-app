@@ -1,11 +1,11 @@
 const navItems = [
   // { id: "dashboard", label: "Dashboard", icon: "" },
-  { id: "queue", label: "Queue", icon: "" },
+  { id: "queue", label: "Rotation Queue", icon: "" },
   { id: "roundrobin", label: "Round Robin", icon: "" },
   { id: "courts", label: "Courts", icon: "" },
   { id: "players", label: "Players", icon: "" },
   { id: "public", label: "Public Display", icon: "" },
-  // { id: "settings", label: "Settings", icon: "" },
+  { id: "settings", label: "Settings", icon: "" },
 ];
 
 export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }) {
