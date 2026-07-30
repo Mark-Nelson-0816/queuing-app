@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 const statusColors = {
   pending: "bg-[var(--warning-light)] text-[var(--warning)]",
@@ -120,6 +120,79 @@ export default function RoundRobin() {
 
   // Get unique levels present in the matches
   const matchLevels = ["All", ...new Set(matches.map((m) => m.player_one_level).filter(Boolean))];
+
+  function generateRounds(matches) {
+    const rounds = [];
+
+    filteredMatches.forEach((match) => {
+      let added = false;
+
+      for (const round of rounds) {
+
+        const playersInRound = new Set();
+
+        round.forEach((m) => {
+          playersInRound.add(m.player_one_id);
+          playersInRound.add(m.player_two_id);
+        });
+
+
+        if (
+          !playersInRound.has(match.player_one_id) &&
+          !playersInRound.has(match.player_two_id)
+        ) {
+          round.push(match);
+          added = true;
+          break;
+        }
+      }
+
+
+      if (!added) {
+        rounds.push([match]);
+      }
+
+    });
+
+
+    return rounds;
+  }
+
+
+  const rounds = generateRounds(filteredMatches);
+
+  // Reorders matches within a single round so levels cycle
+  // Beginner -> Intermediate -> Advanced -> Beginner -> ... (display only)
+  function interleaveByLevel(roundMatches) {
+    const levelOrder = ["Beginner", "Intermediate", "Advanced"];
+
+    const groups = {};
+    roundMatches.forEach((match) => {
+      const level = match.player_one_level || "Other";
+      if (!groups[level]) groups[level] = [];
+      groups[level].push(match);
+    });
+
+    // Known levels first (in fixed order), then any unexpected levels after
+    const levels = [
+      ...levelOrder.filter((level) => groups[level]),
+      ...Object.keys(groups).filter((level) => !levelOrder.includes(level)),
+    ];
+
+    const interleaved = [];
+    let remaining = true;
+    while (remaining) {
+      remaining = false;
+      for (const level of levels) {
+        if (groups[level].length) {
+          interleaved.push(groups[level].shift());
+          remaining = true;
+        }
+      }
+    }
+
+    return interleaved;
+  }
 
   return (
     <div className="space-y-6">
@@ -260,88 +333,86 @@ export default function RoundRobin() {
                   </td>
                 </tr>
               ) : (
-                filteredMatches.map((match, index) => (
-                  <tr
-                    key={match.id}
-                    className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--surface-hover)]/50 transition-colors"
-                  >
-                    <td className="px-4 py-4">
-                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--surface-hover)] text-[var(--text)] text-sm font-bold">
-                        {index + 1}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-full bg-[var(--primary)] text-white text-xs flex items-center justify-center font-medium">
-                          {match.player_one_name?.charAt(0)}
-                        </span>
-                        <span className="text-sm font-medium text-[var(--text-h)]">{match.player_one_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-full bg-[var(--primary)] text-white text-xs flex items-center justify-center font-medium">
-                          {match.player_two_name?.charAt(0)}
-                        </span>
-                        <span className="text-sm font-medium text-[var(--text-h)]">{match.player_two_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          levelStyles[match.player_one_level] || "bg-[var(--surface-hover)] text-[var(--text)]"
-                        }`}
+                rounds.map((round, roundIndex) => (
+                  <Fragment key={roundIndex}>
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="bg-[var(--surface-hover)] px-4 py-3 font-bold text-[var(--text-h)]"
                       >
-                        {match.player_one_level}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          statusColors[match.status] || "bg-[var(--surface-hover)] text-[var(--text)]"
-                        }`}
-                      >
-                        {match.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-right">
-                      {match.status === "pending" &&
-                        (() => {
-                          const isPlayerBusy =
-                            busyPlayerIds.has(match.player_one_id) ||
-                            busyPlayerIds.has(match.player_two_id);
-                          return (
-                            <button
-                              onClick={() => !isPlayerBusy && handleAssignToCourt(match.id)}
-                              disabled={isPlayerBusy}
-                              title={
-                                isPlayerBusy
-                                  ? "One of the players is already playing. End that match first."
-                                  : "Assign to an available court"
-                              }
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-opacity ${
-                                isPlayerBusy
-                                  ? "bg-[var(--surface-hover)] text-[var(--text)] cursor-not-allowed"
-                                  : "bg-[var(--success)] text-white hover:opacity-80"
+                        Round {roundIndex + 1}
+                      </td>
+                    </tr>
+
+                    {interleaveByLevel(round).map((match, index) => {
+                      const isBusy =
+                        match.status === "pending" &&
+                        (busyPlayerIds.has(match.player_one_id) ||
+                          busyPlayerIds.has(match.player_two_id));
+
+                      return (
+                        <tr key={match.id} className="border-b border-[var(--border)] last:border-0">
+                          <td className="px-4 py-4 text-sm text-[var(--text)]">{index + 1}</td>
+
+                          <td className="px-4 py-4 text-sm text-[var(--text-h)]">
+                            {match.player_one_name}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-[var(--text-h)]">
+                            {match.player_two_name}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                levelStyles[match.player_one_level] ||
+                                "bg-[var(--surface-hover)] text-[var(--text)]"
                               }`}
                             >
-                              {isPlayerBusy ? "Player Busy" : "Assign to Court"}
-                            </button>
-                          );
-                        })()}
-                      {match.status === "playing" && match.court_id && (
-                        <button
-                          onClick={() => handleEndMatch(match.id, match.court_id)}
-                          className="px-3 py-1.5 rounded-lg bg-[var(--danger)] text-white text-xs font-semibold hover:opacity-80 transition-opacity"
-                        >
-                          End Match
-                        </button>
-                      )}
-                      {match.status === "completed" && (
-                        <span className="text-xs text-[var(--text)]">Done</span>
-                      )}
-                    </td>
-                  </tr>
+                              {match.player_one_level}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span
+                              className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
+                                statusColors[match.status] ||
+                                "bg-[var(--surface-hover)] text-[var(--text)]"
+                              }`}
+                            >
+                              {match.status}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4 text-right">
+                            {match.status === "pending" && (
+                              <button
+                                onClick={() => handleAssignToCourt(match.id)}
+                                disabled={isBusy}
+                                title={isBusy ? "A player in this match is currently playing" : ""}
+                                className="px-3 py-1.5 rounded-lg bg-[var(--primary)] text-white text-xs font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Assign to Court
+                              </button>
+                            )}
+                            {match.status === "playing" && (
+                              <button
+                                onClick={() => handleEndMatch(match.id, match.court_id)}
+                                className="px-3 py-1.5 rounded-lg bg-[var(--danger-light)] text-[var(--danger)] text-xs font-semibold hover:opacity-80 transition-colors"
+                              >
+                                End Match
+                              </button>
+                            )}
+                            {match.status === "completed" && (
+                              <span className="text-xs font-semibold text-[var(--success)]">
+                                Done
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
                 ))
               )}
             </tbody>
@@ -351,4 +422,3 @@ export default function RoundRobin() {
     </div>
   );
 }
-
