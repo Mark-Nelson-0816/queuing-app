@@ -1,68 +1,60 @@
 import db from "./database.js";
 
-
 export function getQueue() {
-
   return db.prepare(`
-    SELECT 
+    SELECT
       queue.id,
       players.name,
+      players.level,
       queue.position,
       queue.joined_at,
-      players.status
+      players.status,
+
+      COUNT(matches.id) AS matches_played
 
     FROM queue
 
     JOIN players
-    ON queue.player_id = players.id
+      ON queue.player_id = players.id
 
-    ORDER BY queue.position ASC
+    LEFT JOIN matches
+      ON players.id = matches.player_one
+      OR players.id = matches.player_two
+
+    GROUP BY players.id, queue.id
+
+    ORDER BY queue.joined_at ASC
+
   `).all();
-
 }
 
-
-
 export function addToQueue(playerId) {
-
   const position = db.prepare(`
     SELECT COUNT(*) as count
     FROM queue
   `).get().count + 1;
 
-
   return db.prepare(`
     INSERT INTO queue(player_id, position)
     VALUES (?, ?)
-  `)
-  .run(playerId, position);
-
+  `).run(playerId, position);
 }
 
-
-
 export function removeFromQueue(id) {
-
   return db.prepare(`
     DELETE FROM queue
     WHERE id = ?
-  `)
-  .run(id);
-
+  `).run(id);
 }
 
 export function addPlayerToQueue(playerId) {
-
   const position = db.prepare(`
     SELECT COUNT(*) as count
     FROM queue
   `).get().count + 1;
 
-
   return db.prepare(`
     INSERT INTO queue(player_id, position)
     VALUES (?, ?)
-  `)
-  .run(playerId, position);
-
+  `).run(playerId, position);
 }

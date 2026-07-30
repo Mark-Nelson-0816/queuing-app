@@ -24,7 +24,6 @@ export default function PlayerTable({ players }) {
               <tr>
                 <td colSpan={4} className="text-center py-12 text-[var(--text)]">
                   <div className="flex flex-col items-center gap-2">
-                    <span className="text-3xl">👥</span>
                     <p className="text-sm font-medium">No players registered</p>
                     <p className="text-xs">Add players from the Queue page</p>
                   </div>

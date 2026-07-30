@@ -8,10 +8,16 @@ const statusColors = {
 
 export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartMatch }) {
   const [newPlayerName, setNewPlayerName] = useState("");
+  const [selectedLevel, setSelectedLevel] = useState("All");
+
+  const filteredQueue =
+  selectedLevel === "All"
+    ? queue
+    : queue.filter(player => player.level === selectedLevel);
 
   const handleAdd = () => {
-    if (newPlayerName.trim()) {
-      onAddPlayer?.(newPlayerName.trim());
+    if (newPlayerName.trim() && selectedLevel !== "All") {
+      onAddPlayer?.(newPlayerName.trim(), selectedLevel);
       setNewPlayerName("");
     }
   };
@@ -35,9 +41,19 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
             placeholder="Enter player name..."
             className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-h)] text-sm placeholder:text-[var(--text)]/50 focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-all"
           />
+          <select
+            value={selectedLevel}
+            onChange={(e) => setSelectedLevel(e.target.value)}
+            className="px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)]"
+          >
+            <option value="All">All</option>
+            <option value="Beginner">Beginner</option>
+            <option value="Intermediate">Intermediate</option>
+            <option value="Advanced">Advanced</option>
+          </select>
           <button
             onClick={handleAdd}
-            disabled={!newPlayerName.trim()}
+            disabled={!newPlayerName.trim() || selectedLevel === "All"}
             className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add Player
@@ -62,8 +78,11 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
               <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase tracking-wider">
                 Player Name
               </th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase tracking-wider">
-                Time Joined
+              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">
+                Level
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">
+                Matches Played
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase tracking-wider">
                 Status
@@ -74,18 +93,17 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
             </tr>
           </thead>
           <tbody>
-            {queue.length === 0 ? (
+            {filteredQueue.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-12 text-[var(--text)]">
                   <div className="flex flex-col items-center gap-2">
-                    <span className="text-3xl">📋</span>
                     <p className="text-sm font-medium">Queue is empty</p>
                     <p className="text-xs">Add players to start the queue</p>
                   </div>
                 </td>
               </tr>
             ) : (
-              queue.map((player, index) => (
+              filteredQueue.map((player, index) => (
                 <tr
                   key={player.id}
                   className="border-b border-[var(--border)] last:border-b-0 hover:bg-[var(--surface-hover)]/50 transition-colors"
@@ -103,7 +121,10 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
                       <span className="text-sm font-medium text-[var(--text-h)]">{player.name}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-sm text-[var(--text)]">{player.joined_at}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text)]">{player.level}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text)]">
+                    {player.matches_played}
+                  </td>
                   <td className="px-4 py-4">
                     <span
                       className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -115,14 +136,6 @@ export default function QueueList({ queue, onAddPlayer, onRemovePlayer, onStartM
                   </td>
                   <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {player.status === "Waiting" && (
-                        <button
-                          onClick={() => onStartMatch?.(player.id)}
-                          className="px-3 py-1.5 rounded-lg bg-[var(--success)] text-white text-xs font-semibold hover:opacity-90 transition-opacity"
-                        >
-                          Start Match
-                        </button>
-                      )}
                       <button
                         onClick={() => onRemovePlayer?.(player.id)}
                         className="px-3 py-1.5 rounded-lg bg-[var(--danger-light)] text-[var(--danger)] text-xs font-semibold hover:opacity-80 transition-opacity"

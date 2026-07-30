@@ -16,8 +16,6 @@ import { addPlayer } from "../database/playerQueries.js";
 import { addPlayerToQueue } from "../database/queueQueries.js";
 import { createMatch } from "../database/matchQueries.js";
 import {
-  getAvailableCourt,
-  updateCourtStatus,
   addCourt,
   removeCourt
 } from "../database/courtQueries.js";
@@ -107,9 +105,9 @@ ipcMain.handle("remove-queue", (event, id) => {
 
 });
 
-ipcMain.handle("add-player", (event, name) => {
+ipcMain.handle("add-player", (event, name, level) => {
 
-  const playerId = addPlayer(name);
+  const playerId = addPlayer(name, level);
 
   addPlayerToQueue(playerId);
 
@@ -124,51 +122,14 @@ ipcMain.handle("add-player", (event, name) => {
 //matches
 ipcMain.handle("create-match", () => {
 
-  const queue = getQueue();
+  const match = createMatch();
 
-
-  // get only waiting players
-  const waitingPlayers = queue.filter(
-    player => player.status === "waiting"
-  );
-
-
-  if(waitingPlayers.length < 2){
-    return {
-      error: "Not enough players"
-    };
+  if (!match.success) {
+    return match;
   }
-
-
-  const court = getAvailableCourt();
-
-
-  if(!court){
-    return {
-      error: "No available court"
-    };
-  }
-
-
-  const player1 = waitingPlayers[0];
-  const player2 = waitingPlayers[1];
-
-
-  const match = createMatch({
-    courtId: court.id,
-    playerOne: player1.player_id,
-    playerTwo: player2.player_id
-  });
-
-
-  updateCourtStatus(
-    court.id,
-    "playing"
-  );
-
 
   return {
-    success:true,
+    success: true,
     match
   };
 
@@ -177,12 +138,6 @@ ipcMain.handle("create-match", () => {
 ipcMain.handle("end-match", (event, courtId)=>{
 
   endMatch(courtId);
-
-  updateCourtStatus(
-    courtId,
-    "available"
-  );
-
 
   return {
     success:true

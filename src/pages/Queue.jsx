@@ -32,9 +32,9 @@ export default function Queue() {
 
   };
 
-  const handleAddPlayer = async (name) => {
+  const handleAddPlayer = async (name, level) => {
 
-    await window.api.addPlayer(name);
+    await window.api.addPlayer(name, level);
     const updatedQueue = await window.api.getQueue();
     setQueue(updatedQueue);
   };

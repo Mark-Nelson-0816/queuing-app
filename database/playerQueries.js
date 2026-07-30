@@ -1,7 +1,7 @@
 import db from "./database.js";
 
 
-export function addPlayer(name) {
+export function addPlayer(name, level) {
 
     // Check if player already exists
     const existingPlayer = db.prepare(`
@@ -18,9 +18,9 @@ export function addPlayer(name) {
 
     // Create new player
     const result = db.prepare(`
-        INSERT INTO players(name)
-        VALUES(?)
-    `).run(name);
+        INSERT INTO players(name, level)
+        VALUES(?, ?)
+    `).run(name, level);
 
 
     return result.lastInsertRowid;

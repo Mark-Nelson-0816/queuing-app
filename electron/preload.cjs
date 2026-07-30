@@ -7,8 +7,8 @@ contextBridge.exposeInMainWorld("api", {
   getPlayers: () =>
     ipcRenderer.invoke("get-players"),
 
-  addPlayer: (name) =>
-    ipcRenderer.invoke("add-player", name),
+  addPlayer: (name, level) =>
+    ipcRenderer.invoke("add-player", name, level),
 
 
 

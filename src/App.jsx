@@ -29,7 +29,7 @@ function SettingsPage() {
 }
 
 function App() {
-  const [activePage, setActivePage] = useState("dashboard");
+  const [activePage, setActivePage] = useState("queue");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const renderPage = () => {

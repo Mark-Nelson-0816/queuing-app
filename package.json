@@ -18,6 +18,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "database/**/*",
       "package.json"
     ],
     "win": {

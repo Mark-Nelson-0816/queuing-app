@@ -3,22 +3,106 @@ import db from "./database.js";
 
 export function createMatch(){
 
-    // Get 2 players waiting longest
-    const players = db.prepare(`
+    // Get all waiting players ordered by queue time
+    const waitingPlayers = db.prepare(`
         SELECT *
         FROM queue
         JOIN players 
         ON queue.player_id = players.id
         ORDER BY queue.joined_at ASC
-        LIMIT 2
     `).all();
 
-    if(players.length < 2){
+
+    if(waitingPlayers.length < 2){
         return {
-            success: false,
-            error: "Not enough players"
+            success:false,
+            error:"Not enough players"
         };
     }
+
+
+    // Find two players with the same level (avoiding immediate rematches)
+    let playerOne = null;
+    let playerTwo = null;
+
+    // First pass: try to find a pair that hasn't just played each other
+    for(let i = 0; i < waitingPlayers.length; i++){
+
+        for(let j = i + 1; j < waitingPlayers.length; j++){
+
+            if(waitingPlayers[i].level === waitingPlayers[j].level){
+
+                // Check if these two players just played each other recently
+                const recentMatch = db.prepare(`
+                    SELECT id FROM matches
+                    WHERE (
+                        (player_one = ? AND player_two = ?)
+                        OR
+                        (player_one = ? AND player_two = ?)
+                    )
+                    AND status = 'finished'
+                    ORDER BY end_time DESC
+                    LIMIT 1
+                `).get(
+                    waitingPlayers[i].player_id,
+                    waitingPlayers[j].player_id,
+                    waitingPlayers[j].player_id,
+                    waitingPlayers[i].player_id
+                );
+
+                // If they haven't just played each other, pair them
+                if(!recentMatch){
+                    playerOne = waitingPlayers[i];
+                    playerTwo = waitingPlayers[j];
+                    break;
+                }
+
+            }
+
+        }
+
+
+        if(playerOne && playerTwo){
+            break;
+        }
+
+    }
+
+    // Second pass (fallback): if no fresh pair found, allow any same-level pair (rematch)
+    if(!playerOne || !playerTwo){
+
+        for(let i = 0; i < waitingPlayers.length; i++){
+
+            for(let j = i + 1; j < waitingPlayers.length; j++){
+
+                if(waitingPlayers[i].level === waitingPlayers[j].level){
+
+                    playerOne = waitingPlayers[i];
+                    playerTwo = waitingPlayers[j];
+                    break;
+
+                }
+
+            }
+
+
+            if(playerOne && playerTwo){
+                break;
+            }
+
+        }
+
+    }
+
+
+    if(!playerOne || !playerTwo){
+        return {
+            success:false,
+            error:"No opponent with same level"
+        };
+    }
+
+
 
     // Find available court
     const court = db.prepare(`
@@ -31,15 +115,15 @@ export function createMatch(){
 
     if(!court){
         return {
-            success: false,
-            error: "No available court"
+            success:false,
+            error:"No available court"
         };
     }
 
 
 
-    const playerOne = players[0].player_id;
-    const playerTwo = players[1].player_id;
+    const playerOneId = playerOne.player_id;
+    const playerTwoId = playerTwo.player_id;
 
 
 
@@ -56,8 +140,8 @@ export function createMatch(){
         VALUES (?, ?, ?, datetime('now'), 'playing')
     `).run(
         court.id,
-        playerOne,
-        playerTwo
+        playerOneId,
+        playerTwoId
     );
 
 
@@ -67,8 +151,8 @@ export function createMatch(){
         DELETE FROM queue
         WHERE player_id IN (?,?)
     `).run(
-        playerOne,
-        playerTwo
+        playerOneId,
+        playerTwoId
     );
 
 
@@ -79,13 +163,13 @@ export function createMatch(){
         SET status='playing'
         WHERE id IN (?,?)
     `).run(
-        playerOne,
-        playerTwo
+        playerOneId,
+        playerTwoId
     );
 
 
 
-    // Update court
+    // Update court status
     db.prepare(`
         UPDATE courts
         SET status='playing'
@@ -95,12 +179,13 @@ export function createMatch(){
     );
 
 
+
     return {
         matchId: result.lastInsertRowid,
         court: court.name,
         players:[
-            players[0].name,
-            players[1].name
+            playerOne.name,
+            playerTwo.name
         ]
     };
 
@@ -139,6 +224,21 @@ export function endMatch(courtId){
         match.player_one,
         match.player_two
     );
+
+    // Re-add players to the back of the queue for rotation
+    const queueCount = db.prepare(`
+        SELECT COUNT(*) as count FROM queue
+    `).get().count;
+
+    db.prepare(`
+        INSERT INTO queue (player_id, position)
+        VALUES (?, ?)
+    `).run(match.player_one, queueCount + 1);
+
+    db.prepare(`
+        INSERT INTO queue (player_id, position)
+        VALUES (?, ?)
+    `).run(match.player_two, queueCount + 2);
 
     // Free court
     db.prepare(`

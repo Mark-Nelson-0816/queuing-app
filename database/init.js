@@ -8,10 +8,16 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS players (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+
+    level TEXT NOT NULL DEFAULT 'Beginner',
+
     matches_played INTEGER DEFAULT 0,
     wins INTEGER DEFAULT 0,
     losses INTEGER DEFAULT 0,
+
     status TEXT DEFAULT 'waiting',
+    -- waiting | playing | finished
+
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
