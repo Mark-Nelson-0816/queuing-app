@@ -23,35 +23,17 @@ export function createMatch(){
     let playerOne = null;
     let playerTwo = null;
 
+    // Strict FIFO queue behavior: take the first player in queue,
+    // then find the next earliest player with the same level
     for(let i = 0; i < waitingPlayers.length; i++){
 
         for(let j = i + 1; j < waitingPlayers.length; j++){
 
             if(waitingPlayers[i].level === waitingPlayers[j].level){
 
-                const recentMatch = db.prepare(`
-                    SELECT id FROM matches
-                    WHERE (
-                        (player_one = ? AND player_two = ?)
-                        OR
-                        (player_one = ? AND player_two = ?)
-                    )
-                    AND status = 'finished'
-                    ORDER BY end_time DESC
-                    LIMIT 1
-                `).get(
-                    waitingPlayers[i].player_id,
-                    waitingPlayers[j].player_id,
-                    waitingPlayers[j].player_id,
-                    waitingPlayers[i].player_id
-                );
-
-                
-                if(!recentMatch){
-                    playerOne = waitingPlayers[i];
-                    playerTwo = waitingPlayers[j];
-                    break;
-                }
+                playerOne = waitingPlayers[i];
+                playerTwo = waitingPlayers[j];
+                break;
 
             }
 
@@ -60,32 +42,6 @@ export function createMatch(){
 
         if(playerOne && playerTwo){
             break;
-        }
-
-    }
-
-    
-    if(!playerOne || !playerTwo){
-
-        for(let i = 0; i < waitingPlayers.length; i++){
-
-            for(let j = i + 1; j < waitingPlayers.length; j++){
-
-                if(waitingPlayers[i].level === waitingPlayers[j].level){
-
-                    playerOne = waitingPlayers[i];
-                    playerTwo = waitingPlayers[j];
-                    break;
-
-                }
-
-            }
-
-
-            if(playerOne && playerTwo){
-                break;
-            }
-
         }
 
     }
