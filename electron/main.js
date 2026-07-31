@@ -149,9 +149,9 @@ ipcMain.handle("create-match", () => {
 
 });
 
-ipcMain.handle("end-match", (event, courtId)=>{
+ipcMain.handle("end-match", (event, courtId, requeue)=>{
 
-  endMatch(courtId);
+  endMatch(courtId, requeue);
 
   return {
     success:true
@@ -178,8 +178,8 @@ ipcMain.handle("assign-rr-match", (event, matchId, courtId) => {
   return assignMatchToCourt(matchId, courtId);
 });
 
-ipcMain.handle("end-rr-match", (event, matchId, courtId) => {
-  return endRoundRobinMatch(matchId, courtId);
+ipcMain.handle("end-rr-match", (event, matchId, courtId, requeue) => {
+  return endRoundRobinMatch(matchId, courtId, requeue);
 });
 
 app.whenReady().then(() => {

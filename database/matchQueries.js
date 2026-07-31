@@ -1,4 +1,5 @@
 import db from "./database.js";
+import { addToQueue } from "./queueQueries.js";
 
 
 export function createMatch(){
@@ -186,27 +187,80 @@ export function createMatch(){
 
 }
 
-export function endMatch(courtId){
+export function endMatch(courtId, requeue = true){
     
-    const match = db.prepare(`
+    // First check normal queue matches table
+    let match = db.prepare(`
         SELECT *
         FROM matches
         WHERE court_id = ?
         AND status = 'playing'
     `).get(courtId);
 
-    if(!match){
+    if(match){
+        
+        db.prepare(`
+            UPDATE matches
+            SET 
+                status = 'finished',
+                end_time = datetime('now')
+            WHERE id = ?
+        `).run(match.id);
+
+        
+        db.prepare(`
+            UPDATE players
+            SET 
+                status = 'waiting',
+                matches_played = matches_played + 1
+            WHERE id IN (?,?)
+        `).run(
+            match.player_one,
+            match.player_two
+        );
+
+// Requeue players if requested (addToQueue prevents duplicates)
+        if(requeue){
+            addToQueue(match.player_one);
+            addToQueue(match.player_two);
+        }
+
+        
+        db.prepare(`
+            UPDATE courts
+            SET status = 'available'
+            WHERE id = ?
+        `).run(courtId);
+
+        return {
+            success:true,
+            type: 'normal',
+            players:[
+                match.player_one,
+                match.player_two
+            ]
+        };
+    }
+
+    // If no normal match found, check round_robin_matches table
+    const rrMatch = db.prepare(`
+        SELECT *
+        FROM round_robin_matches
+        WHERE court_id = ?
+        AND status = 'playing'
+    `).get(courtId);
+
+    if(!rrMatch){
         throw new Error("No active match found");
     }
 
     
     db.prepare(`
-        UPDATE matches
+        UPDATE round_robin_matches
         SET 
-            status = 'finished',
-            end_time = datetime('now')
+            status = 'completed'
         WHERE id = ?
-    `).run(match.id);
+    `).run(rrMatch.id);
 
     
     db.prepare(`
@@ -216,24 +270,15 @@ export function endMatch(courtId){
             matches_played = matches_played + 1
         WHERE id IN (?,?)
     `).run(
-        match.player_one,
-        match.player_two
+        rrMatch.player_one_id,
+        rrMatch.player_two_id
     );
 
-    
-    const queueCount = db.prepare(`
-        SELECT COUNT(*) as count FROM queue
-    `).get().count;
-
-    db.prepare(`
-        INSERT INTO queue (player_id, position)
-        VALUES (?, ?)
-    `).run(match.player_one, queueCount + 1);
-
-    db.prepare(`
-        INSERT INTO queue (player_id, position)
-        VALUES (?, ?)
-    `).run(match.player_two, queueCount + 2);
+    // Requeue players if requested
+    if(requeue){
+        addToQueue(rrMatch.player_one_id);
+        addToQueue(rrMatch.player_two_id);
+    }
 
     
     db.prepare(`
@@ -244,9 +289,10 @@ export function endMatch(courtId){
 
     return {
         success:true,
+        type: 'round_robin',
         players:[
-            match.player_one,
-            match.player_two
+            rrMatch.player_one_id,
+            rrMatch.player_two_id
         ]
     };
 

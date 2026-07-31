@@ -1,5 +1,6 @@
 import db from "./database.js";
 import { generateRoundRobinSchedule } from "../electron/roundRobinScheduler.js";
+import { addToQueue } from "./queueQueries.js";
 
 function ensureRoundNumberColumn() {
   const columns = db.prepare(`PRAGMA table_info(round_robin_matches)`).all();
@@ -150,14 +151,39 @@ export function assignMatchToCourt(matchId, courtId) {
   return { success: true };
 }
 
-export function endRoundRobinMatch(matchId, courtId) {
+export function endRoundRobinMatch(matchId, courtId, requeue = true) {
   const transaction = db.transaction(() => {
+
+    const match = db.prepare(`
+      SELECT id, player_one_id, player_two_id FROM round_robin_matches WHERE id = ?
+    `).get(matchId);
+
+    if (!match) {
+      throw new Error("No active round robin match found");
+    }
 
     db.prepare(`
       UPDATE round_robin_matches
       SET status = 'completed'
       WHERE id = ?
     `).run(matchId);
+
+    db.prepare(`
+      UPDATE players
+      SET 
+        status = 'waiting',
+        matches_played = matches_played + 1
+      WHERE id IN (?,?)
+    `).run(
+      match.player_one_id,
+      match.player_two_id
+    );
+
+    // Requeue players if requested (addToQueue prevents duplicates)
+    if (requeue) {
+      addToQueue(match.player_one_id);
+      addToQueue(match.player_two_id);
+    }
 
     db.prepare(`
       UPDATE courts

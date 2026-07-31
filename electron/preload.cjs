@@ -43,10 +43,11 @@ addPlayer: (name, level) =>
   //matches
   createMatch: () =>
     ipcRenderer.invoke("create-match"),
-  endMatch:(courtId)=>
+  endMatch:(courtId, requeue)=>
     ipcRenderer.invoke(
       "end-match",
-      courtId
+      courtId,
+      requeue
     ),
 
   // Round Robin
@@ -58,8 +59,8 @@ addPlayer: (name, level) =>
     ipcRenderer.invoke("get-rr-matches"),
   assignRRMatch: (matchId, courtId) =>
     ipcRenderer.invoke("assign-rr-match", matchId, courtId),
-  endRRMatch: (matchId, courtId) =>
-    ipcRenderer.invoke("end-rr-match", matchId, courtId),
+  endRRMatch: (matchId, courtId, requeue) =>
+    ipcRenderer.invoke("end-rr-match", matchId, courtId, requeue),
 
   //datas
   resetAllData: () => 

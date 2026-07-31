@@ -86,8 +86,10 @@ export default function RoundRobin() {
     setTimeout(() => setMessage(""), 3000);
   }
 
+  const [requeuePlayers, setRequeuePlayers] = useState(true);
+
   async function handleEndMatch(matchId, courtId) {
-    await window.api.endRRMatch(matchId, courtId);
+    await window.api.endRRMatch(matchId, courtId, requeuePlayers);
     await loadData();
     setMessage("Match ended, court is now available.");
     setTimeout(() => setMessage(""), 3000);
@@ -257,6 +259,15 @@ export default function RoundRobin() {
         <div className="p-4 border-b border-[var(--border)] flex items-center justify-between flex-wrap gap-3">
           <h3 className="font-semibold text-[var(--text-h)]">Round Robin Matches</h3>
           <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-[var(--text)] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={requeuePlayers}
+                onChange={(e) => setRequeuePlayers(e.target.checked)}
+                className="rounded"
+              />
+              Requeue players after match
+            </label>
             <select
               value={levelFilter}
               onChange={(e) => setLevelFilter(e.target.value)}

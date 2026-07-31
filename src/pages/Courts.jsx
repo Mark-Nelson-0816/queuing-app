@@ -71,9 +71,9 @@ export default function Courts() {
 
 
 
-  const handleEndMatch = async(courtId)=>{
+  const handleEndMatch = async(courtId, requeue = true)=>{
 
-    await window.api.endMatch(courtId);
+    await window.api.endMatch(courtId, requeue);
 
 
     loadCourts();

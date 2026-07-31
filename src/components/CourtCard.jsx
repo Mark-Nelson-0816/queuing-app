@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 export default function CourtCard({
   court,
   onEndMatch,
@@ -6,6 +8,7 @@ export default function CourtCard({
 
 
   const isAvailable = court.status === "available";
+  const [requeuePlayers, setRequeuePlayers] = useState(true);
 
 
   return (
@@ -119,28 +122,39 @@ export default function CourtCard({
 
 
 
-      {
+{
         !isAvailable &&
 
-        <button
+        <div className="space-y-2 mb-2">
+          <button
 
-          onClick={() => onEndMatch?.(court.id)}
+            onClick={() => onEndMatch?.(court.id, requeuePlayers)}
 
-          className="
-          w-full
-          py-2
-          rounded-xl
-          bg-[var(--danger)]
-          text-white
-          text-sm
-          font-semibold
-          mb-2
-          "
-        >
+            className="
+            w-full
+            py-2
+            rounded-xl
+            bg-red-500/80
+            text-white
+            text-sm
+            font-semibold
+            "
+          >
 
-          End Match
+            End Match
 
-        </button>
+          </button>
+
+          <label className="flex items-center gap-2 text-xs text-[var(--text)] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={requeuePlayers}
+              onChange={(e) => setRequeuePlayers(e.target.checked)}
+              className="rounded"
+            />
+            Requeue players after match
+          </label>
+        </div>
 
       }
 
