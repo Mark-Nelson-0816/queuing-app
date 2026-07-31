@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Trash2, Users } from "lucide-react";
 
 const statusStyles = {
@@ -24,33 +23,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function Toggle({ checked, onChange, label }) {
-  return (
-    <label className="flex items-center gap-2 text-xs text-[var(--text)] cursor-pointer select-none">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`
-          relative inline-flex h-5 w-9 items-center rounded-full transition-colors
-          ${checked ? "bg-[var(--primary)]" : "bg-[var(--border)]"}
-        `}
-      >
-        <span
-          className={`
-            inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform
-            ${checked ? "translate-x-4.5" : "translate-x-1"}
-          `}
-        />
-      </button>
-      {label}
-    </label>
-  );
-}
-
-export default function CourtCard({ court, onEndMatch, onRemoveCourt }) {
-  const [requeuePlayers, setRequeuePlayers] = useState(true);
+export default function CourtCard({ court, requeuePlayers = true, onEndMatch, onRemoveCourt }) {
   const isAvailable = court.status === "available";
   const players = court.players ?? [];
   const style = statusStyles[court.status] ?? statusStyles.available;
@@ -113,14 +86,9 @@ export default function CourtCard({ court, onEndMatch, onRemoveCourt }) {
         )}
       </div>
 
-      {/* Action */}
+{/* Action */}
       {!isAvailable && (
-        <div className="pt-3 border-t border-[var(--border)] space-y-3">
-          <Toggle
-            checked={requeuePlayers}
-            onChange={setRequeuePlayers}
-            label="Requeue players after match"
-          />
+        <div className="pt-3 border-t border-[var(--border)]">
           <button
             onClick={() => onEndMatch?.(court.id, requeuePlayers)}
             className="w-full py-2 rounded-xl bg-red-400 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
