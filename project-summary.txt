@@ -1,0 +1,691 @@
+================================================================================
+  BADMINTON QUEUE - COMPLETE PROJECT SUMMARY
+================================================================================
+
+  A desktop application for managing badminton game queues, courts, players,
+  matches, and round-robin tournaments. Built with Electron + React + SQLite.
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+  Name:            Badminton Queue
+  Version:         0.0.0
+  Type:            Desktop Application (Electron)
+  App ID:          com.badminton.queue
+  Product Name:    Badminton Queue
+
+  Goal:
+  - Provide a digital queue management system for badminton venues/clubs.
+  - Allow players to register, join a queue, get matched with opponents of
+    the same skill level, and play on available courts.
+  - Support both casual rotation (simple queue) and round-robin tournaments.
+  - Display live match status on a public-facing full-screen display.
+
+================================================================================
+2. TECHNOLOGY STACK
+================================================================================
+
+  Frontend:
+    - React 19.2.7
+    - Vite 8.1.1 (build tool)
+    - Tailwind CSS 4.3.3 (utility-first CSS framework)
+    - Lucide React 1.28.0 (icon library)
+
+  Backend / Desktop Shell:
+    - Electron 43.2.0
+    - better-sqlite3 13.0.2 (SQLite database driver)
+
+  Dev / Build:
+    - electron-builder 26.15.3 (packaging)
+    - ESLint 10.6.0 (code linting)
+    - Babel + React Compiler (optimization)
+
+  Build Configuration (electron-builder):
+    - Windows target: NSIS installer
+    - Files included: dist/, electron/, database/, package.json
+    - App data deleted on uninstall (NSIS setting)
+
+================================================================================
+3. PROJECT STRUCTURE
+================================================================================
+
+  badminton-queue/
+  ├── index.html                      # Entry HTML file
+  ├── package.json                    # Dependencies & scripts
+  ├── vite.config.js                  # Vite configuration (React, Babel, Tailwind)
+  ├── eslint.config.js               # ESLint config
+  ├── README.md                      # Template README
+  ├── TODO.md                        # Development task tracking
+  │
+  ├── database/
+  │   ├── database.js                # SQLite database connection (better-sqlite3)
+  │   ├── init.js                    # Database schema initialization
+  │   ├── playerQueries.js           # Player CRUD operations
+  │   ├── queueQueries.js            # Queue management operations
+  │   ├── courtQueries.js            # Court management operations
+  │   ├── matchQueries.js            # Match creation and ending
+  │   ├── roundRobinQueries.js       # Round-robin tournament operations
+  │   └── resetQueries.js            # Reset all data operation
+  │
+  ├── electron/
+  │   ├── main.js                    # Electron main process (IPC handlers, window)
+  │   ├── preload.cjs                # Context bridge (window.api)
+  │   └── roundRobinScheduler.js     # Round-robin schedule generation algorithm
+  │
+  ├── public/
+  │   ├── favicon.svg                # App favicon
+  │   └── icons.svg                  # Icons
+  │
+  ├── src/
+  │   ├── main.jsx                   # React entry point
+  │   ├── App.jsx                    # Root component with routing
+  │   ├── App.css                    # (empty/unused)
+  │   ├── index.css                  # Global styles & CSS variables
+  │   │
+  │   ├── components/
+  │   │   ├── Sidebar.jsx            # Navigation sidebar
+  │   │   ├── Header.jsx             # Top header bar with clock
+  │   │   ├── DashboardCard.jsx      # Stats card component
+  │   │   ├── QueueList.jsx          # Queue table with search & filters
+  │   │   ├── PlayerTable.jsx        # Player table with edit/delete
+  │   │   ├── CourtCard.jsx          # Individual court card display
+  │   │   └── PublicDisplay.jsx      # Full-screen public display view
+  │   │
+  │   └── pages/
+  │       ├── Dashboard.jsx          # Dashboard with stats & activity
+  │       ├── Queue.jsx              # Rotation Queue Management page
+  │       ├── RoundRobin.jsx         # Round Robin Tournament page
+  │       ├── Courts.jsx             # Court Management page
+  │       ├── Players.jsx            # Player Management page
+  │       └── PublicDisplayPage.jsx  # Public Display data loader
+  │
+  └── database.db (runtime)          # SQLite database file
+      database.db-shm                # SQLite shared memory file
+      database.db-wal                # SQLite WAL file
+
+================================================================================
+4. DATABASE SCHEMA (6 tables)
+================================================================================
+
+  The database is initialized in database/init.js using a transaction that
+  creates all tables with IF NOT EXISTS.
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: players                                                         │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: Stores all registered players                                 │
+  ├──────┬──────────────┬───────────────────────────────────────────────────┤
+  │  id  │ INTEGER PK   │ Auto-incremented player ID                       │
+  │ name │ TEXT NOT NULL │ Player's display name                            │
+  │ level│ TEXT DEFAULT │ Skill level: 'Beginner', 'Intermediate', 'Advanced'
+  │      │ 'Beginner'   │                                                   │
+  │ matches_played │ INTEGER DEFAULT 0 │ Total matches played               │
+  │ wins │ INTEGER DEFAULT 0 │ Total wins                                   │
+  │ losses│ INTEGER DEFAULT 0 │ Total losses                                │
+  │ status│ TEXT DEFAULT  │ 'waiting' | 'playing' | 'finished'              │
+  │       │ 'waiting'     │                                                  │
+  │ created_at │ DATETIME DEFAULT CURRENT_TIMESTAMP                         │
+  └──────┴──────────────┴───────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: courts                                                          │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: Manages badminton courts                                      │
+  ├──────┬──────────────┬───────────────────────────────────────────────────┤
+  │  id  │ INTEGER PK   │ Auto-incremented court ID                        │
+  │ name │ TEXT NOT NULL │ Court name (e.g., "Court 1")                     │
+  │ status│ TEXT DEFAULT │ 'available' | 'playing'                          │
+  │       │ 'available'  │                                                   │
+  │ created_at │ DATETIME DEFAULT CURRENT_TIMESTAMP                         │
+  └──────┴──────────────┴───────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: queue                                                           │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: FIFO queue of players waiting to play                         │
+  ├──────┬──────────────┬───────────────────────────────────────────────────┤
+  │  id  │ INTEGER PK   │ Auto-incremented queue entry ID                  │
+  │ player_id │ INTEGER NOT NULL │ FK to players.id                         │
+  │ position │ INTEGER   │ Position in queue (1-based)                      │
+  │ joined_at │ DATETIME DEFAULT CURRENT_TIMESTAMP                          │
+  └──────┴──────────────┴───────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: matches                                                         │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: Tracks currently playing and completed matches                │
+  ├──────┬──────────────┬───────────────────────────────────────────────────┤
+  │  id  │ INTEGER PK   │ Auto-incremented match ID                        │
+  │ court_id │ INTEGER  │ FK to courts.id                                   │
+  │ player_one │ INTEGER NOT NULL │ FK to players.id                        │
+  │ player_two │ INTEGER NOT NULL │ FK to players.id                        │
+  │ start_time │ DATETIME │ Match start time                                │
+  │ end_time  │ DATETIME │ Match end time                                   │
+  │ status    │ TEXT DEFAULT │ 'playing' | 'finished'                       │
+  │           │ 'playing'   │                                                │
+  │ winner_id │ INTEGER  │ FK to players.id (winner)                        │
+  │ created_at │ DATETIME DEFAULT CURRENT_TIMESTAMP                         │
+  └──────┴──────────────┴───────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: match_history                                                   │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: Archived match records                                        │
+  ├──────┬──────────────┬───────────────────────────────────────────────────┤
+  │  id  │ INTEGER PK   │ Auto-incremented history ID                      │
+  │ player_one │ INTEGER NOT NULL │ FK to players.id                        │
+  │ player_two │ INTEGER NOT NULL │ FK to players.id                        │
+  │ played_at  │ DATETIME DEFAULT CURRENT_TIMESTAMP                         │
+  │ winner_id  │ INTEGER   │ FK to players.id                               │
+  └──────┴──────────────┴───────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: round_robin_matches                                             │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: Stores round-robin tournament match schedule                  │
+  ├──────┬──────────────┬───────────────────────────────────────────────────┤
+  │  id  │ INTEGER PK   │ Auto-incremented match ID                        │
+  │ player_one_id │ INTEGER NOT NULL │ FK to players.id                     │
+  │ player_two_id │ INTEGER NOT NULL │ FK to players.id                     │
+  │ status    │ TEXT DEFAULT 'pending' │ 'pending' | 'playing' | 'completed'
+  │ court_id  │ INTEGER   │ FK to courts.id (assigned court)                │
+  │ round_number │ INTEGER │ Round number in the tournament                  │
+  │ created_at │ DATETIME DEFAULT CURRENT_TIMESTAMP                         │
+  └──────┴──────────────┴───────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │  TABLE: settings                                                        │
+  ├─────────────────────────────────────────────────────────────────────────┤
+  │  Purpose: Key-value store for app settings                              │
+  │  id  │ INTEGER PK │ key │ TEXT UNIQUE │ value │ TEXT                    │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+5. APP ARCHITECTURE & FLOW
+================================================================================
+
+  5.1 ELECTRON MAIN PROCESS (electron/main.js)
+  ─────────────────────────────────────────────
+  - Creates the main BrowserWindow (1200x800, maximized, fullscreenable)
+  - Loads the built React app from dist/index.html
+  - Registers F11 global shortcut for fullscreen toggle
+  - Hides the application menu (Menu.setApplicationMenu(null))
+  - Sets up all IPC handlers that bridge renderer ↔ database
+  - Database location: app.getPath("userData") + "badminton.db"
+
+  5.2 PRELOAD SCRIPT (electron/preload.cjs)
+  ─────────────────────────────────────────
+  - Uses contextBridge.exposeInMainWorld to expose "window.api"
+  - All database operations are invoked via ipcRenderer.invoke()
+  - Provides a clean API surface for the React frontend
+
+  5.3 REACT APP (src/App.jsx)
+  ───────────────────────────
+  - Root component with state-based routing (no React Router)
+  - activePage state determines which page component renders
+  - Layout: Sidebar (left) + Header (top) + Main content area
+  - Public Display page renders in full-screen mode (no sidebar/header)
+  - Settings page includes a "Reset All Data" button
+
+  5.4 IPC COMMUNICATION MAP
+  ─────────────────────────
+  Renderer (React) → window.api.* → ipcRenderer.invoke → Main Process IPC handler → Database Query → Response
+
+  API Methods:
+    Player Operations:
+      getPlayers()       → SELECT * FROM players ORDER BY id DESC
+      addPlayer(name, level) → INSERT INTO players (name, level)
+      deletePlayer(id)   → DELETE FROM players + cleanup related tables
+      updatePlayer(id, name, level) → UPDATE players SET name=?, level=?
+
+    Court Operations:
+      getCourts()        → SELECT courts + active players via LEFT JOIN
+      addCourt(name)     → INSERT INTO courts (name)
+      removeCourt(id)    → DELETE matches + clear RR court assignments + DELETE court
+
+    Queue Operations:
+      getQueue()         → SELECT queue JOIN players LEFT JOIN matches ORDER BY joined_at ASC
+      addQueue(playerId) → Checks for duplicate, calculates position, INSERT
+      removeQueue(id)    → DELETE FROM queue WHERE id=?
+
+    Match Operations:
+      createMatch()      → FIFO level-based matching + court assignment
+      endMatch(courtId, requeue) → Ends match, updates players, optionally requeues
+
+    Round Robin Operations:
+      getRRPlayers()     → SELECT id, name, level FROM players ORDER BY name ASC
+      generateRRMatches(playerIds) → Groups by level, generates round-robin schedule
+      getRRMatches()     → SELECT all RR matches with player names/levels
+      assignRRMatch(matchId, courtId) → Assigns pending match to available court
+      endRRMatch(matchId, courtId, requeue) → Ends RR match, optional requeue
+
+    Data Operations:
+      resetAllData()     → DELETE all data, reinsert 3 default courts
+
+================================================================================
+6. QUEUE LOGIC - DETAILED EXPLANATION
+================================================================================
+
+  6.1 THE QUEUE SYSTEM (database/queueQueries.js)
+  ───────────────────────────────────────────────
+  Purpose: Manage a First-In-First-Out waiting list of players.
+
+  Key Functions:
+    getQueue():
+      - Joins queue table with players table
+      - LEFT JOINs matches to count each player's matches_played
+      - Groups by player and queue entry
+      - Orders by joined_at ASC (oldest first = FIFO)
+
+    addToQueue(playerId):
+      - First checks if player is already in queue (prevents duplicates)
+      - Calculates position as current count + 1
+      - Inserts new entry with position
+
+    removeFromQueue(id):
+      - Deletes queue entry by queue.id (not player_id)
+
+  6.2 MATCH CREATION (database/matchQueries.js -> createMatch())
+  ──────────────────────────────────────────────────────────────
+  This is the core matching algorithm. It follows these steps:
+
+  Step 1: Get all waiting players from queue joined with players table,
+          ordered by joined_at ASC (FIFO).
+
+  Step 2: FIFO + Level-Based Matching Algorithm:
+    - Iterate through waiting players in order (i = 0, 1, 2, ...)
+    - For each player at position i, look for another player at position j
+      (where j > i) who has the SAME skill level.
+    - The first pair found that matches stops the search.
+    - This ensures:
+      a) The player who has been waiting longest gets priority.
+      b) They are matched with the next earliest player of the same level.
+      c) If no same-level opponent exists, matching fails.
+
+  Step 3: Court Assignment:
+    - Find the first available court (status = 'available').
+    - If no court available, matching fails.
+
+  Step 4: Database Updates (all happen in sequence):
+    a) INSERT into matches table (court_id, player_one, player_two, start_time, status='playing')
+    b) DELETE both players from queue
+    c) UPDATE both players' status to 'playing'
+    d) UPDATE court status to 'playing'
+
+  Step 5: Return match details (matchId, court name, player names)
+
+  Edge Cases:
+    - Less than 2 players in queue → "Not enough players"
+    - No same-level opponent found → "No opponent with same level"
+    - No available court → "No available court"
+
+  6.3 MATCH ENDING (database/matchQueries.js -> endMatch())
+  ─────────────────────────────────────────────────────────
+  When a match ends:
+
+  Step 1: Check if there's an active normal match on this court.
+  Step 2: If not found, check for an active round-robin match on this court.
+  Step 3: If no match found → throw error.
+
+  For Normal Matches:
+    a) UPDATE matches SET status='finished', end_time=now
+    b) UPDATE players SET status='waiting', matches_played+=1
+    c) If requeue=true → addToQueue() for both players (addToQueue prevents duplicates)
+    d) UPDATE court SET status='available'
+
+  For Round Robin Matches:
+    a) UPDATE round_robin_matches SET status='completed'
+    b) UPDATE players SET status='waiting', matches_played+=1
+    c) If requeue=true → addToQueue() for both players
+    d) UPDATE court SET status='available'
+
+  The requeue feature (added as per TODO.md) allows players to be automatically
+  re-added to the queue when their match ends, so they can play again.
+
+================================================================================
+7. ROUND ROBIN TOURNAMENT - DETAILED EXPLANATION
+================================================================================
+
+  7.1 SCHEDULING ALGORITHM (electron/roundRobinScheduler.js)
+  ──────────────────────────────────────────────────────────
+  Uses the "Circle Method" (also known as the "Polygon Method" or "Berger Tables")
+  for generating a round-robin tournament schedule.
+
+  Steps:
+    1. Take the list of player IDs.
+    2. If odd number, add a null "bye" player.
+    3. Fix the first player in place.
+    4. Rotate the remaining players each round.
+    5. In each round, pair players symmetrically:
+       - Player at index i pairs with player at index (n-1-i)
+       - Skip pairs that include the null bye player.
+
+  Example with 4 players [A, B, C, D]:
+    Round 1: A vs D, B vs C
+    Round 2: A vs C, D vs B
+    Round 3: A vs B, C vs D
+
+  Each player plays every other player exactly once.
+  Total rounds = number of players - 1 (if even) or number of players (if odd).
+
+  7.2 MATCH GENERATION (database/roundRobinQueries.js)
+  ─────────────────────────────────────────────────────
+  generateRoundRobinMatches(playerIds):
+    - Fetches players from database
+    - Groups players by skill level (Beginner, Intermediate, Advanced)
+    - For each level group with 2+ players, generates a round-robin schedule
+    - Returns array of match objects with player_one_id, player_two_id, round_number
+
+  saveRoundRobinMatches(matches):
+    - Wipes all existing RR matches and resets court statuses
+    - Inserts all new matches with status='pending'
+    - Uses a transaction for atomicity
+
+  7.3 MATCH ASSIGNMENT (database/roundRobinQueries.js)
+  ─────────────────────────────────────────────────────
+  assignMatchToCourt(matchId, courtId):
+    - Validates court is available
+    - Validates match is pending
+    - Checks neither player is already playing in another match
+    - Updates match to 'playing' and assigns court
+    - Updates court to 'playing'
+
+  7.4 LEVEL FILTERING & INTERLEAVING (src/pages/RoundRobin.jsx)
+  ──────────────────────────────────────────────────────────────
+  - Matches are displayed grouped by round number
+  - Within each round, matches are interleaved by level
+    (alternating: Beginner, Intermediate, Advanced, Beginner, ...)
+  - A level filter dropdown allows filtering to see only specific levels
+  - Player-level badges use color coding:
+    - Beginner: Blue
+    - Intermediate: Amber
+    - Advanced: Purple
+
+================================================================================
+8. PAGES & FEATURES - DETAILED DESCRIPTION
+================================================================================
+
+  8.1 DASHBOARD (src/pages/Dashboard.jsx)
+  ────────────────────────────────────────
+  Route ID: "dashboard"
+  Title: "Dashboard"
+
+  Features:
+    - 4 Summary Cards (DashboardCard component):
+      - Players Waiting (with trend % vs yesterday)
+      - Active Courts (with trend)
+      - Total Players Today (with trend)
+      - Completed Matches (with trend)
+    - Recent Activity panel (hardcoded demo data):
+      - Shows match starts, queue joins, match ends, court assignments
+    - Court Status panel (hardcoded demo data):
+      - Lists courts 1-4 with playing/available status badges
+
+  NOTE: Currently uses hardcoded/demo data, not connected to live database.
+
+  8.2 ROTATION QUEUE MANAGEMENT (src/pages/Queue.jsx)
+  ────────────────────────────────────────────────────
+  Route ID: "queue"
+  Title: "Rotation Queue Management"
+
+  Features:
+    - QueueList component with:
+      - Search input to find registered players (with dropdown suggestions)
+      - Level filter dropdown (All, Beginner, Intermediate, Advanced)
+      - "Add to Queue" button (disabled until player selected)
+      - "Start Match" button to trigger match creation
+      - Table displaying: position #, player name (with avatar), level, matches
+        played, status (waiting/playing/finished), and Remove button
+    - Stats summary:
+      - Waiting count
+      - Playing count
+      - Total count
+
+  Data Flow:
+    - On mount: loads queue data and players list via API
+    - Add to Queue: calls addQueue API, refreshes queue
+    - Remove from Queue: calls removeQueue API, filters local state
+    - Start Match: calls createMatch API, shows error if failed, refreshes queue
+
+  8.3 ROUND ROBIN MANAGEMENT (src/pages/RoundRobin.jsx)
+  ──────────────────────────────────────────────────────
+  Route ID: "roundrobin"
+  Title: "Round Robin Management"
+
+  Features:
+    - Stats bar: Total Matches, Pending, Playing, Completed
+    - Player Selection Panel:
+      - Grid of all players with checkboxes
+      - "Select All" toggle
+      - Selected count display
+      - "Generate Matches" button (disabled if < 2 selected)
+    - Matches Table:
+      - Grouped by Round number (with round header rows)
+      - Within each round, matches interleaved by skill level
+      - Columns: #, Player 1, Player 2, Level, Status, Actions
+      - Status badges: pending (yellow), playing (blue), completed (green)
+      - Pending matches: "Assign to Court" button (disabled if player busy)
+      - Playing matches: "End Match" button
+      - Completed matches: "Done" label
+      - Level filter dropdown
+      - "Clear Pending" button to remove all pending matches
+    - Busy player detection: players already in a playing match can't be
+      assigned to another court
+
+  8.4 COURT MANAGEMENT (src/pages/Courts.jsx)
+  ────────────────────────────────────────────
+  Route ID: "courts"
+  Title: "Court Management"
+
+  Features:
+    - Add Court: text input + "Add Court" button
+    - Stats bar: Playing, Available, Total Courts
+    - Toggle switch: "Requeue players after match" (on by default)
+    - Court Cards Grid (CourtCard component):
+      - Each card shows: court name, status badge, player names with avatars
+      - Available courts: no action buttons
+      - Playing courts: "End Match" button (red)
+      - Hover: delete button (trash icon) - hidden for playing courts
+    - Error message display for invalid actions
+
+  CourtCard Component Features:
+    - Status-based styling: green for available, blue for playing
+    - Players display with avatar circles
+    - End Match button triggers onEndMatch(courtId, requeuePlayers)
+    - Remove court button with confirmation
+
+  8.5 PLAYER MANAGEMENT (src/pages/Players.jsx)
+  ──────────────────────────────────────────────
+  Route ID: "players"
+  Title: "Player Management"
+
+  Features:
+    - Add Player form:
+      - Name input with Enter key support
+      - Level dropdown (Beginner, Intermediate, Advanced)
+      - "Add Player" button (disabled if name empty)
+    - Stats cards: Total Players, Playing, Total Matches
+    - Player Table (PlayerTable component):
+      - Columns: Player (avatar + name + level), Matches Played, Status, Actions
+      - Inline editing: click "Edit" to edit name and level inline
+      - "Save" and "Cancel" for edits
+      - "Delete" button with confirmation dialog
+      - Empty state message when no players
+
+  PlayerTable Component Features:
+    - Edit mode: switches row to input fields
+    - Status badges: waiting (green), playing (blue), finished (gray)
+    - Avatar circle with first letter of name
+    - Level displayed below name
+
+  8.6 PUBLIC DISPLAY (src/pages/PublicDisplayPage.jsx + PublicDisplay.jsx)
+  ────────────────────────────────────────────────────────────────────────
+  Route ID: "public"
+  Title: "Public Display" (renders in full-screen, no sidebar/header)
+
+  PublicDisplayPage (data loader):
+    - Loads courts and queue data from API
+    - Formats queue join times to readable format
+    - Auto-refreshes every 10 seconds (setInterval)
+    - Passes data to PublicDisplay component
+
+  PublicDisplay Component:
+    - Full-screen layout (h-screen, no overflow)
+    - Header: "Badminton Queue" title + live clock (hour:minute + date)
+    - 4-column grid layout:
+      - Left 3 columns: "Currently Playing" section
+        - Shows court cards with player names and "LIVE" badges
+        - Responsive grid: 1 col (≤1 court), 2 cols (2-4 courts), 3 cols (>4)
+        - Dense mode for >4 courts (smaller padding, text)
+        - Empty state: shuttlecock emoji + "No active matches"
+        - Each court card: court name, green LIVE badge (pulsing), player cards
+        - Player display: 2-player format shows VS divider
+        - Multi-player format shows all players in grid
+      - Right 1 column: "Next Up" section
+        - Shows up to 6 queued players
+        - Each player: position number + name + time joined
+        - "+N more" if more than 7 players in queue
+        - Empty state: clipboard emoji + "Queue is empty"
+    - Escape key handler: reloads page (for exiting fullscreen mode)
+
+  8.7 SETTINGS (defined in App.jsx inline)
+  ────────────────────────────────────────
+  Route ID: "settings"
+  Title: "Settings"
+
+  Features:
+    - "Reset all Data" button (red, centered)
+    - Confirmation dialog before reset
+    - Calls resetAllData API which:
+      - Deletes all round_robin_matches, matches, queue, players, courts
+      - Re-inserts 3 default courts (Court 1, Court 2, Court 3)
+      - Resets auto-increment counters
+
+================================================================================
+9. UI / UX DETAILS
+================================================================================
+
+  9.1 CSS THEME (src/index.css)
+  ─────────────────────────────
+  CSS Variables defined on :root for theming:
+    - Background: --bg (#f8fafc)
+    - Surface: --surface (#ffffff), --surface-hover (#f1f5f9)
+    - Text: --text (#475569), --text-h (#0f172a)
+    - Border: --border (#e2e8f0)
+    - Primary: --primary (#2563eb), --primary-hover (#1d4ed8), --primary-light (#dbeafe)
+    - Success: --success (#16a34a), --success-light (#dcfce7)
+    - Warning: --warning (#f59e0b), --warning-light (#fef3c7)
+    - Danger: --danger (#e03434), --danger-light (#fee2e2)
+    - Shadows: --shadow, --shadow-lg
+    - Font: "Segoe UI", Inter, system-ui, sans-serif
+
+  Dark theme CSS variables are defined but commented out.
+
+  Scrollbar styling: thin 6px scrollbar with custom colors.
+
+  9.2 SIDEBAR (src/components/Sidebar.jsx)
+  ────────────────────────────────────────
+  - Collapsible (64px expanded, 16px collapsed)
+  - Navigation items: Rotation Queue, Round Robin, Courts, Players, Public Display, Settings
+  - Active item highlighted with primary color and white text
+  - Collapse/expand toggle button with animated arrow icon
+  - Footer with app name and version
+
+  9.3 HEADER (src/components/Header.jsx)
+  ──────────────────────────────────────
+  - Shows current page title
+  - Live updating clock (hours:minutes + weekday, month, day)
+  - Updates every second via setInterval
+  - Optional actions slot for page-specific buttons
+  - User avatar circle (currently hardcoded to "A")
+
+  9.4 DASHBOARD CARD (src/components/DashboardCard.jsx)
+  ──────────────────────────────────────────────────────
+  - Reusable stat card with label, value, icon, trend, and color
+  - Color themes: primary (blue), success (green), warning (yellow), danger (red)
+  - Trend indicator: up (green ↑), down (red ↓), flat (gray →)
+  - Hover shadow effect
+
+================================================================================
+10. ELECTRON SPECIFIC FEATURES
+================================================================================
+
+  - Fullscreen mode via F11 (globalShortcut)
+  - Application menu hidden (Menu.setApplicationMenu(null))
+  - Window starts maximized
+  - Preload script uses CommonJS (require) for Electron compatibility
+  - Main process uses ES modules (import) with fileURLToPath for __dirname
+  - Database file stored in Electron's userData directory:
+    Windows: %APPDATA%/badminton-queue/badminton.db
+    macOS: ~/Library/Application Support/badminton-queue/badminton.db
+    Linux: ~/.config/badminton-queue/badminton.db
+
+================================================================================
+11. BUILD & RUN SCRIPTS
+================================================================================
+
+  npm run dev      → Starts Vite dev server (React hot-reload)
+  npm run build    → Builds React app for production (dist/)
+  npm run electron → Runs the Electron app (loads from dist/)
+  npm run dist     → Builds + packages into installable executable
+  npm run preview  → Previews the built Vite app
+  npm run lint     → Runs ESLint
+
+================================================================================
+12. TODO.md - RECENT DEVELOPMENT TASK
+================================================================================
+
+  The TODO.md tracks the "End Match Fix + Requeue Feature" implementation:
+
+  Completed Steps:
+    1. Analyzed codebase and planned changes
+    2. Modified database/matchQueries.js - endMatch() handles both match types
+       and requeue parameter
+    3. Modified database/roundRobinQueries.js - endRoundRobinMatch() accepts
+       requeue parameter
+    4. Modified electron/main.js - IPC handlers pass requeue
+    5. Modified electron/preload.cjs - API passes requeue
+    6. Modified src/components/CourtCard.jsx - added requeue context
+    7. Modified src/pages/Courts.jsx - added requeue toggle
+    8. Modified src/pages/RoundRobin.jsx - pass requeue to API
+    9. Build verified: ✅ Build succeeded
+
+  This feature allows players to be automatically re-added to the queue when
+  their match ends, controlled by a toggle switch on the Courts page.
+
+================================================================================
+13. DATA FLOW SUMMARIES
+================================================================================
+
+  13.1 TYPICAL USER FLOW: CASUAL PLAY
+  ────────────────────────────────────
+    1. Admin opens Player Management → adds players (name + level)
+    2. Admin opens Queue Management → searches & adds players to queue
+    3. Admin clicks "Start Match"
+       → System finds first 2 FIFO players with same level
+       → System finds an available court
+       → Match is created, players removed from queue, court marked playing
+    4. Players play their match on the assigned court
+    5. Admin opens Court Management → clicks "End Match" on the court
+       → Players are marked as waiting, matches_played incremented
+       → Court becomes available again
+       → Players are optionally re-added to queue (if toggle is on)
+    6. Public Display shows live matches and upcoming queue on TV/monitor
+
+  13.2 TYPICAL USER FLOW: ROUND ROBIN TOURNAMENT
+  ────────────────────────────────────────────────
+    1. Admin adds players (same as above)
+    2. Admin opens Round Robin Management → selects players for tournament
+    3. Admin clicks "Generate Matches"
+       → System generates round-robin schedule grouped by level
+    4. Admin assigns pending matches to available courts
+       → Match status changes to "playing", court becomes busy
+    5. Players play their matches
+    6. Admin clicks "End Match" on completed matches
+       → Players are freed up, court becomes available
+    7. Admin continues assigning remaining matches until all are completed
+
+================================================================================
+END OF SUMMARY
+================================================================================

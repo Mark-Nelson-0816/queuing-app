@@ -6,7 +6,34 @@ const statusColors = {
   finished: "bg-[var(--success-light)] text-[var(--success)]",
 };
 
-export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer, onStartMatch }) {
+function MatchTypeToggle({ matchType, onChange }) {
+  return (
+    <div className="flex items-center gap-1 bg-[var(--surface-hover)] rounded-xl p-1">
+      <button
+        onClick={() => onChange('singles')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+          matchType === 'singles'
+            ? 'bg-[var(--primary)] text-white shadow-sm'
+            : 'text-[var(--text)] hover:text-[var(--text-h)]'
+        }`}
+      >
+        Singles
+      </button>
+      <button
+        onClick={() => onChange('doubles')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+          matchType === 'doubles'
+            ? 'bg-[var(--primary)] text-white shadow-sm'
+            : 'text-[var(--text)] hover:text-[var(--text-h)]'
+        }`}
+      >
+        Doubles
+      </button>
+    </div>
+  );
+}
+
+export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer, onStartMatch, matchType, onMatchTypeChange }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
@@ -89,13 +116,14 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
             <option value="Intermediate">Intermediate</option>
             <option value="Advanced">Advanced</option>
           </select>
-          <button
+<button
             onClick={handleAdd}
             disabled={!selectedPlayerId}
             className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Add to Queue
           </button>
+          <MatchTypeToggle matchType={matchType} onChange={onMatchTypeChange} />
           <button
             onClick={() => onStartMatch?.()}
             className="px-5 py-2.5 rounded-xl bg-[var(--success)] text-white"

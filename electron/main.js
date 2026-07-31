@@ -134,9 +134,9 @@ ipcMain.handle("update-player", (event, id, name, level) => {
 });
 
 //matches
-ipcMain.handle("create-match", () => {
+ipcMain.handle("create-match", (event, matchType) => {
 
-  const match = createMatch();
+  const match = createMatch(matchType || 'singles');
 
   if (!match.success) {
     return match;
@@ -164,8 +164,8 @@ ipcMain.handle("get-rr-players", () => {
   return getAllPlayers();
 });
 
-ipcMain.handle("generate-rr-matches", (event, playerIds) => {
-  const matches = generateRoundRobinMatches(playerIds);
+ipcMain.handle("generate-rr-matches", (event, playerIds, matchType) => {
+  const matches = generateRoundRobinMatches(playerIds, matchType || 'singles');
   saveRoundRobinMatches(matches);
   return { success: true };
 });

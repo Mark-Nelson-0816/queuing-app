@@ -41,8 +41,8 @@ addPlayer: (name, level) =>
     ipcRenderer.invoke("remove-queue", id),
 
   //matches
-  createMatch: () =>
-    ipcRenderer.invoke("create-match"),
+  createMatch: (matchType) =>
+    ipcRenderer.invoke("create-match", matchType),
   endMatch:(courtId, requeue)=>
     ipcRenderer.invoke(
       "end-match",
@@ -53,8 +53,8 @@ addPlayer: (name, level) =>
   // Round Robin
   getRRPlayers: () =>
     ipcRenderer.invoke("get-rr-players"),
-  generateRRMatches: (playerIds) =>
-    ipcRenderer.invoke("generate-rr-matches", playerIds),
+  generateRRMatches: (playerIds, matchType) =>
+    ipcRenderer.invoke("generate-rr-matches", playerIds, matchType),
   getRRMatches: () =>
     ipcRenderer.invoke("get-rr-matches"),
   assignRRMatch: (matchId, courtId) =>

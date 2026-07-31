@@ -131,9 +131,9 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
                     </span>
                   </div>
 
-                  <div
+<div
                     className={`flex-1 min-h-0 grid gap-1.5 content-center ${
-                      court.players?.length > 2 ? "grid-cols-2" : "grid-cols-1"
+                      court.players?.length > 2 ? "grid-cols-1" : "grid-cols-1"
                     }`}
                   >
                     {court.players?.length === 2 ? (
@@ -181,6 +181,43 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
                           </span>
                         </div>
                       </>
+                    ) : court.players?.length === 4 ? (
+                      <div className="space-y-2">
+                        {/* Team 1 */}
+                        <div className="bg-[var(--primary-light)]/30 rounded-xl p-2">
+                          <p className={`font-semibold text-[var(--primary)] text-center mb-1 ${dense ? 'text-[10px]' : 'text-xs'}`}>Team 1</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {court.players.slice(0, 2).map((player, index) => (
+                              <div key={index} className="flex items-center gap-1.5 bg-[var(--surface-hover)] rounded-lg overflow-hidden p-1.5">
+                                <span className={`shrink-0 rounded-full bg-[var(--primary)] text-white flex items-center justify-center font-bold ${dense ? 'w-5 h-5 text-[10px]' : 'w-7 h-7 text-sm'}`}>
+                                  {player.charAt(0)}
+                                </span>
+                                <span className={`font-medium text-[var(--text-h)] truncate ${dense ? 'text-sm' : 'text-lg'}`}>
+                                  {player}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        {/* VS */}
+                        <p className={`text-center font-bold opacity-40 ${dense ? 'text-xs' : 'text-sm'}`}>VS</p>
+                        {/* Team 2 */}
+                        <div className="bg-[var(--warning-light)]/30 rounded-xl p-2">
+                          <p className={`font-semibold text-[var(--warning)] text-center mb-1 ${dense ? 'text-[10px]' : 'text-xs'}`}>Team 2</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {court.players.slice(2, 4).map((player, index) => (
+                              <div key={index} className="flex items-center gap-1.5 bg-[var(--surface-hover)] rounded-lg overflow-hidden p-1.5">
+                                <span className={`shrink-0 rounded-full bg-[var(--warning)] text-white flex items-center justify-center font-bold ${dense ? 'w-5 h-5 text-[10px]' : 'w-7 h-7 text-sm'}`}>
+                                  {player.charAt(0)}
+                                </span>
+                                <span className={`font-medium text-[var(--text-h)] truncate ${dense ? 'text-sm' : 'text-lg'}`}>
+                                  {player}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     ) : (
                       court.players?.map((player, index) => (
                         <div

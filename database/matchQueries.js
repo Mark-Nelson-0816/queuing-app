@@ -2,7 +2,7 @@ import db from "./database.js";
 import { addToQueue } from "./queueQueries.js";
 
 
-export function createMatch(){
+export function createMatch(matchType = 'singles'){
 
     const waitingPlayers = db.prepare(`
         SELECT *
@@ -12,48 +12,46 @@ export function createMatch(){
         ORDER BY queue.joined_at ASC
     `).all();
 
+    const requiredPlayers = matchType === 'doubles' ? 4 : 2;
 
-    if(waitingPlayers.length < 2){
+    if(waitingPlayers.length < requiredPlayers){
         return {
             success:false,
-            error:"Not enough players"
+            error: `Not enough players. Need ${requiredPlayers} for ${matchType}.`
         };
     }
 
-    let playerOne = null;
-    let playerTwo = null;
+    let matchedPlayers = [];
+    let playerObjects = [];
 
     // Strict FIFO queue behavior: take the first player in queue,
-    // then find the next earliest player with the same level
+    // then find the next earliest players with the same level
     for(let i = 0; i < waitingPlayers.length; i++){
 
-        for(let j = i + 1; j < waitingPlayers.length; j++){
+        const level = waitingPlayers[i].level;
+        const sameLevel = [waitingPlayers[i]];
 
-            if(waitingPlayers[i].level === waitingPlayers[j].level){
-
-                playerOne = waitingPlayers[i];
-                playerTwo = waitingPlayers[j];
-                break;
-
+        for(let j = i + 1; j < waitingPlayers.length && sameLevel.length < requiredPlayers; j++){
+            if(waitingPlayers[j].level === level){
+                sameLevel.push(waitingPlayers[j]);
             }
-
         }
 
-
-        if(playerOne && playerTwo){
+        if(sameLevel.length >= requiredPlayers){
+            matchedPlayers = sameLevel.slice(0, requiredPlayers).map(p => p.player_id);
+            playerObjects = sameLevel.slice(0, requiredPlayers);
             break;
         }
 
     }
 
 
-    if(!playerOne || !playerTwo){
+    if(matchedPlayers.length < requiredPlayers){
         return {
             success:false,
-            error:"No opponent with same level"
+            error: `Not enough same-level players for ${matchType}. Need ${requiredPlayers}.`
         };
     }
-
 
 
     
@@ -73,11 +71,10 @@ export function createMatch(){
     }
 
 
-
-    const playerOneId = playerOne.player_id;
-    const playerTwoId = playerTwo.player_id;
-
-
+    // For doubles: team 1 = players[0,1], team 2 = players[2,3]
+    // For singles: player_one = first, player_two = second
+    const playerOneId = matchedPlayers[0];
+    const playerTwoId = matchedPlayers[1];
 
     
     const result = db.prepare(`
@@ -86,39 +83,53 @@ export function createMatch(){
             court_id,
             player_one,
             player_two,
+            match_type,
             start_time,
             status
         )
-        VALUES (?, ?, ?, datetime('now'), 'playing')
+        VALUES (?, ?, ?, ?, datetime('now'), 'playing')
     `).run(
         court.id,
         playerOneId,
-        playerTwoId
+        playerTwoId,
+        matchType
     );
 
+    const matchId = result.lastInsertRowid;
+
+    // Insert match_players entries
+    const insertMP = db.prepare(`
+        INSERT INTO match_players (match_id, player_id, team, match_type, source)
+        VALUES (?, ?, ?, ?, 'normal')
+    `);
+
+    if (matchType === 'doubles') {
+        // Team 1: players[0], players[1]; Team 2: players[2], players[3]
+        insertMP.run(matchId, matchedPlayers[0], 1, 'doubles');
+        insertMP.run(matchId, matchedPlayers[1], 1, 'doubles');
+        insertMP.run(matchId, matchedPlayers[2], 2, 'doubles');
+        insertMP.run(matchId, matchedPlayers[3], 2, 'doubles');
+    } else {
+        insertMP.run(matchId, matchedPlayers[0], null, 'singles');
+        insertMP.run(matchId, matchedPlayers[1], null, 'singles');
+    }
 
 
+    // Build parameterized placeholders for IN clauses
+    const placeholders = matchedPlayers.map(() => '?').join(',');
     
     db.prepare(`
         DELETE FROM queue
-        WHERE player_id IN (?,?)
-    `).run(
-        playerOneId,
-        playerTwoId
-    );
-
+        WHERE player_id IN (${placeholders})
+    `).run(...matchedPlayers);
 
 
     
     db.prepare(`
         UPDATE players
         SET status='playing'
-        WHERE id IN (?,?)
-    `).run(
-        playerOneId,
-        playerTwoId
-    );
-
+        WHERE id IN (${placeholders})
+    `).run(...matchedPlayers);
 
 
     
@@ -133,18 +144,47 @@ export function createMatch(){
 
 
     return {
-        matchId: result.lastInsertRowid,
+        matchId,
         court: court.name,
-        players:[
-            playerOne.name,
-            playerTwo.name
-        ]
+        matchType,
+        players: playerObjects.map(p => p.name),
+        teams: matchType === 'doubles' ? {
+            team1: [playerObjects[0].name, playerObjects[1].name],
+            team2: [playerObjects[2].name, playerObjects[3].name]
+        } : undefined
     };
 
 }
 
 export function endMatch(courtId, requeue = true){
     
+    // Helper to free players from match_players
+    const freePlayers = (matchId, source) => {
+        const matchPlayers = db.prepare(`
+            SELECT player_id FROM match_players
+            WHERE match_id = ? AND source = ?
+        `).all(matchId, source);
+
+        const playerIds = matchPlayers.map(p => p.player_id);
+        const placeholders = playerIds.map(() => '?').join(',');
+
+        db.prepare(`
+            UPDATE players
+            SET 
+                status = 'waiting',
+                matches_played = matches_played + 1
+            WHERE id IN (${placeholders})
+        `).run(...playerIds);
+
+        if(requeue){
+            for(const pid of playerIds){
+                addToQueue(pid);
+            }
+        }
+
+        return playerIds;
+    };
+
     // First check normal queue matches table
     let match = db.prepare(`
         SELECT *
@@ -163,23 +203,7 @@ export function endMatch(courtId, requeue = true){
             WHERE id = ?
         `).run(match.id);
 
-        
-        db.prepare(`
-            UPDATE players
-            SET 
-                status = 'waiting',
-                matches_played = matches_played + 1
-            WHERE id IN (?,?)
-        `).run(
-            match.player_one,
-            match.player_two
-        );
-
-// Requeue players if requested (addToQueue prevents duplicates)
-        if(requeue){
-            addToQueue(match.player_one);
-            addToQueue(match.player_two);
-        }
+        const playerIds = freePlayers(match.id, 'normal');
 
         
         db.prepare(`
@@ -191,10 +215,8 @@ export function endMatch(courtId, requeue = true){
         return {
             success:true,
             type: 'normal',
-            players:[
-                match.player_one,
-                match.player_two
-            ]
+            matchType: match.match_type || 'singles',
+            players: playerIds
         };
     }
 
@@ -218,23 +240,7 @@ export function endMatch(courtId, requeue = true){
         WHERE id = ?
     `).run(rrMatch.id);
 
-    
-    db.prepare(`
-        UPDATE players
-        SET 
-            status = 'waiting',
-            matches_played = matches_played + 1
-        WHERE id IN (?,?)
-    `).run(
-        rrMatch.player_one_id,
-        rrMatch.player_two_id
-    );
-
-    // Requeue players if requested
-    if(requeue){
-        addToQueue(rrMatch.player_one_id);
-        addToQueue(rrMatch.player_two_id);
-    }
+    const playerIds = freePlayers(rrMatch.id, 'round_robin');
 
     
     db.prepare(`
@@ -246,10 +252,8 @@ export function endMatch(courtId, requeue = true){
     return {
         success:true,
         type: 'round_robin',
-        players:[
-            rrMatch.player_one_id,
-            rrMatch.player_two_id
-        ]
+        matchType: rrMatch.match_type || 'singles',
+        players: playerIds
     };
 
 }

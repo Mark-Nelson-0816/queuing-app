@@ -12,6 +12,33 @@ const levelStyles = {
   Advanced: "bg-purple-100 text-purple-700",
 };
 
+function MatchTypeToggle({ matchType, onChange }) {
+  return (
+    <div className="flex items-center gap-1 bg-[var(--surface-hover)] rounded-xl p-1">
+      <button
+        onClick={() => onChange('singles')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+          matchType === 'singles'
+            ? 'bg-[var(--primary)] text-white shadow-sm'
+            : 'text-[var(--text)] hover:text-[var(--text-h)]'
+        }`}
+      >
+        Singles
+      </button>
+      <button
+        onClick={() => onChange('doubles')}
+        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+          matchType === 'doubles'
+            ? 'bg-[var(--primary)] text-white shadow-sm'
+            : 'text-[var(--text)] hover:text-[var(--text-h)]'
+        }`}
+      >
+        Doubles
+      </button>
+    </div>
+  );
+}
+
 export default function RoundRobin() {
   const [players, setPlayers] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -19,6 +46,7 @@ export default function RoundRobin() {
   const [courts, setCourts] = useState([]);
   const [message, setMessage] = useState("");
   const [levelFilter, setLevelFilter] = useState("All");
+  const [matchType, setMatchType] = useState("singles");
 
   async function loadData() {
     const allPlayers = await window.api.getRRPlayers();
@@ -53,15 +81,16 @@ export default function RoundRobin() {
     }
   }
 
-  async function handleGenerateMatches() {
-    if (selectedIds.size < 2) {
-      setMessage("Select at least 2 players to generate matches.");
+async function handleGenerateMatches() {
+    const minPlayers = matchType === 'doubles' ? 4 : 2;
+    if (selectedIds.size < minPlayers) {
+      setMessage(`Select at least ${minPlayers} players for ${matchType}.`);
       setTimeout(() => setMessage(""), 3000);
       return;
     }
 
     const playerIds = Array.from(selectedIds);
-    await window.api.generateRRMatches(playerIds);
+    await window.api.generateRRMatches(playerIds, matchType);
     const allMatches = await window.api.getRRMatches();
     setMatches(allMatches);
     setMessage(`Generated ${allMatches.length} matches!`);
@@ -211,9 +240,10 @@ export default function RoundRobin() {
             <span className="text-sm text-[var(--text)]">
               {selectedIds.size} selected
             </span>
+<MatchTypeToggle matchType={matchType} onChange={setMatchType} />
             <button
               onClick={handleGenerateMatches}
-              disabled={selectedIds.size < 2}
+              disabled={selectedIds.size < (matchType === 'doubles' ? 4 : 2)}
               className="px-5 py-2 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Generate Matches
@@ -283,8 +313,8 @@ export default function RoundRobin() {
             <thead>
               <tr className="border-b border-[var(--border)]">
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">#</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Player 1</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Player 2</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Team 1</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Team 2</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Level</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Status</th>
                 <th className="text-right px-4 py-3 text-xs font-semibold text-[var(--text)] uppercase">Actions</th>
@@ -324,11 +354,37 @@ export default function RoundRobin() {
                           <td className="px-4 py-4 text-sm text-[var(--text)]">{index + 1}</td>
 
                           <td className="px-4 py-4 text-sm text-[var(--text-h)]">
-                            {match.player_one_name}
+                            {match.team_one_names ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-[var(--primary)] text-xs">Team 1</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {match.team_one_names.map((name, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[var(--primary-light)] rounded-lg text-xs">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              match.player_one_name
+                            )}
                           </td>
 
                           <td className="px-4 py-4 text-sm text-[var(--text-h)]">
-                            {match.player_two_name}
+                            {match.team_two_names ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold text-[var(--warning)] text-xs">Team 2</span>
+                                <div className="flex flex-wrap gap-1">
+                                  {match.team_two_names.map((name, i) => (
+                                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[var(--warning-light)] rounded-lg text-xs">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              match.player_two_name
+                            )}
                           </td>
 
                           <td className="px-4 py-4">

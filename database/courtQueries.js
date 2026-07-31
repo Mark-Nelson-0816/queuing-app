@@ -8,23 +8,23 @@ export function getCourts(){
       courts.id,
       courts.name,
       courts.status,
-      GROUP_CONCAT(DISTINCT players.name) AS players
+      GROUP_CONCAT(DISTINCT players.name) AS players,
+      CASE WHEN COUNT(DISTINCT match_players.player_id) = 4 THEN 'doubles' ELSE 'singles' END AS match_type
 
     FROM courts
 
     LEFT JOIN (
-      SELECT court_id, player_one AS player_id FROM matches WHERE status = 'playing'
+      SELECT court_id, id AS match_id FROM matches WHERE status = 'playing'
       UNION
-      SELECT court_id, player_two AS player_id FROM matches WHERE status = 'playing'
-      UNION
-      SELECT court_id, player_one_id AS player_id FROM round_robin_matches WHERE status = 'playing'
-      UNION
-      SELECT court_id, player_two_id AS player_id FROM round_robin_matches WHERE status = 'playing'
-    ) AS active_players
-      ON active_players.court_id = courts.id
+      SELECT court_id, id AS match_id FROM round_robin_matches WHERE status = 'playing'
+    ) AS active_matches
+      ON active_matches.court_id = courts.id
+
+    LEFT JOIN match_players
+      ON match_players.match_id = active_matches.match_id
 
     LEFT JOIN players
-      ON players.id = active_players.player_id
+      ON players.id = match_players.player_id
 
     GROUP BY courts.id
 

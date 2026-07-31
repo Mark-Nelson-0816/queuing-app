@@ -1,5 +1,5 @@
 import db from "./database.js";
-import { generateRoundRobinSchedule } from "../electron/roundRobinScheduler.js";
+import { generateRoundRobinSchedule, generateDoublesRoundRobinSchedule } from "../electron/roundRobinScheduler.js";
 import { addToQueue } from "./queueQueries.js";
 
 function ensureRoundNumberColumn() {
@@ -19,8 +19,10 @@ export function getAllPlayers() {
   `).all();
 }
 
-export function generateRoundRobinMatches(playerIds) {
+export function generateRoundRobinMatches(playerIds, matchType = 'singles') {
   if (!playerIds || playerIds.length < 2) return [];
+
+  const minPlayers = matchType === 'doubles' ? 4 : 2;
 
   const players = db.prepare(`
     SELECT id, level FROM players WHERE id IN (${playerIds.map(() => '?').join(',')})
@@ -38,18 +40,37 @@ export function generateRoundRobinMatches(playerIds) {
 
   for (const level in levelGroups) {
     const groupIds = levelGroups[level];
-    if (groupIds.length < 2) continue; 
+    if (groupIds.length < minPlayers) continue; 
 
-    const schedule = generateRoundRobinSchedule(groupIds);
+    if (matchType === 'doubles') {
+      const schedule = generateDoublesRoundRobinSchedule(groupIds);
 
-    for (const round of schedule) {
-      for (const pairing of round.matches) {
-        matches.push({
-          player_one: pairing.player_one_id,
-          player_two: pairing.player_two_id,
-          round_number: round.round_number,
-          status: "pending",
-        });
+      for (const round of schedule) {
+        for (const pairing of round.matches) {
+          matches.push({
+            player_one: pairing.player_one_id,
+            player_two: pairing.player_two_id,
+            team_one: pairing.team_one,
+            team_two: pairing.team_two,
+            round_number: round.round_number,
+            match_type: 'doubles',
+            status: "pending",
+          });
+        }
+      }
+    } else {
+      const schedule = generateRoundRobinSchedule(groupIds);
+
+      for (const round of schedule) {
+        for (const pairing of round.matches) {
+          matches.push({
+            player_one: pairing.player_one_id,
+            player_two: pairing.player_two_id,
+            round_number: round.round_number,
+            match_type: 'singles',
+            status: "pending",
+          });
+        }
       }
     }
   }
@@ -58,21 +79,50 @@ export function generateRoundRobinMatches(playerIds) {
 }
 
 export function saveRoundRobinMatches(matches) {
+  // Delete existing match_players entries for RR matches first
+  db.prepare(`
+    DELETE FROM match_players WHERE source = 'round_robin'
+  `).run();
+
+  db.prepare(`DELETE FROM round_robin_matches`).run();
+
   const insert = db.prepare(`
-    INSERT INTO round_robin_matches (player_one_id, player_two_id, round_number, status)
-    VALUES (?, ?, ?, 'pending')
+    INSERT INTO round_robin_matches (player_one_id, player_two_id, match_type, round_number, status)
+    VALUES (?, ?, ?, ?, 'pending')
+  `);
+
+  const insertMP = db.prepare(`
+    INSERT INTO match_players (match_id, player_id, team, match_type, source)
+    VALUES (?, ?, ?, ?, 'round_robin')
   `);
 
   const transaction = db.transaction(() => {
-    db.prepare(`DELETE FROM round_robin_matches`).run();
-
     db.prepare(`
       UPDATE courts
       SET status = 'available'
     `).run();
 
     for (const match of matches) {
-      insert.run(match.player_one, match.player_two, match.round_number);
+      const result = insert.run(
+        match.player_one,
+        match.player_two,
+        match.match_type || 'singles',
+        match.round_number
+      );
+      const rrMatchId = result.lastInsertRowid;
+
+      // Insert match_players entries
+      if (match.match_type === 'doubles' && match.team_one && match.team_two) {
+        // Team 1 players
+        insertMP.run(rrMatchId, match.team_one[0], 1, 'doubles');
+        insertMP.run(rrMatchId, match.team_one[1], 1, 'doubles');
+        // Team 2 players
+        insertMP.run(rrMatchId, match.team_two[0], 2, 'doubles');
+        insertMP.run(rrMatchId, match.team_two[1], 2, 'doubles');
+      } else {
+        insertMP.run(rrMatchId, match.player_one, null, 'singles');
+        insertMP.run(rrMatchId, match.player_two, null, 'singles');
+      }
     }
   });
 
@@ -80,13 +130,14 @@ export function saveRoundRobinMatches(matches) {
 }
 
 export function getRoundRobinMatches() {
-  return db.prepare(`
+  const matches = db.prepare(`
     SELECT
       rrm.id,
       rrm.status,
       rrm.court_id,
       rrm.round_number,
       rrm.created_at,
+      rrm.match_type,
       p1.name AS player_one_name,
       p1.id AS player_one_id,
       p1.level AS player_one_level,
@@ -98,6 +149,29 @@ export function getRoundRobinMatches() {
     JOIN players p2 ON rrm.player_two_id = p2.id
     ORDER BY rrm.round_number ASC, rrm.id ASC
   `).all();
+
+  // For doubles matches, fetch team member names from match_players
+  return matches.map(match => {
+    const result = { ...match };
+
+    if (match.match_type === 'doubles') {
+      const teamPlayers = db.prepare(`
+        SELECT mp.player_id, mp.team, p.name
+        FROM match_players mp
+        JOIN players p ON p.id = mp.player_id
+        WHERE mp.match_id = ? AND mp.source = 'round_robin'
+        ORDER BY mp.team ASC, mp.id ASC
+      `).all(match.id);
+
+      const team1 = teamPlayers.filter(tp => tp.team === 1).map(tp => tp.name);
+      const team2 = teamPlayers.filter(tp => tp.team === 2).map(tp => tp.name);
+
+      result.team_one_names = team1;
+      result.team_two_names = team2;
+    }
+
+    return result;
+  });
 }
 
 export function assignMatchToCourt(matchId, courtId) {

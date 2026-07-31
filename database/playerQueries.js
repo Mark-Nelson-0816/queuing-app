@@ -41,6 +41,7 @@ export function getPlayers() {
 export function deletePlayer(id) {
   const transaction = db.transaction(() => {
     
+    db.prepare(`DELETE FROM match_players WHERE player_id = ?`).run(id);
     db.prepare(`DELETE FROM queue WHERE player_id = ?`).run(id);
     
     db.prepare(`DELETE FROM round_robin_matches WHERE player_one_id = ? OR player_two_id = ?`).run(id, id);

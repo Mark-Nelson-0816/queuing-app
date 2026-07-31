@@ -57,27 +57,70 @@ export default function CourtCard({ court, requeuePlayers = true, onEndMatch, on
         </button>
       </div>
 
-      {/* Players */}
+{/* Players */}
       <div className="flex-1">
         {players.length > 0 ? (
           <div className="space-y-2">
             <p className="flex items-center gap-1.5 text-xs font-medium text-[var(--text)] uppercase tracking-wide">
               <Users size={12} />
-              Players
+              {players.length === 4 ? 'Teams' : 'Players'}
             </p>
-            <div className="flex flex-col flex-wrap gap-2">
-              {players.map((player, index) => (
-                <span
-                  key={index}
-                  className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 bg-[var(--surface-hover)] rounded-full text-sm"
-                >
-                  <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-[11px] font-semibold">
-                    {player.charAt(0).toUpperCase()}
+            {players.length === 4 ? (
+              <div className="space-y-2">
+                {/* Team 1 */}
+                <div className="bg-[var(--primary-light)]/50 rounded-xl p-2">
+                  <p className="text-[10px] font-semibold text-[var(--primary)] uppercase tracking-wide mb-1.5 px-1">Team 1</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {players.slice(0, 2).map((player, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 bg-[var(--surface)] rounded-full text-sm"
+                      >
+                        <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-[11px] font-semibold">
+                          {player.charAt(0).toUpperCase()}
+                        </span>
+                        {player}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {/* VS */}
+                <div className="flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-[var(--text)]/40 uppercase tracking-widest">VS</span>
+                </div>
+                {/* Team 2 */}
+                <div className="bg-[var(--warning-light)]/50 rounded-xl p-2">
+                  <p className="text-[10px] font-semibold text-[var(--warning)] uppercase tracking-wide mb-1.5 px-1">Team 2</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {players.slice(2, 4).map((player, index) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 bg-[var(--surface)] rounded-full text-sm"
+                      >
+                        <span className="w-6 h-6 rounded-full bg-[var(--warning)] text-white flex items-center justify-center text-[11px] font-semibold">
+                          {player.charAt(0).toUpperCase()}
+                        </span>
+                        {player}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col flex-wrap gap-2">
+                {players.map((player, index) => (
+                  <span
+                    key={index}
+                    className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 bg-[var(--surface-hover)] rounded-full text-sm"
+                  >
+                    <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-[11px] font-semibold">
+                      {player.charAt(0).toUpperCase()}
+                    </span>
+                    {player}
                   </span>
-                  {player}
-                </span>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-[var(--text)]/60 italic py-4">

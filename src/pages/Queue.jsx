@@ -4,6 +4,7 @@ import QueueList from "../components/QueueList";
 export default function Queue() {
   const [queue, setQueue] = useState([]);
   const [players, setPlayers] = useState([]);
+  const [matchType, setMatchType] = useState("singles");
 
   const loadData = async () => {
     const [queueData, playerData] = await Promise.all([
@@ -35,7 +36,7 @@ export default function Queue() {
   };
 
   const handleStartMatch = async () => {
-    const result = await window.api.createMatch();
+    const result = await window.api.createMatch(matchType);
     if (result.error) {
       alert(result.error);
       return;
@@ -54,6 +55,8 @@ export default function Queue() {
         onAddToQueue={handleAddToQueue}
         onRemovePlayer={handleRemovePlayer}
         onStartMatch={handleStartMatch}
+        matchType={matchType}
+        onMatchTypeChange={setMatchType}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
