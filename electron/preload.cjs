@@ -41,6 +41,8 @@ addPlayer: (name, level) =>
     ipcRenderer.invoke("remove-queue", id),
 
   //matches
+  previewNextMatch: (matchType) =>
+    ipcRenderer.invoke("preview-next-match", matchType),
   createMatch: (matchType) =>
     ipcRenderer.invoke("create-match", matchType),
   endMatch:(courtId, requeue)=>

@@ -2,6 +2,76 @@ import db from "./database.js";
 import { addToQueue } from "./queueQueries.js";
 
 
+export function previewNextMatch(matchType = 'singles'){
+
+    const waitingPlayers = db.prepare(`
+        SELECT queue.id AS queue_id, players.id AS player_id, players.name, players.level, players.status, queue.joined_at
+        FROM queue
+        JOIN players 
+        ON queue.player_id = players.id
+        ORDER BY queue.joined_at ASC
+    `).all();
+
+    const requiredPlayers = matchType === 'doubles' ? 4 : 2;
+
+    if(waitingPlayers.length < requiredPlayers){
+        return {
+            success: false,
+            matchType,
+            error: `Not enough players. Need ${requiredPlayers} for ${matchType}.`
+        };
+    }
+
+    let matchedPlayers = [];
+
+    // Strict FIFO queue behavior: take the first player in queue,
+    // then find the next earliest players with the same level
+    for(let i = 0; i < waitingPlayers.length; i++){
+
+        const level = waitingPlayers[i].level;
+        const sameLevel = [waitingPlayers[i]];
+
+        for(let j = i + 1; j < waitingPlayers.length && sameLevel.length < requiredPlayers; j++){
+            if(waitingPlayers[j].level === level){
+                sameLevel.push(waitingPlayers[j]);
+            }
+        }
+
+        if(sameLevel.length >= requiredPlayers){
+            matchedPlayers = sameLevel.slice(0, requiredPlayers);
+            break;
+        }
+
+    }
+
+    if(matchedPlayers.length < requiredPlayers){
+        return {
+            success: false,
+            matchType,
+            error: `Waiting for more players of the same level`
+        };
+    }
+
+    if (matchType === 'doubles') {
+        return {
+            success: true,
+            matchType: 'doubles',
+            teams: {
+                team1: [matchedPlayers[0], matchedPlayers[1]],
+                team2: [matchedPlayers[2], matchedPlayers[3]]
+            }
+        };
+    }
+
+    return {
+        success: true,
+        matchType: 'singles',
+        players: [matchedPlayers[0], matchedPlayers[1]]
+    };
+
+}
+
+
 export function createMatch(matchType = 'singles'){
 
     const waitingPlayers = db.prepare(`

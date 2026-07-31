@@ -33,7 +33,90 @@ function MatchTypeToggle({ matchType, onChange }) {
   );
 }
 
-export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer, onStartMatch, matchType, onMatchTypeChange }) {
+function NextMatchPreview({ preview, matchType }) {
+  // Guard: if preview data doesn't match the current match type, don't render
+  if (!preview || preview.matchType !== matchType) return null;
+
+  return (
+    <div className="bg-[var(--surface)] border border-[var(--primary)]/30 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="w-2 h-2 rounded-full bg-[var(--primary)] animate-pulse" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
+          Next Match
+        </span>
+      </div>
+
+      {matchType === 'doubles' && preview.success ? (
+        <div className="flex items-center gap-3">
+          {/* Team 1 */}
+          <div className="flex-1 bg-[var(--surface-hover)] rounded-xl p-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--primary)] block mb-1.5">Team 1</span>
+            {preview.teams.team1.map((player, i) => (
+              <div key={i} className="flex items-center gap-2 py-1">
+                <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                  {player.name.charAt(0)}
+                </span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-[var(--text-h)]">{player.name}</span>
+                  <span className="text-[10px] text-[var(--text)] ml-1">({player.level})</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <span className="text-lg font-bold text-[var(--text)]/40 shrink-0">VS</span>
+
+          {/* Team 2 */}
+          <div className="flex-1 bg-[var(--surface-hover)] rounded-xl p-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--warning)] block mb-1.5">Team 2</span>
+            {preview.teams.team2.map((player, i) => (
+              <div key={i} className="flex items-center gap-2 py-1">
+                <span className="w-6 h-6 rounded-full bg-[var(--warning)] text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                  {player.name.charAt(0)}
+                </span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-[var(--text-h)]">{player.name}</span>
+                  <span className="text-[10px] text-[var(--text)] ml-1">({player.level})</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : matchType === 'singles' && preview.success ? (
+        <div className="flex items-center gap-3">
+          <div className="flex-1 bg-[var(--surface-hover)] rounded-xl p-3 flex items-center gap-2">
+            <span className="w-7 h-7 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-bold shrink-0">
+              {preview.players[0].name.charAt(0)}
+            </span>
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-[var(--text-h)]">{preview.players[0].name}</span>
+              <span className="text-[10px] text-[var(--text)] ml-1">({preview.players[0].level})</span>
+            </div>
+          </div>
+
+          <span className="text-sm font-bold text-[var(--text)]/40 shrink-0">VS</span>
+
+          <div className="flex-1 bg-[var(--surface-hover)] rounded-xl p-3 flex items-center gap-2">
+            <span className="w-7 h-7 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-xs font-bold shrink-0">
+              {preview.players[1].name.charAt(0)}
+            </span>
+            <div className="min-w-0">
+              <span className="text-sm font-medium text-[var(--text-h)]">{preview.players[1].name}</span>
+              <span className="text-[10px] text-[var(--text)] ml-1">({preview.players[1].level})</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 py-2 text-sm text-[var(--text)]/60">
+          <span className="text-base">⏳</span>
+          <span>{preview.error}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer, onStartMatch, matchType, onMatchTypeChange, preview }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [selectedLevel, setSelectedLevel] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
@@ -123,7 +206,7 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
           >
             + Add to Queue
           </button>
-          <MatchTypeToggle matchType={matchType} onChange={onMatchTypeChange} />
+<MatchTypeToggle matchType={matchType} onChange={onMatchTypeChange} />
           <button
             onClick={() => onStartMatch?.()}
             className="px-5 py-2.5 rounded-xl bg-[var(--success)] text-white"
@@ -131,6 +214,11 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
             Start Match
           </button>
         </div>
+      </div>
+
+      {/* Next Match Preview */}
+      <div className="px-4 py-3">
+        <NextMatchPreview preview={preview} matchType={matchType} />
       </div>
 
       <div className="overflow-x-auto">

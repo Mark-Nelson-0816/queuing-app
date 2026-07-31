@@ -5,6 +5,7 @@ export default function Queue() {
   const [queue, setQueue] = useState([]);
   const [players, setPlayers] = useState([]);
   const [matchType, setMatchType] = useState("singles");
+  const [preview, setPreview] = useState(null);
 
   const loadData = async () => {
     const [queueData, playerData] = await Promise.all([
@@ -16,9 +17,20 @@ export default function Queue() {
     setPlayers(playerData);
   };
 
+const loadPreview = async () => {
+    const previewData = await window.api.previewNextMatch(matchType);
+    setPreview(previewData);
+  };
+
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    // Reset preview when matchType changes to avoid stale data mismatch
+    setPreview(null);
+    loadPreview();
+  }, [matchType, queue]);
 
   const handleRemovePlayer = async (id) => {
     await window.api.removeQueue(id);
@@ -52,6 +64,7 @@ export default function Queue() {
       <QueueList
         queue={queue}
         players={players}
+        preview={preview}
         onAddToQueue={handleAddToQueue}
         onRemovePlayer={handleRemovePlayer}
         onStartMatch={handleStartMatch}

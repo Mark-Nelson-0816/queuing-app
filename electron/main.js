@@ -14,7 +14,7 @@ import {
   removeFromQueue
 } from "../database/queueQueries.js";
 import { addPlayer, deletePlayer, updatePlayer } from "../database/playerQueries.js";
-import { createMatch } from "../database/matchQueries.js";
+import { createMatch, previewNextMatch } from "../database/matchQueries.js";
 import {
   addCourt,
   removeCourt
@@ -73,7 +73,6 @@ ipcMain.handle("get-players", () => {
 ipcMain.handle("get-courts", () => {
   const courts = getCourts();
 
-  console.log("Courts from DB:", courts);
 
   return courts;
 });
@@ -134,6 +133,10 @@ ipcMain.handle("update-player", (event, id, name, level) => {
 });
 
 //matches
+ipcMain.handle("preview-next-match", (event, matchType) => {
+  return previewNextMatch(matchType || 'singles');
+});
+
 ipcMain.handle("create-match", (event, matchType) => {
 
   const match = createMatch(matchType || 'singles');
