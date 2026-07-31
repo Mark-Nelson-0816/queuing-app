@@ -65,6 +65,7 @@ export default function CourtCard({ court, requeuePlayers = true, onEndMatch, on
               <Users size={12} />
               {players.length === 4 ? 'Teams' : 'Players'}
             </p>
+
             {players.length === 4 ? (
               <div className="space-y-2">
                 {/* Team 1 */}
@@ -104,6 +105,31 @@ export default function CourtCard({ court, requeuePlayers = true, onEndMatch, on
                       </span>
                     ))}
                   </div>
+                </div>
+              </div>
+            ) : players.length === 2 ? (
+              <div className="space-y-2">
+                {/* Player 1 */}
+                <div className="bg-[var(--primary-light)]/50 rounded-xl p-2">
+                  <span className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 bg-[var(--surface)] rounded-full text-sm">
+                    <span className="w-6 h-6 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-[11px] font-semibold">
+                      {players[0].charAt(0).toUpperCase()}
+                    </span>
+                    {players[0]}
+                  </span>
+                </div>
+                {/* VS */}
+                <div className="flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-[var(--text)]/40 uppercase tracking-widest">VS</span>
+                </div>
+                {/* Player 2 */}
+                <div className="bg-[var(--warning-light)]/50 rounded-xl p-2">
+                  <span className="inline-flex items-center gap-2 pl-1.5 pr-3 py-1 bg-[var(--surface)] rounded-full text-sm">
+                    <span className="w-6 h-6 rounded-full bg-[var(--warning)] text-white flex items-center justify-center text-[11px] font-semibold">
+                      {players[1].charAt(0).toUpperCase()}
+                    </span>
+                    {players[1]}
+                  </span>
                 </div>
               </div>
             ) : (

@@ -154,7 +154,9 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
   return (
     <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] overflow-hidden">
 
-      <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-hover)]/50">
+      <div className="p-4 border-b border-[var(--border)] bg-[var(--surface-hover)]/50 space-y-3">
+
+        {/* Row 1: find & add a player */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1">
             <input
@@ -189,6 +191,7 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
               </div>
             )}
           </div>
+
           <select
             value={selectedLevel}
             onChange={(e) => setSelectedLevel(e.target.value)}
@@ -199,17 +202,28 @@ export default function QueueList({ queue, players, onAddToQueue, onRemovePlayer
             <option value="Intermediate">Intermediate</option>
             <option value="Advanced">Advanced</option>
           </select>
-<button
+
+          <button
             onClick={handleAdd}
             disabled={!selectedPlayerId}
-            className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
             + Add to Queue
           </button>
-<MatchTypeToggle matchType={matchType} onChange={onMatchTypeChange} />
+        </div>
+
+        {/* Row 2: queue controls, visually separated from the search/add row */}
+        <div className="flex items-center justify-between pt-3 border-t border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[var(--text)] uppercase tracking-wider">
+              Queue Type
+            </span>
+            <MatchTypeToggle matchType={matchType} onChange={onMatchTypeChange} />
+          </div>
+
           <button
             onClick={() => onStartMatch?.()}
-            className="px-5 py-2.5 rounded-xl bg-[var(--success)] text-white"
+            className="px-5 py-2.5 rounded-xl bg-[var(--success)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
           >
             Start Match
           </button>
