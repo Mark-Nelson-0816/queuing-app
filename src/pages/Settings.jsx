@@ -211,9 +211,9 @@ export default function Settings() {
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Page intro */}
-      <div className="bg-gradient-to-br from-[var(--primary)] to-[var(--primary-hover)] rounded-2xl p-6 text-white flex items-center justify-between gap-4">
+      <div className="bg-[var(--primary)] rounded-2xl p-6 text-white flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-white/80 text-xl font-bold leading-tight">Settings</h2>
+          <h2 className="text-xl font-bold leading-tight">Settings</h2>
           <p className="text-white/80 text-sm mt-1">
             Configure appearance, preferences, and manage application data.
           </p>

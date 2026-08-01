@@ -8,6 +8,7 @@ export default function Players() {
   const [newName, setNewName] = useState("");
   const [newLevel, setNewLevel] = useState("Beginner");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     loadPlayers();
@@ -32,8 +33,12 @@ export default function Players() {
 
   const confirmDelete = async () => {
     if (deleteTarget === null) return;
-    await window.api.deletePlayer(deleteTarget);
+    const result = await window.api.deletePlayer(deleteTarget);
     setDeleteTarget(null);
+    if (result && result.success === false) {
+      setError(result.error || "Cannot delete this player right now.");
+      return;
+    }
     await loadPlayers();
   };
 
@@ -44,6 +49,18 @@ export default function Players() {
 
   return (
     <div className="space-y-6">
+
+      {error && (
+        <div className="flex items-center justify-between gap-3 bg-[var(--danger)] text-white px-4 py-3 rounded-xl">
+          <p className="text-sm font-medium">{error}</p>
+          <button
+            onClick={() => setError("")}
+            className="text-white/80 hover:text-white text-sm font-semibold shrink-0"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4">
         <h3 className="font-semibold text-[var(--text-h)] mb-3">Add New Player</h3>

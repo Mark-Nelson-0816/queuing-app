@@ -44,6 +44,24 @@ export function getPlayers() {
 }
 
 export function deletePlayer(id) {
+  // Prevent deleting a player who is currently playing
+  const activeNormalMatch = db.prepare(`
+    SELECT id FROM matches
+    WHERE (player_one = ? OR player_two = ?) AND status = 'playing'
+  `).get(id, id);
+
+  const activeRRMatch = db.prepare(`
+    SELECT id FROM round_robin_matches
+    WHERE (player_one_id = ? OR player_two_id = ?) AND status = 'playing'
+  `).get(id, id);
+
+  if (activeNormalMatch || activeRRMatch) {
+    return {
+      success: false,
+      error: "Cannot delete a player who is currently playing. End their match first."
+    };
+  }
+
   const transaction = db.transaction(() => {
     
     db.prepare(`DELETE FROM match_players WHERE player_id = ?`).run(id);

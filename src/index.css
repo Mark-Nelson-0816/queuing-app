@@ -121,7 +121,6 @@ body {
 h1,
 h2,
 h3 {
-  color: var(--text-h);
   font-family: var(--sans);
   font-weight: 600;
 }
