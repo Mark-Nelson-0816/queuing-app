@@ -41,6 +41,15 @@ export default function Courts() {
     loadCourts();
   }, []);
 
+  useEffect(() => {
+    // Read persisted auto-requeue default from settings
+    window.api.getSettings().then((data) => {
+      if (data.autoRequeue === "true" || data.autoRequeue === "false") {
+        setRequeuePlayers(data.autoRequeue === "true");
+      }
+    }).catch((err) => console.error("Failed to load auto-requeue setting:", err));
+  }, []);
+
   const showMessage = (text, duration = 3000) => {
     setMessage(text);
     setTimeout(() => setMessage(""), duration);

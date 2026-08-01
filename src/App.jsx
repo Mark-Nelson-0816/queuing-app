@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import Dashboard from "./pages/Dashboard";
@@ -7,14 +7,7 @@ import RoundRobin from "./pages/RoundRobin";
 import Courts from "./pages/Courts";
 import Players from "./pages/Players";
 import PublicDisplayPage from "./pages/PublicDisplayPage";
-
-async function handleReset() {
-    if (!confirm("Delete all data?")) return;
-
-    await window.api.resetAllData();
-
-    
-}
+import Settings from "./pages/Settings";
 
 const pageTitles = {
   dashboard: "Dashboard",
@@ -26,19 +19,30 @@ const pageTitles = {
   settings: "Settings",
 };
 
-function SettingsPage() {
-  return (
-    <div className="flex items-center justify-center h-64">
-      <div className="text-center">
-        <button onClick={handleReset} className="bg-red-400 p-3">Reset all Datas.</button>
-      </div>
-    </div>
-  );
-}
-
 function App() {
   const [activePage, setActivePage] = useState("queue");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Apply persisted theme preference on startup (before first paint matters little here)
+  useEffect(() => {
+    async function applySavedTheme() {
+      try {
+        const data = await window.api.getSettings();
+        const theme = data.theme || "light";
+        const root = document.documentElement;
+        root.classList.remove("dark", "light");
+        if (theme === "system") {
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          root.classList.add(prefersDark ? "dark" : "light");
+        } else {
+          root.classList.add(theme === "dark" ? "dark" : "light");
+        }
+      } catch (err) {
+        console.error("Failed to apply saved theme:", err);
+      }
+    }
+    applySavedTheme();
+  }, []);
 
   const renderPage = () => {
     switch (activePage) {
@@ -55,7 +59,7 @@ function App() {
       case "public":
         return <PublicDisplayPage />;
       case "settings":
-        return <SettingsPage />;
+        return <Settings />;
       default:
         return <Dashboard />;
     }

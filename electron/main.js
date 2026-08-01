@@ -31,6 +31,7 @@ import {
   endRoundRobinMatch
 } from "../database/roundRobinQueries.js";
 import { resetAllData } from "../database/resetQueries.js";
+import { getSetting, getAllSettings, setSetting } from "../database/settingsQueries.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -200,4 +201,17 @@ app.whenReady().then(() => {
 //datas
 ipcMain.handle("reset-all-data", () => {
     return resetAllData();
+});
+
+// Settings
+ipcMain.handle("get-settings", () => {
+  return getAllSettings();
+});
+
+ipcMain.handle("update-setting", (event, key, value) => {
+  return setSetting(key, value);
+});
+
+ipcMain.handle("get-setting", (event, key) => {
+  return getSetting(key);
 });

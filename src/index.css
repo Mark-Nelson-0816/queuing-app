@@ -1,7 +1,17 @@
 @import "tailwindcss";
 
-:root {
+/* ============================================================
+   THEME TOKENS
+   The app supports three theme modes:
+     - "light"   → explicit light theme (.light)
+     - "dark"    → explicit dark theme (.dark)
+     - "system"  → follows OS preference via media query
+   `:root` carries the default light values so the app never
+   appears unstyled even before JS applies a theme class.
+   ============================================================ */
 
+:root,
+:root.light {
   --bg: #f8fafc;
   --surface: #ffffff;
   --surface-hover: #f1f5f9;
@@ -24,24 +34,37 @@
 
   --shadow: rgba(15, 23, 42, 0.08) 0 10px 25px;
   --shadow-lg: rgba(15, 23, 42, 0.12) 0 15px 35px;
-
-  --sans: "Segoe UI", Inter, system-ui, sans-serif;
-
-  font: 16px/145% var(--sans);
-  letter-spacing: 0.1px;
-
-  color: var(--text);
-  background: var(--bg);
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
 }
 
+:root.dark {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+
+  --text: #cbd5e1;
+  --text-h: #f8fafc;
+
+  --border: #334155;
+
+  --primary: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-light: #1e3a5f;
+
+  --success: #22c55e;
+  --success-light: #14532d;
+  --warning: #fbbf24;
+  --warning-light: #451a03;
+  --danger: #ef4444;
+  --danger-light: #450a0a;
+
+  --shadow: rgba(0, 0, 0, 0.4) 0 10px 25px;
+  --shadow-lg: rgba(0, 0, 0, 0.5) 0 15px 35px;
+}
+
+/* "system" mode: JS toggles .dark/.light based on this media query */
 @media (prefers-color-scheme: dark) {
-  :root {
-    /* Dark Theme */
-    /* --bg: #0f172a;
+  :root:not(.light) {
+    --bg: #0f172a;
     --surface: #1e293b;
     --surface-hover: #334155;
 
@@ -62,8 +85,22 @@
     --danger-light: #450a0a;
 
     --shadow: rgba(0, 0, 0, 0.4) 0 10px 25px;
-    --shadow-lg: rgba(0, 0, 0, 0.5) 0 15px 35px; */
+    --shadow-lg: rgba(0, 0, 0, 0.5) 0 15px 35px;
   }
+}
+
+:root {
+  --sans: "Segoe UI", Inter, system-ui, sans-serif;
+
+  font: 16px/145% var(--sans);
+  letter-spacing: 0.1px;
+
+  color: var(--text);
+  background: var(--bg);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {

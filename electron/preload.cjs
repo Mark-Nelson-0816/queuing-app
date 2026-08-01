@@ -67,4 +67,12 @@ addPlayer: (name, level) =>
   //datas
   resetAllData: () => 
     ipcRenderer.invoke("reset-all-data"),
+
+  // Settings
+  getSettings: () =>
+    ipcRenderer.invoke("get-settings"),
+  getSetting: (key) =>
+    ipcRenderer.invoke("get-setting", key),
+  updateSetting: (key, value) =>
+    ipcRenderer.invoke("update-setting", key, value),
 });

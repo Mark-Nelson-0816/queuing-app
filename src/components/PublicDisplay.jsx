@@ -92,7 +92,6 @@ export default function PublicDisplay({ courts = demoCourts, queueNext = demoQue
           {activeCourts.length === 0 ? (
             <div className="flex-1 flex items-center justify-center rounded-2xl bg-[var(--surface)] border border-dashed border-[var(--border)]">
               <div className="text-center">
-                <p className="text-5xl mb-2">🏸</p>
                 <p className="text-xl text-[var(--text)]">No active matches</p>
                 <p className="text-sm opacity-60">Waiting for players...</p>
               </div>

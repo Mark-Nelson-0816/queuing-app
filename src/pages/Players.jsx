@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import PlayerTable from "../components/PlayerTable";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function Players() {
 
   const [players, setPlayers] = useState([]);
   const [newName, setNewName] = useState("");
   const [newLevel, setNewLevel] = useState("Beginner");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     loadPlayers();
@@ -25,8 +27,13 @@ export default function Players() {
   };
 
   const handleDeletePlayer = async (id) => {
-    if (!confirm("Are you sure you want to delete this player?")) return;
-    await window.api.deletePlayer(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTarget === null) return;
+    await window.api.deletePlayer(deleteTarget);
+    setDeleteTarget(null);
     await loadPlayers();
   };
 
@@ -98,6 +105,16 @@ export default function Players() {
         players={players}
         onDeletePlayer={handleDeletePlayer}
         onUpdatePlayer={handleUpdatePlayer}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete Player"
+        message="Are you sure you want to delete this player?"
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );
