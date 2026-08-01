@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS players (
 
     level TEXT NOT NULL DEFAULT 'Beginner',
 
-    matches_played INTEGER DEFAULT 0,
     wins INTEGER DEFAULT 0,
     losses INTEGER DEFAULT 0,
 

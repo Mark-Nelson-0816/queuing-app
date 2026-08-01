@@ -31,9 +31,14 @@ export function addPlayer(name, level) {
 export function getPlayers() {
 
   return db.prepare(`
-    SELECT *
+    SELECT
+      players.*,
+      COUNT(DISTINCT match_players.match_id) AS matches_played
     FROM players
-    ORDER BY id DESC
+    LEFT JOIN match_players ON match_players.player_id = players.id
+      AND match_players.source IN ('normal', 'round_robin')
+    GROUP BY players.id
+    ORDER BY players.id DESC
   `).all();
 
 }

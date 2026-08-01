@@ -108,7 +108,6 @@ function NextMatchPreview({ preview, matchType }) {
         </div>
       ) : (
         <div className="flex items-center gap-2 py-2 text-sm text-[var(--text)]/60">
-          <span className="text-base">⏳</span>
           <span>{preview.error}</span>
         </div>
       )}

@@ -10,16 +10,16 @@ export function getQueue() {
       queue.joined_at,
       players.status,
 
-      COUNT(matches.id) AS matches_played
+      COUNT(DISTINCT match_players.match_id) AS matches_played
 
     FROM queue
 
     JOIN players
       ON queue.player_id = players.id
 
-    LEFT JOIN matches
-      ON players.id = matches.player_one
-      OR players.id = matches.player_two
+    LEFT JOIN match_players
+      ON match_players.player_id = players.id
+      AND match_players.source IN ('normal', 'round_robin')
 
     GROUP BY players.id, queue.id
 

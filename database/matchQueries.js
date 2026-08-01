@@ -241,8 +241,7 @@ export function endMatch(courtId, requeue = true){
         db.prepare(`
             UPDATE players
             SET 
-                status = 'waiting',
-                matches_played = matches_played + 1
+                status = 'waiting'
             WHERE id IN (${placeholders})
         `).run(...playerIds);
 
