@@ -11,7 +11,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:g rid-cols-4 gap-4">
         {summaryData.map((card) => (
           <DashboardCard key={card.id} {...card} />
         ))}

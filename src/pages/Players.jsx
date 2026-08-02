@@ -1,130 +1,112 @@
 import { useEffect, useState } from "react";
-import PlayerTable from "../components/PlayerTable";
+import RegisteredPlayerTable from "../components/RegisteredPlayersTable";
+import AllPlayersTable from "../components/AllPlayersTable";
+import RegisterPlayerToday from "../components/RegisterPlayerToday";
+import AddNewPlayer from "../components/AddNewPlayer";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function Players() {
-
-  const [players, setPlayers] = useState([]);
-  const [newName, setNewName] = useState("");
-  const [newLevel, setNewLevel] = useState("Beginner");
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    loadPlayers();
-  }, []);
-
-  async function loadPlayers(){
-    const data = await window.api.getPlayers();
-    setPlayers(data);
-  }
-
-  const handleAddPlayer = async () => {
-    if (!newName.trim()) return;
-    await window.api.addPlayer(newName.trim(), newLevel);
-    setNewName("");
-    setNewLevel("Beginner");
-    await loadPlayers();
-  };
-
-  const handleDeletePlayer = async (id) => {
-    setDeleteTarget(id);
-  };
-
-  const confirmDelete = async () => {
-    if (deleteTarget === null) return;
-    const result = await window.api.deletePlayer(deleteTarget);
-    setDeleteTarget(null);
-    if (result && result.success === false) {
-      setError(result.error || "Cannot delete this player right now.");
-      return;
-    }
-    await loadPlayers();
-  };
-
-  const handleUpdatePlayer = async (id, name, level) => {
-    await window.api.updatePlayer(id, name, level);
-    await loadPlayers();
-  };
+  
+  const [error, setError] = useState('');
+  const [addPlayerLoading, setAddPlayerLoading] = useState(false);
+  const [registerTodayLoading, setRegisterTodayLoading] = useState(false);
+  const [tableLoading, setTableLoading] = useState(false);
+  const [activeTable, setActiveTable] = useState("registered_today");
+  const [search, setSearch] = useState('');
 
   return (
     <div className="space-y-6">
-
       {error && (
-        <div className="flex items-center justify-between gap-3 bg-[var(--danger)] text-white px-4 py-3 rounded-xl">
-          <p className="text-sm font-medium">{error}</p>
-          <button
-            onClick={() => setError("")}
-            className="text-white/80 hover:text-white text-sm font-semibold shrink-0"
-          >
-            ✕
-          </button>
+        <div className='rounded-xl bg-red-500 text-white p-4 flex justify-between'>
+          <p>
+            {error}
+          </p>
+          <button className="text-lg" onClick={(e)=>setError('')}>✖</button>
         </div>
       )}
-
-      <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4">
-        <h3 className="font-semibold text-[var(--text-h)] mb-3">Add New Player</h3>
-        <div className="flex items-center gap-3">
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") handleAddPlayer(); }}
-            placeholder="Enter player name..."
-            className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--text-h)] text-sm placeholder:text-[var(--text)]/50 focus:outline-none focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary)]/20 transition-all"
-          />
-          <select
-            value={newLevel}
-            onChange={(e) => setNewLevel(e.target.value)}
-            className="px-4 py-2.5 rounded-xl bg-[var(--surface)] border border-[var(--border)]"
-          >
-            <option value="Beginner">Beginner</option>
-            <option value="Intermediate">Intermediate</option>
-            <option value="Advanced">Advanced</option>
-          </select>
-          <button
-            onClick={handleAddPlayer}
-            disabled={!newName.trim()}
-            className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-white text-sm font-semibold hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            + Add Player
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            {players.length}
+            0
           </p>
-          <p>Total Players</p>
+          <p>All Players</p>
         </div>
 
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            {players.filter(p => p.status === "playing").length}
+            0
+          </p>
+          <p>Players Today</p>
+        </div>
+
+        <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
+          <p className="text-2xl font-bold">
+            0
           </p>
           <p>Playing</p>
         </div>
 
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            {players.reduce(
-              (sum,p)=>sum+p.matches_played,
-              0
-            )}
+            0
           </p>
           <p>Total Matches</p>
         </div>
       </div>
 
-      <PlayerTable
-        players={players}
-        onDeletePlayer={handleDeletePlayer}
-        onUpdatePlayer={handleUpdatePlayer}
-      />
+      <div className='flex justify-between gap-4 w-full'>
 
-      <ConfirmDialog
+        <AddNewPlayer 
+          setError={setError}
+          addLoadingPlayer={addPlayerLoading}
+          setAddPlayerLoading={setAddPlayerLoading}
+          />
+        <RegisterPlayerToday
+          setError={setError}
+          registerTodayLoading={registerTodayLoading}
+          setRegisterTodayLoading={setRegisterTodayLoading}
+          />
+
+      </div>
+
+      <div className="border rounded-xl bg-white p-5">
+        <div className='flex justify-between'> 
+          <div>
+            <button 
+            onClick={()=>{
+              setActiveTable('registered_today');
+              setSearch('');
+            }}>
+              <h2 className="text-xl font-semibold">
+                Registered Players Today
+              </h2>
+            </button>
+            &nbsp;&nbsp; | &nbsp;&nbsp;
+            <button 
+            onClick={()=>{
+              setActiveTable('all_players');
+              setSearch('');
+              }}>
+              <h2 className="text-xl font-semibold">
+                Player Profiles
+              </h2>
+            </button>
+          </div>
+          <input
+              placeholder="Search player..."
+              className="rounded-lg border p-2"
+              onChange={(e)=>setSearch(e.target.value)}
+            />
+        </div>
+        {activeTable === "registered_today" ? (
+          <RegisteredPlayerTable searchInput={search}/>
+          ) : (
+          <AllPlayersTable searchInput={search}/>
+        )}
+      </div>
+
+      
+      {/* <ConfirmDialog
         open={deleteTarget !== null}
         title="Delete Player"
         message="Are you sure you want to delete this player?"
@@ -132,7 +114,7 @@ export default function Players() {
         variant="danger"
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
-      />
+      /> */}
     </div>
   );
 }

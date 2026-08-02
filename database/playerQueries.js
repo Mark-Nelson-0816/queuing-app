@@ -1,9 +1,13 @@
 import db from "./database.js";
 
 
-export function addPlayer(name, level) {
+export function addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) {
+  
+    const preferMensNum = preferMens ? 1 : 0;
+    const preferWomensNum = preferWomens ? 1 : 0;
+    const preferMixedNum = preferMixed ? 1 : 0;
+    const preferNoGenderNum = preferNoGender ? 1 : 0;
 
-    
     const existingPlayer = db.prepare(`
         SELECT id
         FROM players
@@ -18,9 +22,9 @@ export function addPlayer(name, level) {
 
     
     const result = db.prepare(`
-        INSERT INTO players(name, level)
-        VALUES(?, ?)
-    `).run(name, level);
+        INSERT INTO players(name, level, gender, contact_number, prefer_mens, prefer_womens, prefer_mixed, prefer_no_gender)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, level, gender, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum);
 
 
     return result.lastInsertRowid;

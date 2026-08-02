@@ -53,14 +53,24 @@ function createWindow() {
   });
 
   mainWindow.maximize();
-
+   mainWindow.webContents.openDevTools();
   const indexPath = path.join(
     app.getAppPath(),
     "dist",
     "index.html"
   );
 
-  mainWindow.loadFile(indexPath);
+  if (app.isPackaged) {
+    const indexPath = path.join(
+      app.getAppPath(),
+      "dist",
+      "index.html"
+    );
+
+    mainWindow.loadFile(indexPath);
+  } else {
+    mainWindow.loadURL("http://localhost:5173");
+  }
 }
 
 //players
@@ -114,9 +124,9 @@ ipcMain.handle("remove-queue", (event, id) => {
 
 });
 
-ipcMain.handle("add-player", (event, name, level) => {
+ipcMain.handle("add-player", (event, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
 
-  const playerId = addPlayer(name, level);
+  const playerId = addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender);
 
   return {
     success: true,
