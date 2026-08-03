@@ -3,17 +3,26 @@ import RegisteredPlayerTable from "../components/RegisteredPlayersTable";
 import AllPlayersTable from "../components/AllPlayersTable";
 import RegisterPlayerToday from "../components/RegisterPlayerToday";
 import AddNewPlayer from "../components/AddNewPlayer";
-import ConfirmDialog from "../components/ConfirmDialog";
 
 export default function Players() {
   
   const [error, setError] = useState('');
-  const [addPlayerLoading, setAddPlayerLoading] = useState(false);
-  const [registerTodayLoading, setRegisterTodayLoading] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
   const [activeTable, setActiveTable] = useState("registered_today");
   const [search, setSearch] = useState('');
+  const [refreshData, setRefreshData] = useState(false);
+  const [cards, setCards] = useState([]);
 
+  const getPlayerCards = async ()=>{
+    const data = await window.api.getPlayerCards();
+    setCards(data);
+  }
+
+  useEffect(() => {
+    getPlayerCards(); 
+
+  }, [refreshData]);
+  
   return (
     <div className="space-y-6">
       {error && (
@@ -24,31 +33,38 @@ export default function Players() {
           <button className="text-lg" onClick={(e)=>setError('')}>✖</button>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            0
+            {cards.allPlayers ?? 0}
           </p>
           <p>All Players</p>
         </div>
 
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            0
+            {cards.currentPlayers ?? 0}
           </p>
-          <p>Players Today</p>
+          <p>Current Players</p>
         </div>
 
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            0
+            {cards.overallPlayersToday ?? 0}
+          </p>
+          <p>Overall Players Today</p>
+        </div>
+
+        <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
+          <p className="text-2xl font-bold">
+            {cards.playing ?? 0}
           </p>
           <p>Playing</p>
         </div>
 
         <div className="bg-[var(--surface)] rounded-2xl border p-4 text-center">
           <p className="text-2xl font-bold">
-            0
+            {cards.totalMatches ?? 0}
           </p>
           <p>Total Matches</p>
         </div>
@@ -58,14 +74,12 @@ export default function Players() {
 
         <AddNewPlayer 
           setError={setError}
-          addLoadingPlayer={addPlayerLoading}
-          setAddPlayerLoading={setAddPlayerLoading}
+          refreshData={refreshData}
+          setRefreshData={setRefreshData}
           />
         <RegisterPlayerToday
-          setError={setError}
-          registerTodayLoading={registerTodayLoading}
-          setRegisterTodayLoading={setRegisterTodayLoading}
-          />
+        refreshData={refreshData}
+        setRefreshData={setRefreshData}/>
 
       </div>
 
@@ -77,7 +91,8 @@ export default function Players() {
               setActiveTable('registered_today');
               setSearch('');
             }}>
-              <h2 className="text-xl font-semibold">
+              <h2 className={`text-xl font-semibold 
+              ${activeTable === 'registered_today' ? 'underline' : ''}`}>
                 Registered Players Today
               </h2>
             </button>
@@ -87,8 +102,9 @@ export default function Players() {
               setActiveTable('all_players');
               setSearch('');
               }}>
-              <h2 className="text-xl font-semibold">
-                Player Profiles
+              <h2 className={`text-xl font-semibold 
+              ${activeTable === 'all_players' ? 'underline' : ''}`}>
+                All Player Profiles
               </h2>
             </button>
           </div>
@@ -99,7 +115,10 @@ export default function Players() {
             />
         </div>
         {activeTable === "registered_today" ? (
-          <RegisteredPlayerTable searchInput={search}/>
+          <RegisteredPlayerTable 
+          searchInput={search}
+          refreshData={refreshData}
+          setRefreshData={setRefreshData}/>
           ) : (
           <AllPlayersTable searchInput={search}/>
         )}

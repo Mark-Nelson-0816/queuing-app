@@ -1,11 +1,11 @@
 'use client';
 import {useState} from "react";
 
-export default function AddNewPlayer({setError, addLoadingPlayer, setAddPlayerLoading}) {
-
+export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
+  
+  const [addPlayerLoading, setAddPlayerLoading] = useState(false);
   const [name, setName] = useState('');
   const [level, setLevel] = useState('Beginner');
-  const [gender, setGender] = useState('Male');
   const [contact, setContact] = useState('');
   const [preferMens, setPreferMens] = useState(false);
   const [preferWomens, setPreferWomens] = useState(false);
@@ -16,19 +16,31 @@ export default function AddNewPlayer({setError, addLoadingPlayer, setAddPlayerLo
     e.preventDefault();
     setAddPlayerLoading(true);
 
-    if (!name || !level || !gender || (!preferMens && !preferWomens && !preferMixed && !preferNoGender)) {
+    if (!name || !level || (!preferMens && !preferWomens && !preferMixed && !preferNoGender)) {
       setError('Please fill in all required fields.');
       setAddPlayerLoading(false);
       return;
     }
+    try{
+      const data = await window.api.addPlayer(name.trim(), level, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
 
-    await window.api.addPlayer(name.trim(), level, gender, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
+      if(data.message && data.message === 'Player already exists.'){
+        setError('Player already exists.');
+        setAddPlayerLoading(false);
+        return;
+      }
+    }catch(error){
+      console.error(error);
+      
+    }finally{
+      setRefreshData(!refreshData);
+    }
 
+    
     setAddPlayerLoading(false);
     setError('');
     setName('');
     setLevel('Beginner');
-    setGender('Male');
     setContact('');
     setPreferMens(false);
     setPreferWomens(false);
@@ -69,19 +81,6 @@ export default function AddNewPlayer({setError, addLoadingPlayer, setAddPlayerLo
             <option value='advanced'>Advanced</option>
           </select>
         </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium">
-            Gender
-          </label>
-
-          <select className="w-full rounded-lg border p-2"
-            value={gender}
-            onChange={(e)=>setGender(e.target.value)}>
-            <option value='male'>Male</option>
-            <option value='female'>Female</option>
-          </select>
-        </div>
         
         <div>
             <label className="mb-2 block text-sm font-medium">
@@ -108,7 +107,7 @@ export default function AddNewPlayer({setError, addLoadingPlayer, setAddPlayerLo
                 </label>
 
                 <label className="flex items-center gap-2 rounded-lg border p-2">
-                <input type="checkbox" defaultChecked 
+                <input type="checkbox" 
                   type="checkbox"
                   checked={preferMixed}
                   onChange={(e) => setPreferMixed(e.target.checked)}
@@ -141,7 +140,7 @@ export default function AddNewPlayer({setError, addLoadingPlayer, setAddPlayerLo
           />
         </div>
         <button className="w-full rounded-lg bg-blue-600 py-2 text-white hover:bg-blue-700">
-          {addLoadingPlayer ? 'Adding...' : 'Add Player'}
+          {addPlayerLoading ? 'Adding...' : 'Add Player'}
         </button>
       </form>
     </div>

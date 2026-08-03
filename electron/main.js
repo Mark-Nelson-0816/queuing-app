@@ -7,6 +7,15 @@ import "../database/init.js";
 
 import { ipcMain } from "electron";
 import { getPlayers } from "../database/playerQueries.js";
+import { searchPlayers } from "../database/playerQueries.js";
+import { registerPlayer } from "../database/playerQueries.js";
+import { getRegisteredPlayersToday } from "../database/playerQueries.js";
+import { removeRegisteredPlayer } from "../database/playerQueries.js";
+import { getPlayersProfile } from "../database/playerQueries.js";
+import { updatePlayerInfo } from "../database/playerQueries.js";
+import { deletePlayerProfile } from "../database/playerQueries.js";
+import { getPlayerCards } from "../database/playerQueries.js";
+
 import { getCourts } from "../database/courtQueries.js";
 import { 
   getQueue,
@@ -74,16 +83,77 @@ function createWindow() {
 }
 
 //players
+
+ipcMain.handle("add-player", (event, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
+
+  const playerId = addPlayer(name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender);
+
+  if(playerId.message && playerId.message === 'Player already exists.'){
+    return {message: playerId.message};
+  }
+
+  return {
+    success: true,
+    id: playerId
+  };
+
+});
+
+ipcMain.handle('search-players', (event, name) =>{
+  const players = searchPlayers(name);
+
+  return players;
+});
+
+ipcMain.handle('register-player', (event, id) =>{
+
+  return registerPlayer(id);
+
+});
+
+ipcMain.handle('get-players-profile', (event, name) => {
+  return getPlayersProfile(name);
+});
+
+ipcMain.handle('get-registered-players-today', (event) => {
+  return getRegisteredPlayersToday();
+});
+
+ipcMain.handle('remove-registered-player', (event, id) => {
+  return removeRegisteredPlayer(id);
+});
+
+ipcMain.handle("update-player-info", (event, id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
+  return updatePlayerInfo(id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender);
+});
+
+ipcMain.handle("delete-players-profile", (event, id) => {
+  return deletePlayerProfile(id);
+
+});
+
+ipcMain.handle("get-player-cards", () => {
+  return getPlayerCards();
+});
+
+//old player function - not used in player management page (not sure if used in other pages)
 ipcMain.handle("get-players", () => {
   const players = getPlayers();
 
   return players;
 });
 
+ipcMain.handle("delete-player", (event, id) => {
+  return deletePlayer(id);
+});
+
+ipcMain.handle("update-player", (event, id, name, level) => {
+  return updatePlayer(id, name, level);
+});
+
 //courts
 ipcMain.handle("get-courts", () => {
   const courts = getCourts();
-
 
   return courts;
 });
@@ -122,25 +192,6 @@ ipcMain.handle("remove-queue", (event, id) => {
 
   return removeFromQueue(id);
 
-});
-
-ipcMain.handle("add-player", (event, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
-
-  const playerId = addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender);
-
-  return {
-    success: true,
-    id: playerId
-  };
-
-});
-
-ipcMain.handle("delete-player", (event, id) => {
-  return deletePlayer(id);
-});
-
-ipcMain.handle("update-player", (event, id, name, level) => {
-  return updatePlayer(id, name, level);
 });
 
 //matches

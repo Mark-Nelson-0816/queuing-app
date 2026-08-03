@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS players (
     level TEXT NOT NULL DEFAULT 'beginner',
     -- beginner | intermediate | upper_intermediate | advanced
 
-    gender TEXT DEFAULT 'male',
     contact_number TEXT DEFAULT 'N/A',
 
     prefer_mixed INTEGER DEFAULT 0,

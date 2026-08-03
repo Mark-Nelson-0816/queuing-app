@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Modal from "./Modal";
 
 export default function EditPlayer({
@@ -5,6 +8,56 @@ export default function EditPlayer({
   onClose,
   player,
 }) {
+  const [id, setId] = useState(null);
+  const [name, setName] = useState('');
+  const [level, setLevel] = useState('beginner');
+  const [contact, setContact] = useState('');
+  const [preferMens, setPreferMens] = useState(false);
+  const [preferWomens, setPreferWomens] = useState(false);
+  const [preferMixed, setPreferMixed] = useState(false);
+  const [preferNoGender, setPreferNoGender] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const handleUpdatePlayer = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if(!name || !level || (!preferMens && !preferWomens && !preferMixed && !preferNoGender)){
+      setError('Please fill in all required fields.');
+      setLoading(false);
+      return;
+    }
+    
+    await window.api.updatePlayerInfo(id, name.trim(), level, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
+
+    setError('');
+    setLoading(false);
+    setLevel('beginner');
+    setName('');
+    setId(null);
+    setContact('');
+    setPreferMens(false);
+    setPreferWomens(false);
+    setPreferMixed(false);
+    setPreferNoGender(false);
+
+    onClose();
+  };
+  useEffect(() => {
+    if (!player) return;
+
+    setId(player.id ?? null);
+    setName(player.name ?? '');
+    setLevel(player.level ?? 'beginner');
+    setContact(player.contact_number ?? '');
+
+    setPreferMens(Boolean(player.prefer_mens));
+    setPreferWomens(Boolean(player.prefer_womens));
+    setPreferMixed(Boolean(player.prefer_mixed));
+    setPreferNoGender(Boolean(player.prefer_no_gender));
+  }, [player]);
+  
   if (!player) return null;
 
   return (
@@ -13,15 +66,18 @@ export default function EditPlayer({
       onClose={onClose}
       title="Edit Player Profile"
     >
-      <div className="space-y-4">
-
+      <form className="space-y-4" onSubmit={handleUpdatePlayer}> 
+        {error && (
+          <div className='bg-red-500 p-2 rounded-lg text-white'>{error} </div>
+        )}
         <div>
           <label className="mb-1 block text-sm font-medium">
             Full Name
           </label>
 
           <input
-            defaultValue={player.name}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg border p-2"
           />
         </div>
@@ -32,27 +88,14 @@ export default function EditPlayer({
           </label>
 
           <select
-            defaultValue={player.level}
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
             className="w-full rounded-lg border p-2"
           >
-            <option>Beginner</option>
-            <option>Intermediate</option>
-            <option>Upper Intermediate</option>
-            <option>Advanced</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium">
-            Gender
-          </label>
-
-          <select
-            defaultValue={player.gender}
-            className="w-full rounded-lg border p-2"
-          >
-            <option>Male</option>
-            <option>Female</option>
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="upper_intermediate">Upper Intermediate</option>
+            <option value="advanced">Advanced</option>
           </select>
         </div>
 
@@ -66,7 +109,8 @@ export default function EditPlayer({
             <label className="flex items-center gap-2 rounded-lg border p-2">
               <input
                 type="checkbox"
-                defaultChecked={player.preferMens}
+                checked={preferMens}
+                onChange={(e) => setPreferMens(e.target.checked)}
               />
               <span>Men's</span>
             </label>
@@ -74,7 +118,8 @@ export default function EditPlayer({
             <label className="flex items-center gap-2 rounded-lg border p-2">
               <input
                 type="checkbox"
-                defaultChecked={player.preferWomens}
+                checked={preferWomens}
+                onChange={(e) => setPreferWomens(e.target.checked)}
               />
               <span>Women's</span>
             </label>
@@ -82,7 +127,8 @@ export default function EditPlayer({
             <label className="flex items-center gap-2 rounded-lg border p-2">
               <input
                 type="checkbox"
-                defaultChecked={player.preferMixed}
+                checked={preferMixed}
+                onChange={(e) => setPreferMixed(e.target.checked)}
               />
               <span>Mixed</span>
             </label>
@@ -90,7 +136,8 @@ export default function EditPlayer({
             <label className="flex items-center gap-2 rounded-lg border p-2">
               <input
                 type="checkbox"
-                defaultChecked={player.preferNoGender}
+                checked={preferNoGender}
+                onChange={(e) => setPreferNoGender(e.target.checked)}
               />
               <span>No Gender</span>
             </label>
@@ -104,7 +151,8 @@ export default function EditPlayer({
           </label>
 
           <input
-            defaultValue={player.contact}
+            value={contact}
+            onChange={(e) => setContact(e.target.value)}
             className="w-full rounded-lg border p-2"
           />
         </div>
@@ -112,6 +160,7 @@ export default function EditPlayer({
         <div className="flex justify-end gap-3 pt-3">
 
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg border px-4 py-2"
           >
@@ -120,13 +169,14 @@ export default function EditPlayer({
 
           <button
             className="rounded-lg bg-blue-600 px-5 py-2 text-white hover:bg-blue-700"
+            disabled={loading}
           >
-            Save Changes
+            {loading ? 'Saving...' : 'Save Changes'}
           </button>
 
         </div>
 
-      </div>
+      </form>
     </Modal>
   );
 }
