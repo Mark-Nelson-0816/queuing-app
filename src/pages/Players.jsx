@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import RegisteredPlayerTable from "../components/RegisteredPlayersTable";
-import AllPlayersTable from "../components/AllPlayersTable";
-import RegisterPlayerToday from "../components/RegisterPlayerToday";
-import AddNewPlayer from "../components/AddNewPlayer";
+import RegisteredPlayerTable from "../components/players/RegisteredPlayersTable";
+import AllPlayersTable from "../components/players/AllPlayersTable";
+import RegisterPlayerToday from "../components/players/RegisterPlayerToday";
+import AddNewPlayer from "../components/players/AddNewPlayer";
 
 export default function Players() {
   

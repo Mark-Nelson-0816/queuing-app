@@ -1,6 +1,6 @@
 'use client';
 import {useState, useEffect} from 'react';
-import ConfirmDialog from "../components/ConfirmDialog";
+import ConfirmDialog from "../ConfirmDialog";
 
 export default function RegisteredPlayersTodayList({searchInput, refreshData, setRefreshData}) {
 

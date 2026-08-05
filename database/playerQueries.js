@@ -1,7 +1,7 @@
 import db from "./database.js";
 
 
-export function addPlayer(name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) {
+export function addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) {
   
     const preferMensNum = preferMens ? 1 : 0;
     const preferWomensNum = preferWomens ? 1 : 0;
@@ -21,9 +21,9 @@ export function addPlayer(name, level, contact, preferMens, preferWomens, prefer
 
     
     const result = db.prepare(`
-        INSERT INTO players(name, level, contact_number, prefer_mens, prefer_womens, prefer_mixed, prefer_no_gender)
-        VALUES(?, ?, ?, ?, ?, ?, ?)
-    `).run(name, level, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum);
+        INSERT INTO players(name, level, gender, contact_number, prefer_mens, prefer_womens, prefer_mixed, prefer_no_gender)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, level, gender, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum);
 
 
     return result.lastInsertRowid;
@@ -84,7 +84,7 @@ export function registerPlayer(id) {
 
 }
 
-export function updatePlayerInfo(id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender){
+export function updatePlayerInfo(id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender){
 
     const preferMensNum = preferMens ? 1 : 0;
     const preferWomensNum = preferWomens ? 1 : 0;
@@ -92,19 +92,32 @@ export function updatePlayerInfo(id, name, level, contact, preferMens, preferWom
     const preferNoGenderNum = preferNoGender ? 1 : 0;
 
   return db.prepare(`
-    UPDATE players SET name = ?, level = ?, contact_number = ?, prefer_mens = ?, prefer_womens = ?, prefer_mixed = ?, prefer_no_gender = ? WHERE id =?`).run(name, level, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum, id)
+    UPDATE players SET name = ?, level = ?, gender = ?, contact_number = ?, prefer_mens = ?, prefer_womens = ?, prefer_mixed = ?, prefer_no_gender = ? WHERE id =?`).run(name, level, gender, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum, id)
 }
 
 export function getRegisteredPlayersToday() {
 
   return db.prepare(`
-    SELECT p.id, p.name, p.level, r.status, r.match_count
+    SELECT p.id, p.name, p.level, p.gender, r.status, r.match_count
     FROM players p
     JOIN registered_players_today r ON r.player_id = p.id
     WHERE r.registered_date = CURRENT_DATE AND r.is_done_today = 0
     ORDER BY r.created_at ASC
   `).all();
 
+}
+
+export function getRegisteredPlayersTodayLevelCount() {
+  return db.prepare(`
+    SELECT
+      SUM(CASE WHEN p.level = 'beginner' THEN 1 ELSE 0 END) AS beginner,
+      SUM(CASE WHEN p.level = 'intermediate' THEN 1 ELSE 0 END) AS intermediate,
+      SUM(CASE WHEN p.level = 'upper_intermediate' THEN 1 ELSE 0 END) AS upper_intermediate,
+      SUM(CASE WHEN p.level = 'advanced' THEN 1 ELSE 0 END) AS advanced
+    FROM registered_players_today r
+    JOIN players p
+      ON r.player_id = p.id
+  `).get();
 }
 
 export function removeRegisteredPlayer(id) {

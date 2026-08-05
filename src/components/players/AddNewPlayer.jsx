@@ -6,6 +6,7 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
   const [addPlayerLoading, setAddPlayerLoading] = useState(false);
   const [name, setName] = useState('');
   const [level, setLevel] = useState('Beginner');
+  const [gender, setGender] = useState('male');
   const [contact, setContact] = useState('');
   const [preferMens, setPreferMens] = useState(false);
   const [preferWomens, setPreferWomens] = useState(false);
@@ -22,7 +23,7 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
       return;
     }
     try{
-      const data = await window.api.addPlayer(name.trim(), level, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
+      const data = await window.api.addPlayer(name.trim(), level, gender, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
 
       if(data.message && data.message === 'Player already exists.'){
         setError('Player already exists.');
@@ -40,7 +41,8 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
     setAddPlayerLoading(false);
     setError('');
     setName('');
-    setLevel('Beginner');
+    setGender('male');
+    setLevel('beginner');
     setContact('');
     setPreferMens(false);
     setPreferWomens(false);
@@ -48,7 +50,7 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
     setPreferNoGender(false);
   }
   return (
-    <div className="rounded-xl border bg-white p-6 shadow-sm w-full">
+    <div className="rounded-xl border bg-white p-6 shadow-sm w-full max-h-[600px]">
       <h2 className="mb-5 text-xl font-semibold">
         Add New Player Profile
       </h2>
@@ -65,6 +67,19 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
             value={name}
             onChange={(e)=>setName(e.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Gender
+          </label>
+
+          <select className="w-full rounded-lg border p-2"
+            value={gender}
+            onChange={(e)=>setGender(e.target.value)}>
+            <option value='male'>Male</option>
+            <option value='female'>Female</option>
+          </select>
         </div>
 
         <div>

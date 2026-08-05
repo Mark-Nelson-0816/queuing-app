@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import EditPlayer from "./EditPlayer";
-import ConfirmDialog from "../components/ConfirmDialog";
+import EditPlayer from "../EditPlayer";
+import ConfirmDialog from "../ConfirmDialog";
 
 export default function AllPlayersTable({searchInput}) {
   const [players, setPlayers] = useState([]);

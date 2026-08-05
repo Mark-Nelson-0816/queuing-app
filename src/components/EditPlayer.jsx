@@ -12,6 +12,7 @@ export default function EditPlayer({
   const [name, setName] = useState('');
   const [level, setLevel] = useState('beginner');
   const [contact, setContact] = useState('');
+  const [gender, setGender] = useState('male');
   const [preferMens, setPreferMens] = useState(false);
   const [preferWomens, setPreferWomens] = useState(false);
   const [preferMixed, setPreferMixed] = useState(false);
@@ -29,12 +30,13 @@ export default function EditPlayer({
       return;
     }
     
-    await window.api.updatePlayerInfo(id, name.trim(), level, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
+    await window.api.updatePlayerInfo(id, name.trim(), level, gender, contact.trim(), preferMens, preferWomens, preferMixed, preferNoGender);
 
     setError('');
     setLoading(false);
     setLevel('beginner');
     setName('');
+    setGender('male');
     setId(null);
     setContact('');
     setPreferMens(false);
@@ -51,6 +53,7 @@ export default function EditPlayer({
     setName(player.name ?? '');
     setLevel(player.level ?? 'beginner');
     setContact(player.contact_number ?? '');
+    setGender(player.gender ?? 'male');
 
     setPreferMens(Boolean(player.prefer_mens));
     setPreferWomens(Boolean(player.prefer_womens));
@@ -80,6 +83,19 @@ export default function EditPlayer({
             onChange={(e) => setName(e.target.value)}
             className="w-full rounded-lg border p-2"
           />
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium">
+            Gender
+          </label>
+
+          <select className="w-full rounded-lg border p-2"
+            value={gender}
+            onChange={(e)=>setGender(e.target.value)}>
+            <option value='male'>Male</option>
+            <option value='female'>Female</option>
+          </select>
         </div>
 
         <div>

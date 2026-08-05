@@ -54,7 +54,7 @@ export default function RegisterPlayerToday({refreshData, setRefreshData}) {
   }, [search]);
 
   return (
-    <div className="rounded-xl border bg-white p-6 shadow-sm w-full">
+    <div className="rounded-xl border bg-white p-6 shadow-sm w-full max-h-[600px]">
       <h2 className="mb-5 text-xl font-semibold">
         Register Player Today
       </h2>
@@ -66,7 +66,7 @@ export default function RegisterPlayerToday({refreshData, setRefreshData}) {
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      <div className="flex flex-col gap-2 px-2 overflow-y-auto max-h-[450px]">
+      <div className="flex flex-col gap-2 px-2 overflow-y-auto max-h-[430px]">
         {players.map((player) => (
           <div
             key={player.id}

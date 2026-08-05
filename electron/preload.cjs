@@ -4,14 +4,12 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("api", {
 
   // Players
-  getPlayers: () =>
-    ipcRenderer.invoke("get-players"),
 
   searchPlayers: (name) =>
     ipcRenderer.invoke("search-players", name),
 
-  addPlayer: (name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) =>
-    ipcRenderer.invoke("add-player", name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender),
+  addPlayer: (name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) =>
+    ipcRenderer.invoke("add-player", name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender),
 
   registerPlayer: (id) => 
     ipcRenderer.invoke('register-player', id),
@@ -19,14 +17,17 @@ contextBridge.exposeInMainWorld("api", {
   getRegisteredPlayersToday: () =>
     ipcRenderer.invoke("get-registered-players-today"),
 
+  getRegisteredPlayersTodayLevelCount: () =>
+    ipcRenderer.invoke("get-registered-players-today-level-count"),
+
   removeRegisteredPlayer: (id) =>
     ipcRenderer.invoke("remove-registered-player", id),
 
   getPlayersProfile: (name) => 
     ipcRenderer.invoke("get-players-profile", name),
 
-  updatePlayerInfo: (id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) => 
-    ipcRenderer.invoke('update-player-info', id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender),
+  updatePlayerInfo: (id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => 
+    ipcRenderer.invoke('update-player-info', id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender),
 
   deletePlayerProfile: (id) => 
     ipcRenderer.invoke("delete-players-profile", id),
@@ -38,6 +39,9 @@ contextBridge.exposeInMainWorld("api", {
 
 
   //old player function - not used in player management page (not sure if used in other pages)
+  getPlayers: () =>
+    ipcRenderer.invoke("get-players"),
+
   deletePlayer: (id) =>
     ipcRenderer.invoke("delete-player", id),
 

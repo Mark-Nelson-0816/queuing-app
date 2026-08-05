@@ -10,6 +10,7 @@ import { getPlayers } from "../database/playerQueries.js";
 import { searchPlayers } from "../database/playerQueries.js";
 import { registerPlayer } from "../database/playerQueries.js";
 import { getRegisteredPlayersToday } from "../database/playerQueries.js";
+import { getRegisteredPlayersTodayLevelCount } from "../database/playerQueries.js";
 import { removeRegisteredPlayer } from "../database/playerQueries.js";
 import { getPlayersProfile } from "../database/playerQueries.js";
 import { updatePlayerInfo } from "../database/playerQueries.js";
@@ -84,9 +85,9 @@ function createWindow() {
 
 //players
 
-ipcMain.handle("add-player", (event, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
+ipcMain.handle("add-player", (event, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
 
-  const playerId = addPlayer(name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender);
+  const playerId = addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender);
 
   if(playerId.message && playerId.message === 'Player already exists.'){
     return {message: playerId.message};
@@ -115,16 +116,20 @@ ipcMain.handle('get-players-profile', (event, name) => {
   return getPlayersProfile(name);
 });
 
-ipcMain.handle('get-registered-players-today', (event) => {
+ipcMain.handle('get-registered-players-today', () => {
   return getRegisteredPlayersToday();
+});
+
+ipcMain.handle('get-registered-players-today-level-count', () => {
+  return getRegisteredPlayersTodayLevelCount();
 });
 
 ipcMain.handle('remove-registered-player', (event, id) => {
   return removeRegisteredPlayer(id);
 });
 
-ipcMain.handle("update-player-info", (event, id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
-  return updatePlayerInfo(id, name, level, contact, preferMens, preferWomens, preferMixed, preferNoGender);
+ipcMain.handle("update-player-info", (event, id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
+  return updatePlayerInfo(id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender);
 });
 
 ipcMain.handle("delete-players-profile", (event, id) => {

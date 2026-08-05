@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS players (
     level TEXT NOT NULL DEFAULT 'beginner',
     -- beginner | intermediate | upper_intermediate | advanced
 
+    gender TEXT DEFAULT 'male',
     contact_number TEXT DEFAULT 'N/A',
 
     prefer_mixed INTEGER DEFAULT 0,
@@ -49,6 +50,54 @@ CREATE TABLE IF NOT EXISTS registered_players_today (
     FOREIGN KEY (player_id) REFERENCES players(id)
 );
 
+
+CREATE TABLE tournament_teams(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+
+    player_1_id INTEGER REFERENCES players(id),
+    player_2_id INTEGER REFERENCES players(id)
+);
+
+CREATE TABLE tournament_rounds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+
+    round_number INTEGER NOT NULL,
+
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tournaments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    match_type VARCHAR(50) DEFAULT 'double',
+    category VARCHAR(50) DEFAULT 'mens',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tournament_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+
+    round_id INTEGER NOT NULL REFERENCES tournament_rounds(id),
+
+    team_a_id INTEGER NOT NULL REFERENCES tournament_teams(id),
+
+    team_b_id INTEGER NOT NULL REFERENCES tournament_teams(id),
+
+    winner_team_id INTEGER DEFAULT NULL REFERENCES tournament_teams(id),
+
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
+
+
+-- not used in players & tournament
 
 CREATE TABLE IF NOT EXISTS courts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
