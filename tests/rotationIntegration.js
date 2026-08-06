@@ -578,10 +578,30 @@ try {
 
   const firstWaiting = waitingMatches[0];
   const secondWaiting = waitingMatches[1];
+  let publicNextUp = rotation.getRotationNextUpMatches();
+  assert.equal(publicNextUp.success, true, publicNextUp.message);
+  assert.deepEqual(
+    publicNextUp.data.matches.map((match) => match.id),
+    waitingMatches.map((match) => match.id),
+  );
+  assert.equal(
+    publicNextUp.data.matches.every((match) => (
+      match.source === "rotation"
+      && match.status === "waiting"
+      && match.courtId === null
+      && match.validationMessage === ""
+    )),
+    true,
+  );
   const courtA = Number(db.prepare("SELECT id FROM courts WHERE name = 'Court A'").get().id);
   const courtB = Number(db.prepare("SELECT id FROM courts WHERE name = 'Court B'").get().id);
   const courtC = Number(db.prepare("SELECT id FROM courts WHERE name = 'Court C'").get().id);
   assert.equal(rotation.startRotationMatch(firstWaiting.id, courtA).success, true);
+  publicNextUp = rotation.getRotationNextUpMatches();
+  assert.deepEqual(
+    publicNextUp.data.matches.map((match) => match.id),
+    [secondWaiting.id],
+  );
   expectFailure(rotation.startRotationMatch(firstWaiting.id, courtB), /already started/);
   expectFailure(rotation.startRotationMatch(secondWaiting.id, courtA), /no longer available/);
   expectFailure(rotation.finishRotationMatch(secondWaiting.id, 1, []), /Only a playing/);
@@ -634,6 +654,12 @@ try {
       id, tournament_id, round_id, team_a_id, team_b_id, status
     ) VALUES (?, ?, ?, ?, ?, 'pending')
   `).run(firstWaiting.id, tournamentId, roundId, teamAId, teamBId);
+  publicNextUp = rotation.getRotationNextUpMatches();
+  assert.deepEqual(
+    publicNextUp.data.matches.map((match) => match.id),
+    [secondWaiting.id],
+  );
+  assert.equal(publicNextUp.data.matches.some((match) => match.source === "tournament"), false);
   assert.equal(startTournamentMatch(firstWaiting.id, courtB).success, true);
   const simultaneousCourts = getCourts();
   const activeRotation = simultaneousCourts.find((court) => court.id === courtA).activeMatch;

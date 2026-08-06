@@ -62,6 +62,9 @@ function PlayerOption({ player }) {
 
 export default function Queue() {
   const [initialDraft] = useState(loadRotationDraft);
+  const [hasSavedRotationDraft] = useState(() => (
+    sessionStorage.getItem(ROTATION_DRAFT_KEY) !== null
+  ));
   const [rotationState, setRotationState] = useState(EMPTY_STATE);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState(
     initialDraft.selectedPlayerIds,
@@ -159,6 +162,22 @@ export default function Queue() {
       }
       if (settingsRequest.status === "fulfilled") {
         setAutoRequeue(settingsRequest.value.autoRequeue !== "false");
+        const defaultMatchType = settingsRequest.value.defaultMatchType;
+        if (
+          !hasSavedRotationDraft
+          && ["singles", "doubles"].includes(defaultMatchType)
+        ) {
+          const nextCategory = defaultMatchType === "singles"
+            && configurationRef.current.category === "mixed"
+            ? "no_gender"
+            : configurationRef.current.category;
+          configurationRef.current = {
+            matchType: defaultMatchType,
+            category: nextCategory,
+          };
+          setMatchType(defaultMatchType);
+          setCategory(nextCategory);
+        }
       }
     }).finally(() => {
       if (!cancelled) setIsLoading(false);
@@ -166,7 +185,7 @@ export default function Queue() {
     return () => {
       cancelled = true;
     };
-  }, [applyState]);
+  }, [applyState, hasSavedRotationDraft]);
 
   const applyConfiguration = (nextMatchType, nextCategory, removedPlayerIds = []) => {
     const removedIds = new Set(removedPlayerIds);

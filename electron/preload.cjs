@@ -134,6 +134,9 @@ contextBridge.exposeInMainWorld("api", {
   getRotationMatches: () =>
     ipcRenderer.invoke("get-rotation-matches"),
 
+  getRotationNextUpMatches: () =>
+    ipcRenderer.invoke("get-rotation-next-up-matches"),
+
   updateWaitingMatch: (matchId, teamAIds, teamBIds) =>
     ipcRenderer.invoke(
       "update-waiting-match",
@@ -173,4 +176,6 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("get-setting", key),
   updateSetting: (key, value) =>
     ipcRenderer.invoke("update-setting", key, value),
+  getApplicationInfo: () =>
+    ipcRenderer.invoke("get-application-info"),
 });

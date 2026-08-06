@@ -184,7 +184,7 @@ export default function PublicDisplay({
               <div className="flex-1 min-h-0 flex flex-col gap-2">
                 {queueNext.slice(0, 6).map((player, index) => (
                   <div
-                    key={player.id}
+                    key={`${player.source}-${player.id}`}
                     className="flex items-center gap-3 bg-[var(--surface-hover)] rounded-xl p-3 shrink-0"
                   >
                     <span className="w-8 h-8 rounded-full bg-[var(--primary)] text-white flex items-center justify-center font-bold shrink-0">

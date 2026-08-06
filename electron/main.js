@@ -34,6 +34,7 @@ import {
   generateAndSaveRotationMatches,
   getActiveTeamLocks,
   getEligibleRotationPlayers,
+  getRotationNextUpMatches,
   getRotationMatches,
   getRotationState,
   rebalanceWaitingMatch,
@@ -45,7 +46,7 @@ import {
 } from "../database/rotationQueries.js";
 
 import { resetAllData } from "../database/resetQueries.js";
-import { getSetting, getAllSettings, setSetting } from "../database/settingsQueries.js";
+import { getApplicationInfo, getSetting, getAllSettings, setSetting } from "../database/settingsQueries.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -238,6 +239,10 @@ ipcMain.handle(
 
 ipcMain.handle("get-rotation-matches", () => getRotationMatches());
 
+ipcMain.handle("get-rotation-next-up-matches", () => (
+  getRotationNextUpMatches()
+));
+
 ipcMain.handle(
   "update-waiting-match",
   (event, matchId, teamAIds, teamBIds) => (
@@ -299,3 +304,5 @@ ipcMain.handle("update-setting", (event, key, value) => {
 ipcMain.handle("get-setting", (event, key) => {
   return getSetting(key);
 });
+
+ipcMain.handle("get-application-info", () => getApplicationInfo());

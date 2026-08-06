@@ -1,4 +1,7 @@
 import db from "./database.js";
+import path from "path";
+import process from "node:process";
+import { app } from "electron";
 
 // Get a single setting value (returns null if not set)
 export function getSetting(key) {
@@ -24,5 +27,21 @@ export function setSetting(key, value) {
   ).run(key, String(value));
 
   return { success: true };
+}
+
+export function getApplicationInfo() {
+  const sqliteVersion = db.prepare("SELECT sqlite_version() AS version").get().version;
+  const schemaVersion = Number(db.pragma("user_version", { simple: true }) || 0);
+
+  return {
+    applicationName: app.getName(),
+    version: app.getVersion(),
+    electronVersion: process.versions.electron,
+    sqliteVersion,
+    schemaVersion,
+    platform: `${process.platform} (${process.arch})`,
+    databaseLocation: path.join(app.getPath("userData"), "badminton.db"),
+    developer: "Not configured",
+  };
 }
 

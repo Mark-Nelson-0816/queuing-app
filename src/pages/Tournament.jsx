@@ -26,6 +26,34 @@ export default function Tournament() {
   useEffect(() => {
     let isCancelled = false;
 
+    window.api.getSettings()
+      .then((settings) => {
+        if (isCancelled) return;
+        const defaultMatchType = ["singles", "doubles"].includes(
+          settings.defaultTournamentMatchType,
+        ) ? settings.defaultTournamentMatchType : "doubles";
+        const defaultCategory = ["no_gender", "mens", "womens", "mixed"].includes(
+          settings.defaultTournamentCategory,
+        ) ? settings.defaultTournamentCategory : "no_gender";
+        setMatchType(defaultMatchType);
+        setCategory(
+          defaultMatchType === "singles" && defaultCategory === "mixed"
+            ? "no_gender"
+            : defaultCategory,
+        );
+      })
+      .catch(() => {
+        // Existing tournament defaults remain in place when settings cannot load.
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
     window.api.getLatestTournament()
       .then((result) => {
         if (isCancelled) return;

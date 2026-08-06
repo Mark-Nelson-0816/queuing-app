@@ -117,6 +117,54 @@ const getRotationMatchRowsStatement = db.prepare(`
     rotation_matches.id DESC
 `);
 
+const getRotationNextUpRowsStatement = db.prepare(`
+  SELECT
+    rotation_matches.id,
+    rotation_matches.queue_position,
+    rotation_matches.match_type,
+    rotation_matches.category,
+    rotation_matches.status,
+    rotation_matches.court_id,
+    rotation_matches.winner_team,
+    rotation_matches.team_a_strength,
+    rotation_matches.team_b_strength,
+    rotation_matches.balance_difference,
+    rotation_matches.warnings,
+    rotation_matches.validation_message,
+    rotation_matches.start_time,
+    rotation_matches.end_time,
+    rotation_matches.created_at,
+    rotation_matches.updated_at,
+    NULL AS court_name,
+    NULL AS court_status
+  FROM rotation_matches
+  WHERE rotation_matches.status = 'waiting'
+    AND rotation_matches.queue_position IS NOT NULL
+    AND rotation_matches.court_id IS NULL
+    AND COALESCE(TRIM(rotation_matches.validation_message), '') = ''
+    AND (
+      SELECT COUNT(*)
+      FROM rotation_match_players
+      WHERE rotation_match_players.rotation_match_id = rotation_matches.id
+    ) = CASE rotation_matches.match_type WHEN 'singles' THEN 2 ELSE 4 END
+    AND (
+      SELECT COUNT(*)
+      FROM rotation_match_players
+      WHERE rotation_match_players.rotation_match_id = rotation_matches.id
+        AND rotation_match_players.team = 1
+    ) = CASE rotation_matches.match_type WHEN 'singles' THEN 1 ELSE 2 END
+    AND (
+      SELECT COUNT(*)
+      FROM rotation_match_players
+      WHERE rotation_match_players.rotation_match_id = rotation_matches.id
+        AND rotation_match_players.team = 2
+    ) = CASE rotation_matches.match_type WHEN 'singles' THEN 1 ELSE 2 END
+  ORDER BY
+    rotation_matches.queue_position ASC,
+    rotation_matches.created_at ASC,
+    rotation_matches.id ASC
+`);
+
 const getRotationParticipantsStatement = db.prepare(`
   SELECT
     rotation_match_players.id,
@@ -365,6 +413,7 @@ function mapParticipant(row) {
 function mapRotationMatch(row) {
   const participants = getRotationParticipantsStatement.all(row.id).map(mapParticipant);
   return {
+    source: "rotation",
     id: Number(row.id),
     queuePosition: row.queue_position === null ? null : Number(row.queue_position),
     matchType: row.match_type,
@@ -396,6 +445,10 @@ function mapRotationMatch(row) {
 
 function loadRotationMatches() {
   return getRotationMatchRowsStatement.all().map(mapRotationMatch);
+}
+
+function loadRotationNextUpMatches() {
+  return getRotationNextUpRowsStatement.all().map(mapRotationMatch);
 }
 
 function createRotationSummary(matches) {
@@ -432,6 +485,17 @@ export function getRotationMatches() {
     };
   } catch (error) {
     return failure(error, "Failed to load rotation matches.");
+  }
+}
+
+export function getRotationNextUpMatches() {
+  try {
+    return {
+      success: true,
+      data: { matches: loadRotationNextUpMatches() },
+    };
+  } catch (error) {
+    return failure(error, "Failed to load the Rotation Queue's next matches.");
   }
 }
 

@@ -31,16 +31,17 @@ export default function PublicDisplayPage() {
           }
         });
 
-      window.api.getRotationMatches()
+      window.api.getRotationNextUpMatches()
         .then((result) => {
           if (isCancelled) return;
 
           const mappedQueue = result?.success
             ? result.data.matches
-              .filter((match) => match.status === "waiting")
-              .sort((first, second) => first.queuePosition - second.queuePosition)
+              .filter((match) => match.source === "rotation")
               .map((match) => ({
                 id: match.id,
+                source: match.source,
+                queuePosition: match.queuePosition,
                 name: [
                   match.teamA.map((player) => player.name).join(" / "),
                   match.teamB.map((player) => player.name).join(" / "),
