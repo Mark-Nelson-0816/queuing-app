@@ -16,8 +16,11 @@ function formatLabel(value) {
     : "";
 }
 
-function PublicTeam({ team, dense, accent = "primary" }) {
+function PublicTeam({ team, dense, accent = "primary", matchType }) {
   const isPrimary = accent === "primary";
+  const sideLabel = matchType === "singles"
+    ? `Player ${team?.teamNumber === 1 ? "A" : "B"}`
+    : `Team ${team?.teamNumber}`;
 
   return (
     <div className={`rounded-xl ${dense ? "p-2" : "p-3"} ${
@@ -28,7 +31,7 @@ function PublicTeam({ team, dense, accent = "primary" }) {
       <p className={`font-semibold text-center mb-1.5 ${dense ? "text-[10px]" : "text-xs"} ${
         isPrimary ? "text-[var(--primary)]" : "text-[var(--warning)]"
       }`}>
-        Team {team?.teamNumber}
+        {sideLabel}
       </p>
       <div className={`grid gap-2 ${team?.players.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
         {team?.players.map((player) => (
@@ -121,6 +124,7 @@ export default function PublicDisplay({
               {activeCourts.map((court) => {
                 const match = court.activeMatch;
                 const isTournament = match.source === "tournament";
+                const isRotation = match.source === "rotation";
 
                 return (
                   <div
@@ -141,20 +145,23 @@ export default function PublicDisplay({
                       <p className={`font-bold text-[var(--text-h)] ${dense ? "text-xs" : "text-sm"}`}>
                         {isTournament
                           ? `Tournament - Round ${match.roundNumber}`
-                          : "Normal Match"}
+                          : isRotation
+                            ? "Rotation Match"
+                            : "Legacy Normal Match"}
                       </p>
                       <p className={`text-[var(--text)] ${dense ? "text-[10px]" : "text-xs"}`}>
-                        {isTournament && `${formatLabel(match.category)} `}
+                        {(isTournament || isRotation)
+                          && `${formatLabel(match.category)} `}
                         {formatLabel(match.matchType)}
                       </p>
                     </div>
 
                     <div className="flex-1 min-h-0 flex flex-col justify-center gap-2">
-                      <PublicTeam team={match.teamA} dense={dense} accent="primary" />
+                      <PublicTeam team={match.teamA} dense={dense} accent="primary" matchType={match.matchType} />
                       <p className={`text-center font-bold text-[var(--text)]/50 ${dense ? "text-xs" : "text-sm"}`}>
                         VS
                       </p>
-                      <PublicTeam team={match.teamB} dense={dense} accent="warning" />
+                      <PublicTeam team={match.teamB} dense={dense} accent="warning" matchType={match.matchType} />
                     </div>
                   </div>
                 );

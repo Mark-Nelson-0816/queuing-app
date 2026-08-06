@@ -118,7 +118,7 @@ function Stat({ label, value, icon: Icon, color }) {
 
 const DEFAULT_SETTINGS = {
   theme: "light",
-  defaultMatchType: "singles",
+  defaultMatchType: "doubles",
   autoRequeue: "true",
 };
 
@@ -156,15 +156,17 @@ export default function Settings() {
 
   async function loadStats() {
     try {
-      const [players, courts, queue] = await Promise.all([
+      const [players, courts, rotation] = await Promise.all([
         window.api.getPlayers(),
         window.api.getCourts(),
-        window.api.getQueue(),
+        window.api.getRotationMatches(),
       ]);
       setStats({
         players: players.length,
         courts: courts.length,
-        queue: queue.length,
+        queue: rotation?.success
+          ? rotation.data.summary.waiting + rotation.data.summary.incomplete
+          : 0,
         matches: 0,
       });
     } catch (err) {

@@ -1,3 +1,5 @@
+import { normalizeRotationLevel } from "../../database/rotationLogic.js";
+
 const LEVEL_DETAILS = {
   beginner: {
     label: "Beginner",
@@ -28,13 +30,7 @@ const DEFAULT_DETAILS = {
 };
 
 export function normalizePlayerLevel(level) {
-  const normalized = String(level || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-
-  if (normalized === "upperintermediate") return "upper_intermediate";
-  return normalized;
+  return normalizeRotationLevel(level);
 }
 
 export function getLevelClasses(level) {

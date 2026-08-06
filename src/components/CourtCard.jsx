@@ -33,8 +33,11 @@ function StatusBadge({ status }) {
   );
 }
 
-function Team({ team, accent = "primary" }) {
+function Team({ team, accent = "primary", matchType }) {
   if (!team) return null;
+  const sideLabel = matchType === "singles"
+    ? `Player ${team.teamNumber === 1 ? "A" : "B"}`
+    : `Team ${team.teamNumber}`;
 
   return (
     <div className={`rounded-xl p-2 ${
@@ -45,7 +48,7 @@ function Team({ team, accent = "primary" }) {
       <p className={`text-[10px] font-semibold uppercase tracking-wide mb-1.5 ${
         accent === "primary" ? "text-[var(--primary)]" : "text-[var(--warning)]"
       }`}>
-        Team {team.teamNumber}
+        {sideLabel}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {team.players.map((player) => (
@@ -64,14 +67,13 @@ function Team({ team, accent = "primary" }) {
 
 export default function CourtCard({
   court,
-  requeuePlayers = true,
-  onEndMatch,
   onRemoveCourt,
 }) {
   const isAvailable = court.status === "available";
   const activeMatch = court.activeMatch;
   const style = statusStyles[court.status] ?? statusStyles.available;
   const isTournamentMatch = activeMatch?.source === "tournament";
+  const isRotationMatch = activeMatch?.source === "rotation";
 
   return (
     <div className={`group relative bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col gap-4 ring-1 ${style.ring} transition-shadow hover:shadow-md`}>
@@ -101,17 +103,20 @@ export default function CourtCard({
                 <Users size={12} />
                 {isTournamentMatch
                   ? `Tournament - Round ${activeMatch.roundNumber}`
-                  : "Normal Match"}
+                  : isRotationMatch
+                    ? "Rotation Match"
+                    : "Legacy Normal Match"}
               </p>
               <p className="text-xs text-[var(--text)] mt-1">
-                {isTournamentMatch && `${formatLabel(activeMatch.category)} `}
+                {(isTournamentMatch || isRotationMatch)
+                  && `${formatLabel(activeMatch.category)} `}
                 {formatLabel(activeMatch.matchType)}
               </p>
             </div>
 
-            <Team team={activeMatch.teamA} accent="primary" />
+            <Team team={activeMatch.teamA} accent="primary" matchType={activeMatch.matchType} />
             <p className="text-center text-[10px] font-bold text-[var(--text)]/50">VS</p>
-            <Team team={activeMatch.teamB} accent="warning" />
+            <Team team={activeMatch.teamB} accent="warning" matchType={activeMatch.matchType} />
           </div>
         ) : (
           <div className="h-full flex items-center justify-center text-sm text-[var(--text)]/60 italic py-4">
@@ -120,21 +125,21 @@ export default function CourtCard({
         )}
       </div>
 
-      {!isAvailable && activeMatch?.source === "normal" && (
-        <div className="pt-3 border-t border-[var(--border)]">
-          <button
-            type="button"
-            onClick={() => onEndMatch?.(court.id, requeuePlayers)}
-            className="w-full py-2 rounded-xl bg-red-400 hover:bg-red-500 text-white text-sm font-semibold transition-colors"
-          >
-            End Match
-          </button>
-        </div>
-      )}
-
       {!isAvailable && isTournamentMatch && (
         <div className="pt-3 border-t border-[var(--border)] text-xs text-center text-[var(--text)]">
           Select the winner from the Tournament page to finish this match.
+        </div>
+      )}
+
+      {!isAvailable && isRotationMatch && (
+        <div className="pt-3 border-t border-[var(--border)] text-xs text-center text-[var(--text)]">
+          Select the winner from the Rotation Queue page to finish this match.
+        </div>
+      )}
+
+      {!isAvailable && activeMatch?.source === "normal" && (
+        <div className="pt-3 border-t border-[var(--border)] text-xs text-center text-[var(--text)]">
+          This is a legacy normal match record.
         </div>
       )}
     </div>

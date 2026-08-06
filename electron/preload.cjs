@@ -8,10 +8,13 @@ contextBridge.exposeInMainWorld("api", {
   searchPlayers: (name) =>
     ipcRenderer.invoke("search-players", name),
 
-  addPlayer: (name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) =>
-    ipcRenderer.invoke("add-player", name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender),
+  addPlayer: (name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) =>
+    ipcRenderer.invoke("add-player", name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference),
 
-  registerPlayer: (id) => 
+  getPlayerManagementData: () =>
+    ipcRenderer.invoke("get-player-management-data"),
+
+  registerPlayer: (id) =>
     ipcRenderer.invoke('register-player', id),
 
   getRegisteredPlayersToday: () =>
@@ -23,16 +26,16 @@ contextBridge.exposeInMainWorld("api", {
   removeRegisteredPlayer: (id) =>
     ipcRenderer.invoke("remove-registered-player", id),
 
-  getPlayersProfile: (name) => 
+  getPlayersProfile: (name) =>
     ipcRenderer.invoke("get-players-profile", name),
 
-  updatePlayerInfo: (id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => 
-    ipcRenderer.invoke('update-player-info', id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender),
+  updatePlayerInfo: (id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) =>
+    ipcRenderer.invoke('update-player-info', id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference),
 
-  deletePlayerProfile: (id) => 
+  deletePlayerProfile: (id) =>
     ipcRenderer.invoke("delete-players-profile", id),
 
-  getPlayerCards: () => 
+  getPlayerCards: () =>
     ipcRenderer.invoke("get-player-cards"),
 
 
@@ -91,26 +94,72 @@ contextBridge.exposeInMainWorld("api", {
 
 
 
-  // Queue
-  getQueue: () =>
-    ipcRenderer.invoke("get-queue"),
+  // Rotation Queue
+  getRotationState: () =>
+    ipcRenderer.invoke("get-rotation-state"),
 
-  addQueue: (playerId) =>
-    ipcRenderer.invoke("add-queue", playerId),
+  getEligibleRotationPlayers: () =>
+    ipcRenderer.invoke("get-eligible-rotation-players"),
 
-  removeQueue: (id) =>
-    ipcRenderer.invoke("remove-queue", id),
+  getActiveTeamLocks: () =>
+    ipcRenderer.invoke("get-active-team-locks"),
 
-  //matches
-  previewNextMatch: (matchType) =>
-    ipcRenderer.invoke("preview-next-match", matchType),
-  createMatch: (matchType) =>
-    ipcRenderer.invoke("create-match", matchType),
-  endMatch:(courtId, requeue)=>
+  createTeamLock: (firstPlayerId, secondPlayerId, matchType, category) =>
     ipcRenderer.invoke(
-      "end-match",
-      courtId,
-      requeue
+      "create-team-lock",
+      firstPlayerId,
+      secondPlayerId,
+      matchType,
+      category,
+    ),
+
+  removeTeamLock: (lockId) =>
+    ipcRenderer.invoke("remove-team-lock", lockId),
+
+  updateRotationRankPreference: (playerId, preference) =>
+    ipcRenderer.invoke(
+      "update-rotation-rank-preference",
+      playerId,
+      preference,
+    ),
+
+  generateRotationMatches: (playerIds, matchType, category) =>
+    ipcRenderer.invoke(
+      "generate-rotation-matches",
+      playerIds,
+      matchType,
+      category,
+    ),
+
+  getRotationMatches: () =>
+    ipcRenderer.invoke("get-rotation-matches"),
+
+  updateWaitingMatch: (matchId, teamAIds, teamBIds) =>
+    ipcRenderer.invoke(
+      "update-waiting-match",
+      matchId,
+      teamAIds,
+      teamBIds,
+    ),
+
+  rebalanceWaitingMatch: (matchId) =>
+    ipcRenderer.invoke("rebalance-waiting-match", matchId),
+
+  reorderWaitingMatch: (matchId, direction) =>
+    ipcRenderer.invoke("reorder-waiting-match", matchId, direction),
+
+  cancelWaitingMatch: (matchId) =>
+    ipcRenderer.invoke("cancel-waiting-match", matchId),
+
+  startRotationMatch: (matchId, courtId) =>
+    ipcRenderer.invoke("start-rotation-match", matchId, courtId),
+
+  finishRotationMatch: (matchId, winnerTeam, donePlayerIds) =>
+    ipcRenderer.invoke(
+      "finish-rotation-match",
+      matchId,
+      winnerTeam,
+      donePlayerIds,
     ),
 
   //datas

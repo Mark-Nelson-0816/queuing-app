@@ -1,248 +1,748 @@
 import db from "./database.js";
+import {
+  getRotationLevelValue,
+  normalizeRankPreference,
+  normalizeRotationGender,
+  normalizeRotationLevel,
+} from "./rotationLogic.js";
 
+const VALID_GENDERS = new Set(["male", "female"]);
+const VALID_RANK_PREFERENCES = new Set(["same_rank", "adjacent_rank"]);
 
-export function addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) {
-  
-    const preferMensNum = preferMens ? 1 : 0;
-    const preferWomensNum = preferWomens ? 1 : 0;
-    const preferMixedNum = preferMixed ? 1 : 0;
-    const preferNoGenderNum = preferNoGender ? 1 : 0;
-    
-    const existingPlayer = db.prepare(`
-        SELECT id
-        FROM players
-        WHERE name = ?
-    `).get(name);
+function failure(error, fallbackMessage) {
+  return {
+    success: false,
+    message: error instanceof Error && error.message
+      ? error.message
+      : fallbackMessage,
+  };
+}
 
+function parsePlayerId(value) {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Player not found.");
+  return id;
+}
 
-    if (existingPlayer) {
-        return {message: 'Player already exists.'};
+function normalizePlayerInput({
+  name,
+  level,
+  gender,
+  contact,
+  preferMens,
+  preferWomens,
+  preferMixed,
+  preferNoGender,
+  rankPreference,
+}) {
+  const normalizedName = String(name || "").trim();
+  const normalizedLevel = String(level || "").trim();
+  const normalizedGender = normalizeRotationGender(gender);
+  const normalizedRankPreference = normalizeRankPreference(rankPreference);
+  const preferences = {
+    preferMens: Boolean(preferMens),
+    preferWomens: Boolean(preferWomens),
+    preferMixed: Boolean(preferMixed),
+    preferNoGender: Boolean(preferNoGender),
+  };
+
+  if (!normalizedName) throw new Error("Full name is required.");
+  if (!getRotationLevelValue(normalizedLevel)) {
+    throw new Error("Please select a valid skill level.");
+  }
+  if (!VALID_GENDERS.has(normalizedGender)) {
+    throw new Error("Please select a valid gender.");
+  }
+  if (!VALID_RANK_PREFERENCES.has(rankPreference)) {
+    throw new Error("Please select a valid rank-match preference.");
+  }
+  if (!Object.values(preferences).some(Boolean)) {
+    throw new Error("Select at least one preferred match category.");
+  }
+
+  return {
+    name: normalizedName,
+    level: normalizeRotationLevel(normalizedLevel),
+    gender: normalizedGender,
+    contact: String(contact || "").trim() || "N/A",
+    rankPreference: normalizedRankPreference,
+    ...preferences,
+  };
+}
+
+function findDuplicateName(name, excludedPlayerId = null) {
+  return db.prepare(`
+    SELECT id
+    FROM players
+    WHERE LOWER(TRIM(name)) = LOWER(?)
+      AND (? IS NULL OR id <> ?)
+    LIMIT 1
+  `).get(name, excludedPlayerId, excludedPlayerId);
+}
+
+function mapProfile(row) {
+  const hasTodayRegistration = row.today_registration_id !== null
+    && row.today_registration_id !== undefined;
+  return {
+    id: Number(row.id),
+    name: row.name,
+    level: normalizeRotationLevel(row.level),
+    gender: normalizeRotationGender(row.gender),
+    contactNumber: row.contact_number || "N/A",
+    rankPreference: normalizeRankPreference(row.rank_match_preference),
+    preferMens: Boolean(row.prefer_mens),
+    preferWomens: Boolean(row.prefer_womens),
+    preferMixed: Boolean(row.prefer_mixed),
+    preferNoGender: Boolean(row.prefer_no_gender),
+    lifetimeMatches: Number(row.total_matches_played || 0),
+    lifetimeWins: Number(row.total_wins || 0),
+    lifetimeLosses: Number(row.total_losses || 0),
+    createdAt: row.created_at,
+    todayRegistration: hasTodayRegistration
+      ? {
+        id: Number(row.today_registration_id),
+        status: row.today_is_done ? "done" : row.today_status,
+        isDone: Boolean(row.today_is_done),
+      }
+      : null,
+  };
+}
+
+function mapTodayPlayer(row) {
+  return {
+    id: Number(row.id),
+    registrationId: Number(row.registration_id),
+    name: row.name,
+    level: normalizeRotationLevel(row.level),
+    gender: normalizeRotationGender(row.gender),
+    rankPreference: normalizeRankPreference(row.rank_match_preference),
+    status: row.display_status,
+    storedStatus: row.stored_status,
+    isDoneToday: Boolean(row.is_done_today),
+    matchesToday: Number(row.match_count || 0),
+    winsToday: Number(row.wins || 0),
+    lossesToday: Number(row.losses || 0),
+    availableSince: row.available_since,
+    registeredAt: row.registered_at,
+    lockedTeammate: row.lock_id === null
+      ? null
+      : {
+        lockId: Number(row.lock_id),
+        id: Number(row.locked_teammate_id),
+        name: row.locked_teammate_name,
+        level: row.locked_teammate_level,
+      },
+  };
+}
+
+const playerManagementProfilesStatement = db.prepare(`
+  SELECT
+    players.*,
+    registered_players_today.id AS today_registration_id,
+    registered_players_today.status AS today_status,
+    registered_players_today.is_done_today AS today_is_done
+  FROM players
+  LEFT JOIN registered_players_today
+    ON registered_players_today.id = (
+      SELECT current_registration.id
+      FROM registered_players_today AS current_registration
+      WHERE current_registration.player_id = players.id
+        AND current_registration.registered_date = CURRENT_DATE
+      ORDER BY current_registration.is_done_today ASC, current_registration.id DESC
+      LIMIT 1
+    )
+  ORDER BY players.name COLLATE NOCASE ASC, players.id ASC
+`);
+
+const playerManagementTodayStatement = db.prepare(`
+  SELECT
+    players.id,
+    players.name,
+    players.level,
+    players.gender,
+    players.rank_match_preference,
+    registered_players_today.id AS registration_id,
+    registered_players_today.status AS stored_status,
+    registered_players_today.is_done_today,
+    registered_players_today.match_count,
+    registered_players_today.wins,
+    registered_players_today.losses,
+    registered_players_today.available_since,
+    registered_players_today.created_at AS registered_at,
+    player_team_locks.id AS lock_id,
+    locked_teammate.id AS locked_teammate_id,
+    locked_teammate.name AS locked_teammate_name,
+    locked_teammate.level AS locked_teammate_level,
+    CASE
+      WHEN registered_players_today.is_done_today = 1 THEN 'done'
+      WHEN EXISTS (
+        SELECT 1
+        FROM rotation_match_players
+        JOIN rotation_matches
+          ON rotation_matches.id = rotation_match_players.rotation_match_id
+        WHERE rotation_match_players.player_id = players.id
+          AND rotation_matches.status = 'playing'
+      ) OR EXISTS (
+        SELECT 1
+        FROM tournament_matches
+        JOIN tournament_teams AS team_a
+          ON team_a.id = tournament_matches.team_a_id
+        JOIN tournament_teams AS team_b
+          ON team_b.id = tournament_matches.team_b_id
+        WHERE tournament_matches.status = 'playing'
+          AND players.id IN (
+            team_a.player_1_id,
+            team_a.player_2_id,
+            team_b.player_1_id,
+            team_b.player_2_id
+          )
+      ) OR EXISTS (
+        SELECT 1
+        FROM matches
+        LEFT JOIN match_players
+          ON match_players.match_id = matches.id
+          AND match_players.source = 'normal'
+        WHERE matches.status = 'playing'
+          AND (
+            matches.player_one = players.id
+            OR matches.player_two = players.id
+            OR match_players.player_id = players.id
+          )
+      ) THEN 'playing'
+      WHEN EXISTS (
+        SELECT 1
+        FROM rotation_match_players
+        JOIN rotation_matches
+          ON rotation_matches.id = rotation_match_players.rotation_match_id
+        WHERE rotation_match_players.player_id = players.id
+          AND rotation_matches.status IN ('waiting', 'incomplete')
+      ) OR registered_players_today.status = 'assigned' THEN 'assigned'
+      WHEN registered_players_today.status = 'playing' THEN 'playing'
+      ELSE 'available'
+    END AS display_status
+  FROM registered_players_today
+  JOIN players
+    ON players.id = registered_players_today.player_id
+  LEFT JOIN player_team_locks
+    ON player_team_locks.is_active = 1
+    AND (
+      player_team_locks.lock_type = 'permanent'
+      OR player_team_locks.lock_date = CURRENT_DATE
+    )
+    AND players.id IN (
+      player_team_locks.player_1_id,
+      player_team_locks.player_2_id
+    )
+  LEFT JOIN players AS locked_teammate
+    ON locked_teammate.id = CASE
+      WHEN player_team_locks.player_1_id = players.id
+        THEN player_team_locks.player_2_id
+      ELSE player_team_locks.player_1_id
+    END
+  WHERE registered_players_today.registered_date = CURRENT_DATE
+    AND registered_players_today.id = (
+      SELECT current_registration.id
+      FROM registered_players_today AS current_registration
+      WHERE current_registration.player_id = registered_players_today.player_id
+        AND current_registration.registered_date = CURRENT_DATE
+      ORDER BY current_registration.is_done_today ASC, current_registration.id DESC
+      LIMIT 1
+    )
+  ORDER BY
+    registered_players_today.is_done_today ASC,
+    registered_players_today.created_at ASC,
+    players.name COLLATE NOCASE ASC
+`);
+
+function loadPlayerManagementData() {
+  const profiles = playerManagementProfilesStatement.all().map(mapProfile);
+  const todayPlayers = playerManagementTodayStatement.all().map(mapTodayPlayer);
+  const completedRotationMatchesToday = Number(db.prepare(`
+    SELECT COUNT(*) AS count
+    FROM rotation_matches
+    WHERE status = 'finished'
+      AND DATE(end_time) = CURRENT_DATE
+  `).get().count || 0);
+
+  return {
+    profiles,
+    todayPlayers,
+    summary: {
+      totalProfiles: profiles.length,
+      registeredToday: todayPlayers.length,
+      activeToday: todayPlayers.filter((player) => !player.isDoneToday).length,
+      availableToday: todayPlayers.filter((player) => player.status === "available").length,
+      assignedToday: todayPlayers.filter((player) => player.status === "assigned").length,
+      playingToday: todayPlayers.filter((player) => player.status === "playing").length,
+      doneToday: todayPlayers.filter((player) => player.status === "done").length,
+      completedRotationMatchesToday,
+    },
+  };
+}
+
+export function getPlayerManagementData() {
+  try {
+    return { success: true, data: loadPlayerManagementData() };
+  } catch (error) {
+    return failure(error, "Failed to load Player Management data.");
+  }
+}
+
+export function addPlayer(
+  name,
+  level,
+  gender,
+  contact,
+  preferMens,
+  preferWomens,
+  preferMixed,
+  preferNoGender,
+  rankPreference = "same_rank",
+) {
+  try {
+    const player = normalizePlayerInput({
+      name,
+      level,
+      gender,
+      contact,
+      preferMens,
+      preferWomens,
+      preferMixed,
+      preferNoGender,
+      rankPreference,
+    });
+    if (findDuplicateName(player.name)) {
+      return { success: false, message: "Player already exists." };
     }
 
-    
     const result = db.prepare(`
-        INSERT INTO players(name, level, gender, contact_number, prefer_mens, prefer_womens, prefer_mixed, prefer_no_gender)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, level, gender, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum);
+      INSERT INTO players (
+        name,
+        level,
+        gender,
+        contact_number,
+        prefer_mens,
+        prefer_womens,
+        prefer_mixed,
+        prefer_no_gender,
+        rank_match_preference
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      player.name,
+      player.level,
+      player.gender,
+      player.contact,
+      player.preferMens ? 1 : 0,
+      player.preferWomens ? 1 : 0,
+      player.preferMixed ? 1 : 0,
+      player.preferNoGender ? 1 : 0,
+      player.rankPreference,
+    );
 
-
-    return result.lastInsertRowid;
-}
-
-export function searchPlayers(name) {
-
-  return db.prepare(`
-    SELECT p.id, p.name, p.level, p.prefer_mens, p.prefer_womens, p.prefer_mixed, p.prefer_no_gender,
-    CASE
-      WHEN r.id IS NULL THEN 1
-      WHEN r.is_done_today = 1 THEN 1
-      ELSE 0 
-    END AS can_register
-
-    FROM players p 
-    LEFT JOIN registered_players_today r ON r.player_id = p.id AND r.registered_date = CURRENT_DATE 
-    WHERE p.name LIKE ?
-    ORDER BY p.name ASC
-  `).all(`%${name}%`);
-
-}
-
-export function getPlayersProfile(name) {
-
-  return db.prepare(`
-    SELECT * FROM players WHERE name LIKE ? ORDER BY name ASC LIMIT 50
-  `).all(`%${name || ''}%`);
-
-}
-
-export function registerPlayer(id) {
-
-  const registeredPlayer = db.prepare(`
-    SELECT is_done_today
-    FROM registered_players_today
-    WHERE player_id = ?
-      AND registered_date = CURRENT_DATE
-  `).get(id);
-
-  if (!registeredPlayer) {
-    db.prepare(`
-      INSERT INTO registered_players_today (player_id)
-      VALUES (?)
-    `).run(id);
-
-    return;
+    return {
+      success: true,
+      data: { id: Number(result.lastInsertRowid) },
+    };
+  } catch (error) {
+    return failure(error, "Failed to add player profile.");
   }
+}
 
-  if (registeredPlayer.is_done_today === 1) {
+export function updatePlayerInfo(
+  playerId,
+  name,
+  level,
+  gender,
+  contact,
+  preferMens,
+  preferWomens,
+  preferMixed,
+  preferNoGender,
+  rankPreference = "same_rank",
+) {
+  try {
+    const id = parsePlayerId(playerId);
+    const existing = db.prepare(`SELECT id FROM players WHERE id = ?`).get(id);
+    if (!existing) return { success: false, message: "Player not found." };
+
+    const player = normalizePlayerInput({
+      name,
+      level,
+      gender,
+      contact,
+      preferMens,
+      preferWomens,
+      preferMixed,
+      preferNoGender,
+      rankPreference,
+    });
+    if (findDuplicateName(player.name, id)) {
+      return { success: false, message: "Another player already uses this name." };
+    }
+
+    db.prepare(`
+      UPDATE players
+      SET
+        name = ?,
+        level = ?,
+        gender = ?,
+        contact_number = ?,
+        prefer_mens = ?,
+        prefer_womens = ?,
+        prefer_mixed = ?,
+        prefer_no_gender = ?,
+        rank_match_preference = ?
+      WHERE id = ?
+    `).run(
+      player.name,
+      player.level,
+      player.gender,
+      player.contact,
+      player.preferMens ? 1 : 0,
+      player.preferWomens ? 1 : 0,
+      player.preferMixed ? 1 : 0,
+      player.preferNoGender ? 1 : 0,
+      player.rankPreference,
+      id,
+    );
+
+    return { success: true, data: { id } };
+  } catch (error) {
+    return failure(error, "Failed to update player profile.");
+  }
+}
+
+export function registerPlayer(playerId) {
+  try {
+    const id = parsePlayerId(playerId);
+    const player = db.prepare(`SELECT id, name FROM players WHERE id = ?`).get(id);
+    if (!player) return { success: false, message: "Player not found." };
+
+    const transaction = db.transaction(() => {
+      const registration = db.prepare(`
+        SELECT id, is_done_today
+        FROM registered_players_today
+        WHERE player_id = ? AND registered_date = CURRENT_DATE
+        ORDER BY is_done_today ASC, id DESC
+        LIMIT 1
+      `).get(id);
+
+      if (!registration) {
+        const result = db.prepare(`
+          INSERT INTO registered_players_today (
+            player_id, status, is_done_today, available_since
+          ) VALUES (?, 'available', 0, CURRENT_TIMESTAMP)
+        `).run(id);
+        return {
+          registrationId: Number(result.lastInsertRowid),
+          action: "registered",
+        };
+      }
+
+      if (!registration.is_done_today) {
+        throw new Error(`${player.name} is already registered today.`);
+      }
+
+      db.prepare(`
+        UPDATE registered_players_today
+        SET
+          is_done_today = 0,
+          status = 'available',
+          available_since = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(registration.id);
+      return {
+        registrationId: Number(registration.id),
+        action: "reactivated",
+      };
+    });
+
+    return { success: true, data: transaction() };
+  } catch (error) {
+    return failure(error, "Failed to register player today.");
+  }
+}
+
+function getPlayerActivity(playerId) {
+  const rotation = db.prepare(`
+    SELECT rotation_matches.status
+    FROM rotation_match_players
+    JOIN rotation_matches
+      ON rotation_matches.id = rotation_match_players.rotation_match_id
+    WHERE rotation_match_players.player_id = ?
+      AND rotation_matches.status IN ('waiting', 'incomplete', 'playing')
+    LIMIT 1
+  `).get(playerId);
+  if (rotation) return rotation.status === "playing" ? "playing" : "assigned";
+
+  const tournament = db.prepare(`
+    SELECT 1 AS active
+    FROM tournament_matches
+    JOIN tournament_teams AS team_a
+      ON team_a.id = tournament_matches.team_a_id
+    JOIN tournament_teams AS team_b
+      ON team_b.id = tournament_matches.team_b_id
+    WHERE tournament_matches.status = 'playing'
+      AND ? IN (
+        team_a.player_1_id,
+        team_a.player_2_id,
+        team_b.player_1_id,
+        team_b.player_2_id
+      )
+    LIMIT 1
+  `).get(playerId);
+  if (tournament) return "playing";
+
+  const normal = db.prepare(`
+    SELECT 1 AS active
+    FROM matches
+    LEFT JOIN match_players
+      ON match_players.match_id = matches.id
+      AND match_players.source = 'normal'
+    WHERE matches.status = 'playing'
+      AND (
+        matches.player_one = ?
+        OR matches.player_two = ?
+        OR match_players.player_id = ?
+      )
+    LIMIT 1
+  `).get(playerId, playerId, playerId);
+  return normal ? "playing" : null;
+}
+
+export function removeRegisteredPlayer(playerId) {
+  try {
+    const id = parsePlayerId(playerId);
+    const registration = db.prepare(`
+      SELECT id, is_done_today
+      FROM registered_players_today
+      WHERE player_id = ? AND registered_date = CURRENT_DATE
+      ORDER BY is_done_today ASC, id DESC
+      LIMIT 1
+    `).get(id);
+    if (!registration) {
+      return { success: false, message: "Player is not registered today." };
+    }
+    if (registration.is_done_today) {
+      return { success: false, message: "Player is already marked done today." };
+    }
+
+    const activity = getPlayerActivity(id);
+    if (activity === "playing") {
+      return {
+        success: false,
+        message: "Finish the player's active match before marking them done.",
+      };
+    }
+    if (activity === "assigned") {
+      return {
+        success: false,
+        message: "Cancel or edit the player's waiting match before marking them done.",
+      };
+    }
+
     db.prepare(`
       UPDATE registered_players_today
-      SET is_done_today = 0
+      SET is_done_today = 1, status = 'done'
+      WHERE id = ?
+    `).run(registration.id);
+    return { success: true, data: { id, status: "done" } };
+  } catch (error) {
+    return failure(error, "Failed to mark player done today.");
+  }
+}
+
+function playerHasHistory(playerId) {
+  const checks = [
+    [`SELECT 1 FROM rotation_match_players WHERE player_id = ? LIMIT 1`, [playerId]],
+    [`SELECT 1 FROM tournament_teams WHERE player_1_id = ? OR player_2_id = ? LIMIT 1`, [playerId, playerId]],
+    [`SELECT 1 FROM player_team_locks WHERE player_1_id = ? OR player_2_id = ? LIMIT 1`, [playerId, playerId]],
+    [`SELECT 1 FROM match_players WHERE player_id = ? LIMIT 1`, [playerId]],
+    [`SELECT 1 FROM matches WHERE player_one = ? OR player_two = ? OR winner_id = ? LIMIT 1`, [playerId, playerId, playerId]],
+    [`SELECT 1 FROM match_history WHERE player_one = ? OR player_two = ? OR winner_id = ? LIMIT 1`, [playerId, playerId, playerId]],
+    [`SELECT 1 FROM round_robin_matches WHERE player_one_id = ? OR player_two_id = ? LIMIT 1`, [playerId, playerId]],
+  ];
+  return checks.some(([sql, parameters]) => db.prepare(sql).get(...parameters));
+}
+
+export function deletePlayerProfile(playerId) {
+  try {
+    const id = parsePlayerId(playerId);
+    const player = db.prepare(`SELECT id, name FROM players WHERE id = ?`).get(id);
+    if (!player) return { success: false, message: "Player not found." };
+
+    const activeRegistration = db.prepare(`
+      SELECT id
+      FROM registered_players_today
       WHERE player_id = ?
         AND registered_date = CURRENT_DATE
-    `).run(id);
+        AND is_done_today = 0
+    `).get(id);
+    if (activeRegistration) {
+      return {
+        success: false,
+        message: "Mark this player done today before deleting their profile.",
+      };
+    }
+    if (playerHasHistory(id)) {
+      return {
+        success: false,
+        message: "This profile has match, tournament, or teammate-lock history and cannot be deleted safely.",
+      };
+    }
+
+    const transaction = db.transaction(() => {
+      db.prepare(`
+        DELETE FROM queue
+        WHERE registered_player_id IN (
+          SELECT id FROM registered_players_today WHERE player_id = ?
+        )
+      `).run(id);
+      db.prepare(`DELETE FROM registered_players_today WHERE player_id = ?`).run(id);
+      db.prepare(`DELETE FROM players WHERE id = ?`).run(id);
+    });
+    transaction();
+    return { success: true, data: { id } };
+  } catch (error) {
+    return failure(error, "Failed to delete player profile.");
   }
-
 }
 
-export function updatePlayerInfo(id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender){
-
-    const preferMensNum = preferMens ? 1 : 0;
-    const preferWomensNum = preferWomens ? 1 : 0;
-    const preferMixedNum = preferMixed ? 1 : 0;
-    const preferNoGenderNum = preferNoGender ? 1 : 0;
-
-  return db.prepare(`
-    UPDATE players SET name = ?, level = ?, gender = ?, contact_number = ?, prefer_mens = ?, prefer_womens = ?, prefer_mixed = ?, prefer_no_gender = ? WHERE id =?`).run(name, level, gender, contact, preferMensNum, preferWomensNum, preferMixedNum, preferNoGenderNum, id)
-}
-
+// Kept for Tournament and older callers. This intentionally returns only active
+// current-date registrations, not Player Management's done rows.
 export function getRegisteredPlayersToday() {
-
   return db.prepare(`
-    SELECT p.id, p.name, p.level, p.gender, r.status, r.match_count
-    FROM players p
-    JOIN registered_players_today r ON r.player_id = p.id
-    WHERE r.registered_date = CURRENT_DATE AND r.is_done_today = 0
-    ORDER BY r.created_at ASC
+    SELECT
+      players.id,
+      players.name,
+      players.level,
+      players.gender,
+      players.rank_match_preference,
+      registered_players_today.status,
+      registered_players_today.match_count,
+      registered_players_today.wins,
+      registered_players_today.losses,
+      registered_players_today.available_since
+    FROM players
+    JOIN registered_players_today
+      ON registered_players_today.player_id = players.id
+    WHERE registered_players_today.registered_date = CURRENT_DATE
+      AND registered_players_today.is_done_today = 0
+      AND registered_players_today.id = (
+        SELECT MAX(current_registration.id)
+        FROM registered_players_today AS current_registration
+        WHERE current_registration.player_id = registered_players_today.player_id
+          AND current_registration.registered_date = CURRENT_DATE
+          AND current_registration.is_done_today = 0
+      )
+    ORDER BY registered_players_today.created_at ASC
   `).all();
+}
 
+export function searchPlayers(name = "") {
+  return db.prepare(`
+    SELECT
+      players.*,
+      CASE
+        WHEN registered_players_today.id IS NULL THEN 1
+        WHEN registered_players_today.is_done_today = 1 THEN 1
+        ELSE 0
+      END AS can_register,
+      CASE
+        WHEN registered_players_today.is_done_today = 1 THEN 1
+        ELSE 0
+      END AS can_reactivate
+    FROM players
+    LEFT JOIN registered_players_today
+      ON registered_players_today.id = (
+        SELECT current_registration.id
+        FROM registered_players_today AS current_registration
+        WHERE current_registration.player_id = players.id
+          AND current_registration.registered_date = CURRENT_DATE
+        ORDER BY current_registration.is_done_today ASC, current_registration.id DESC
+        LIMIT 1
+      )
+    WHERE players.name LIKE ?
+    ORDER BY players.name COLLATE NOCASE ASC
+  `).all(`%${String(name).trim()}%`);
+}
+
+export function getPlayersProfile(name = "") {
+  return db.prepare(`
+    SELECT *
+    FROM players
+    WHERE name LIKE ?
+    ORDER BY name COLLATE NOCASE ASC
+  `).all(`%${String(name).trim()}%`);
 }
 
 export function getRegisteredPlayersTodayLevelCount() {
   return db.prepare(`
     SELECT
-      SUM(CASE WHEN p.level = 'beginner' THEN 1 ELSE 0 END) AS beginner,
-      SUM(CASE WHEN p.level = 'intermediate' THEN 1 ELSE 0 END) AS intermediate,
-      SUM(CASE WHEN p.level = 'upper_intermediate' THEN 1 ELSE 0 END) AS upper_intermediate,
-      SUM(CASE WHEN p.level = 'advanced' THEN 1 ELSE 0 END) AS advanced
+      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'beginner' THEN 1 ELSE 0 END) AS beginner,
+      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'intermediate' THEN 1 ELSE 0 END) AS intermediate,
+      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'upper_intermediate' THEN 1 ELSE 0 END) AS upper_intermediate,
+      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'advanced' THEN 1 ELSE 0 END) AS advanced
     FROM registered_players_today r
-    JOIN players p
-      ON r.player_id = p.id
+    JOIN players p ON p.id = r.player_id
+    WHERE r.registered_date = CURRENT_DATE
+      AND r.is_done_today = 0
+      AND r.id = (
+        SELECT MAX(current_registration.id)
+        FROM registered_players_today AS current_registration
+        WHERE current_registration.player_id = r.player_id
+          AND current_registration.registered_date = CURRENT_DATE
+          AND current_registration.is_done_today = 0
+      )
   `).get();
-}
-
-export function removeRegisteredPlayer(id) {
-
-  return db.prepare(`
-    UPDATE registered_players_today SET is_done_today = 1 WHERE player_id = ? AND registered_date = CURRENT_DATE
-  `).run(id);
-
-}
-
-export function deletePlayerProfile(id) {
-
-  const transaction = db.transaction(()=>{
-    db.prepare(`
-      DELETE FROM registered_players_today
-      WHERE player_id = ?
-    `).run(id);
-
-    db.prepare(`
-      DELETE FROM players
-      WHERE id = ?
-    `).run(id);
-  });
-
-  transaction();
 }
 
 export function getPlayerCards() {
-
-  const allPlayers = db.prepare(`
-    SELECT COUNT(id) AS total
-    FROM players
-  `).get();
-
-  const currentPlayers = db.prepare(`
-    SELECT COUNT(id) AS total
-    FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
-      AND is_done_today = 0
-  `).get();
-
-  const overallPlayersToday = db.prepare(`
-    SELECT COUNT(id) AS total
-    FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
-  `).get();
-
-  const playing = db.prepare(`
-    SELECT COUNT(id) AS total
-    FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
-      AND is_done_today = 0
-      AND status = 'playing'
-  `).get();
-
-  const totalMatches = 0; // TODO
-
+  const data = loadPlayerManagementData();
   return {
-    allPlayers: allPlayers.total,
-    currentPlayers: currentPlayers.total,
-    overallPlayersToday: overallPlayersToday.total,
-    playing: playing.total,
-    totalMatches
+    allPlayers: data.summary.totalProfiles,
+    currentPlayers: data.summary.activeToday,
+    overallPlayersToday: data.summary.registeredToday,
+    available: data.summary.availableToday,
+    assigned: data.summary.assignedToday,
+    playing: data.summary.playingToday,
+    done: data.summary.doneToday,
+    totalMatches: data.summary.completedRotationMatchesToday,
   };
 }
 
-//old player function - not used in player management page (not sure if used in other pages)
+// Legacy general-player API retained for Settings and older screens.
 export function getPlayers() {
-
   return db.prepare(`
     SELECT
       players.*,
       COUNT(DISTINCT match_players.match_id) AS matches_played
     FROM players
-    LEFT JOIN match_players ON match_players.player_id = players.id
+    LEFT JOIN match_players
+      ON match_players.player_id = players.id
       AND match_players.source IN ('normal', 'round_robin')
     GROUP BY players.id
     ORDER BY players.id DESC
   `).all();
-
 }
 
 export function deletePlayer(id) {
-  // Prevent deleting a player who is currently playing
-  const activeNormalMatch = db.prepare(`
-    SELECT id FROM matches
-    WHERE (player_one = ? OR player_two = ?) AND status = 'playing'
-  `).get(id, id);
-
-  const activeRRMatch = db.prepare(`
-    SELECT id FROM round_robin_matches
-    WHERE (player_one_id = ? OR player_two_id = ?) AND status = 'playing'
-  `).get(id, id);
-
-  if (activeNormalMatch || activeRRMatch) {
-    return {
-      success: false,
-      error: "Cannot delete a player who is currently playing. End their match first."
-    };
-  }
-
-  const transaction = db.transaction(() => {
-    
-    db.prepare(`DELETE FROM match_players WHERE player_id = ?`).run(id);
-    db.prepare(`DELETE FROM queue WHERE player_id = ?`).run(id);
-    
-    db.prepare(`DELETE FROM round_robin_matches WHERE player_one_id = ? OR player_two_id = ?`).run(id, id);
-    
-    db.prepare(`DELETE FROM matches WHERE player_one = ? OR player_two = ?`).run(id, id);
-    
-    db.prepare(`DELETE FROM match_history WHERE player_one = ? OR player_two = ?`).run(id, id);
-    
-    db.prepare(`DELETE FROM players WHERE id = ?`).run(id);
-  });
-
-  transaction();
-  return { success: true };
+  const result = deletePlayerProfile(id);
+  return result.success
+    ? result
+    : { success: false, error: result.message, message: result.message };
 }
 
 export function updatePlayer(id, name, level) {
-  db.prepare(`
-    UPDATE players
-    SET name = ?, level = ?
-    WHERE id = ?
-  `).run(name, level, id);
-
-  return { success: true };
+  try {
+    const playerId = parsePlayerId(id);
+    const result = db.prepare(`
+      UPDATE players SET name = ?, level = ? WHERE id = ?
+    `).run(String(name || "").trim(), String(level || "").trim(), playerId);
+    return result.changes === 1
+      ? { success: true, data: { id: playerId } }
+      : { success: false, message: "Player not found." };
+  } catch (error) {
+    return failure(error, "Failed to update player.");
+  }
 }

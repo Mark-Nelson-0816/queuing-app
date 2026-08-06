@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS players (
     total_wins INTEGER DEFAULT 0,
     total_losses INTEGER DEFAULT 0,
 
+    rank_match_preference TEXT NOT NULL DEFAULT 'same_rank',
+    -- same_rank | adjacent_rank
+
     -- moved to registered_players_today
     -- status TEXT DEFAULT 'waiting',
     -- waiting | playing | finished
@@ -39,13 +42,14 @@ CREATE TABLE IF NOT EXISTS registered_players_today (
     wins INTEGER DEFAULT 0,
     losses INTEGER DEFAULT 0,
 
-    status TEXT DEFAULT 'waiting',
-    -- waiting | playing | finished
+    status TEXT DEFAULT 'available',
+    -- available | assigned | playing | done
 
     is_done_today INTEGER DEFAULT 0,
     -- 1 = done playing for the whole day, else 0 
     
     registered_date DATE DEFAULT CURRENT_DATE,
+    available_since DATETIME DEFAULT CURRENT_TIMESTAMP,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (player_id) REFERENCES players(id)
 );
@@ -215,6 +219,58 @@ CREATE TABLE IF NOT EXISTS match_players (
     source TEXT NOT NULL DEFAULT 'normal'
 );
 
+CREATE TABLE IF NOT EXISTS player_team_locks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    player_2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    lock_type TEXT NOT NULL DEFAULT 'today',
+    lock_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK (player_1_id < player_2_id),
+    CHECK (lock_type IN ('today', 'permanent'))
+);
+
+CREATE TABLE IF NOT EXISTS rotation_matches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    queue_position INTEGER,
+    match_type TEXT NOT NULL,
+    category TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'waiting',
+    court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL,
+    winner_team INTEGER,
+    team_a_strength INTEGER NOT NULL DEFAULT 0,
+    team_b_strength INTEGER NOT NULL DEFAULT 0,
+    balance_difference INTEGER NOT NULL DEFAULT 0,
+    warnings TEXT NOT NULL DEFAULT '[]',
+    validation_message TEXT DEFAULT NULL,
+    start_time DATETIME,
+    end_time DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK (match_type IN ('singles', 'doubles')),
+    CHECK (category IN ('no_gender', 'mens', 'womens', 'mixed')),
+    CHECK (status IN ('waiting', 'incomplete', 'playing', 'finished', 'cancelled')),
+    CHECK (winner_team IS NULL OR winner_team IN (1, 2))
+);
+
+CREATE TABLE IF NOT EXISTS rotation_match_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rotation_match_id INTEGER NOT NULL
+        REFERENCES rotation_matches(id) ON DELETE CASCADE,
+    registered_player_id INTEGER NOT NULL
+        REFERENCES registered_players_today(id),
+    player_id INTEGER NOT NULL REFERENCES players(id),
+    team INTEGER NOT NULL,
+    slot INTEGER NOT NULL,
+    lock_id INTEGER REFERENCES player_team_locks(id) ON DELETE SET NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK (team IN (1, 2)),
+    CHECK (slot IN (1, 2)),
+    UNIQUE(rotation_match_id, registered_player_id),
+    UNIQUE(rotation_match_id, team, slot)
+);
+
 `);
 
 const tournamentMatchColumns = db.prepare(`
@@ -232,6 +288,36 @@ if (!hasTournamentCourtId) {
     `);
 }
 
+const playerColumns = db.prepare(`PRAGMA table_info(players)`).all();
+if (!playerColumns.some((column) => column.name === "rank_match_preference")) {
+    db.exec(`
+        ALTER TABLE players
+        ADD COLUMN rank_match_preference TEXT NOT NULL DEFAULT 'same_rank'
+    `);
+}
+
+const registrationColumns = db.prepare(`
+    PRAGMA table_info(registered_players_today)
+`).all();
+if (!registrationColumns.some((column) => column.name === "available_since")) {
+    db.exec(`
+        ALTER TABLE registered_players_today
+        ADD COLUMN available_since DATETIME
+    `);
+}
+
+db.exec(`
+    UPDATE registered_players_today
+    SET available_since = COALESCE(available_since, created_at, CURRENT_TIMESTAMP);
+
+    UPDATE registered_players_today
+    SET status = CASE
+        WHEN is_done_today = 1 THEN 'done'
+        WHEN status IN ('waiting', 'finished') THEN 'available'
+        ELSE status
+    END;
+`);
+
 db.exec(`
     CREATE INDEX IF NOT EXISTS idx_tournament_matches_court_id
         ON tournament_matches(court_id);
@@ -239,6 +325,50 @@ db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS uq_tournament_matches_active_court
         ON tournament_matches(court_id)
         WHERE court_id IS NOT NULL AND status = 'playing';
+
+    CREATE INDEX IF NOT EXISTS idx_rotation_matches_status_position
+        ON rotation_matches(status, queue_position);
+
+    CREATE INDEX IF NOT EXISTS idx_rotation_matches_court_id
+        ON rotation_matches(court_id);
+
+    CREATE INDEX IF NOT EXISTS idx_rotation_match_players_match_id
+        ON rotation_match_players(rotation_match_id);
+
+    CREATE INDEX IF NOT EXISTS idx_rotation_match_players_registration_id
+        ON rotation_match_players(registered_player_id);
+
+    CREATE INDEX IF NOT EXISTS idx_player_team_locks_active_date
+        ON player_team_locks(lock_date, is_active);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_rotation_active_court
+        ON rotation_matches(court_id)
+        WHERE court_id IS NOT NULL AND status = 'playing';
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_rotation_waiting_position
+        ON rotation_matches(queue_position)
+        WHERE queue_position IS NOT NULL
+          AND status IN ('waiting', 'incomplete');
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_active_team_lock_pair
+        ON player_team_locks(lock_date, player_1_id, player_2_id)
+        WHERE is_active = 1;
+
+    CREATE TRIGGER IF NOT EXISTS prevent_overlapping_active_team_lock
+    BEFORE INSERT ON player_team_locks
+    WHEN NEW.is_active = 1
+    BEGIN
+        SELECT CASE WHEN EXISTS (
+            SELECT 1
+            FROM player_team_locks
+            WHERE is_active = 1
+              AND lock_date = NEW.lock_date
+              AND (
+                  player_1_id IN (NEW.player_1_id, NEW.player_2_id)
+                  OR player_2_id IN (NEW.player_1_id, NEW.player_2_id)
+              )
+        ) THEN RAISE(ABORT, 'A player already belongs to an active teammate lock.') END;
+    END;
 `);
 
 });

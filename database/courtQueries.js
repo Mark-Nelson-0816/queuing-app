@@ -13,6 +13,32 @@ const getActiveNormalMatchesStatement = db.prepare(`
   ORDER BY id ASC
 `);
 
+const getActiveRotationMatchesStatement = db.prepare(`
+  SELECT
+    rotation_matches.id,
+    rotation_matches.court_id,
+    rotation_matches.match_type,
+    rotation_matches.category,
+    rotation_matches.status
+  FROM rotation_matches
+  WHERE rotation_matches.status = 'playing'
+    AND rotation_matches.court_id IS NOT NULL
+  ORDER BY rotation_matches.id ASC
+`);
+
+const getRotationMatchPlayersStatement = db.prepare(`
+  SELECT
+    players.id,
+    players.name,
+    players.level,
+    rotation_match_players.team,
+    rotation_match_players.slot
+  FROM rotation_match_players
+  JOIN players ON players.id = rotation_match_players.player_id
+  WHERE rotation_match_players.rotation_match_id = ?
+  ORDER BY rotation_match_players.team ASC, rotation_match_players.slot ASC
+`);
+
 const getNormalMatchPlayersStatement = db.prepare(`
   SELECT
     players.id,
@@ -204,12 +230,50 @@ function mapNormalMatch(row) {
   };
 }
 
+function mapRotationMatch(row) {
+  const players = getRotationMatchPlayersStatement.all(row.id).map((player) => ({
+    id: Number(player.id),
+    name: player.name,
+    level: player.level,
+    team: Number(player.team),
+  }));
+  const teamA = {
+    id: null,
+    teamNumber: 1,
+    players: players.filter((player) => player.team === 1),
+  };
+  const teamB = {
+    id: null,
+    teamNumber: 2,
+    players: players.filter((player) => player.team === 2),
+  };
+
+  return {
+    source: "rotation",
+    matchId: Number(row.id),
+    courtId: Number(row.court_id),
+    status: row.status,
+    matchType: row.match_type,
+    category: row.category,
+    roundNumber: null,
+    teamA,
+    teamB,
+    players: [...teamA.players, ...teamB.players],
+  };
+}
+
 export function getCourts() {
   const courts = getCourtRowsStatement.all();
   const normalMatchesByCourt = new Map(
     getActiveNormalMatchesStatement.all().map((match) => [
       Number(match.court_id),
       mapNormalMatch(match),
+    ]),
+  );
+  const rotationMatchesByCourt = new Map(
+    getActiveRotationMatchesStatement.all().map((match) => [
+      Number(match.court_id),
+      mapRotationMatch(match),
     ]),
   );
   const tournamentMatchesByCourt = new Map(
@@ -222,6 +286,7 @@ export function getCourts() {
   return courts.map((court) => {
     const courtId = Number(court.id);
     const activeMatch = tournamentMatchesByCourt.get(courtId)
+      || rotationMatchesByCourt.get(courtId)
       || normalMatchesByCourt.get(courtId)
       || null;
     const playerDetails = activeMatch?.players || [];
@@ -285,6 +350,20 @@ export function removeCourt(id) {
     return {
       success: false,
       error: "Cannot remove a court with an active tournament match.",
+    };
+  }
+
+  const activeRotationMatch = db.prepare(`
+    SELECT id
+    FROM rotation_matches
+    WHERE court_id = ? AND status = 'playing'
+    LIMIT 1
+  `).get(id);
+
+  if (activeRotationMatch) {
+    return {
+      success: false,
+      error: "Cannot remove a court with an active rotation match.",
     };
   }
 

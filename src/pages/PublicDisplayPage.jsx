@@ -31,17 +31,23 @@ export default function PublicDisplayPage() {
           }
         });
 
-      window.api.getQueue()
-        .then((queueData) => {
+      window.api.getRotationMatches()
+        .then((result) => {
           if (isCancelled) return;
 
-          const mappedQueue = (Array.isArray(queueData) ? queueData : []).map(
-            (entry) => ({
-              id: entry.id,
-              name: entry.name,
-              timeJoined: formatTime(entry.joined_at),
-            }),
-          );
+          const mappedQueue = result?.success
+            ? result.data.matches
+              .filter((match) => match.status === "waiting")
+              .sort((first, second) => first.queuePosition - second.queuePosition)
+              .map((match) => ({
+                id: match.id,
+                name: [
+                  match.teamA.map((player) => player.name).join(" / "),
+                  match.teamB.map((player) => player.name).join(" / "),
+                ].join(" vs "),
+                timeJoined: formatTime(match.createdAt),
+              }))
+            : [];
 
           setQueueNext(mappedQueue);
         })

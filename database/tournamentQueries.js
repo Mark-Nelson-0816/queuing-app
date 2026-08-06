@@ -451,10 +451,18 @@ const startMatchTransaction = db.transaction((matchId, courtId) => {
     LIMIT 1
   `).get(courtId);
 
+  const activeRotationMatch = db.prepare(`
+    SELECT id
+    FROM rotation_matches
+    WHERE court_id = ? AND status = 'playing'
+    LIMIT 1
+  `).get(courtId);
+
   if (
     court.status !== "available"
     || activeNormalMatch
     || activeTournamentMatch
+    || activeRotationMatch
   ) {
     throw new Error("Selected court is no longer available.");
   }
@@ -576,6 +584,12 @@ const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
         FROM matches
         WHERE matches.court_id = courts.id
           AND matches.status = 'playing'
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM rotation_matches
+        WHERE rotation_matches.court_id = courts.id
+          AND rotation_matches.status = 'playing'
       )
       AND NOT EXISTS (
         SELECT 1

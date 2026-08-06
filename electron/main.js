@@ -7,7 +7,7 @@ import "../database/init.js";
 
 import { ipcMain } from "electron";
 //players
-import { getPlayers, searchPlayers, registerPlayer, getRegisteredPlayersToday, getRegisteredPlayersTodayLevelCount, removeRegisteredPlayer, getPlayersProfile, updatePlayerInfo, deletePlayerProfile, getPlayerCards, } from "../database/playerQueries.js";
+import { getPlayers, searchPlayers, registerPlayer, getRegisteredPlayersToday, getRegisteredPlayersTodayLevelCount, removeRegisteredPlayer, getPlayersProfile, updatePlayerInfo, deletePlayerProfile, getPlayerCards, getPlayerManagementData, } from "../database/playerQueries.js";
 
 //tournament
 import {
@@ -22,20 +22,27 @@ import {
 } from "../database/tournamentQueries.js";
 
 import { getAvailableCourts, getCourts } from "../database/courtQueries.js";
-import { 
-  getQueue,
-  addToQueue,
-  removeFromQueue
-} from "../database/queueQueries.js";
 import { addPlayer, deletePlayer, updatePlayer } from "../database/playerQueries.js";
-import { createMatch, previewNextMatch } from "../database/matchQueries.js";
 import {
   addCourt,
   removeCourt
 } from "../database/courtQueries.js";
 import {
-  endMatch
-} from "../database/matchQueries.js";
+  cancelWaitingMatch,
+  createTeamLock,
+  finishRotationMatch,
+  generateAndSaveRotationMatches,
+  getActiveTeamLocks,
+  getEligibleRotationPlayers,
+  getRotationMatches,
+  getRotationState,
+  rebalanceWaitingMatch,
+  removeTeamLock,
+  reorderWaitingMatch,
+  startRotationMatch,
+  updateRotationRankPreference,
+  updateWaitingMatch,
+} from "../database/rotationQueries.js";
 
 import { resetAllData } from "../database/resetQueries.js";
 import { getSetting, getAllSettings, setSetting } from "../database/settingsQueries.js";
@@ -60,7 +67,7 @@ function createWindow() {
   });
 
   mainWindow.maximize();
-   mainWindow.webContents.openDevTools();
+  
   if (app.isPackaged) {
     const indexPath = path.join(
       app.getAppPath(),
@@ -76,20 +83,11 @@ function createWindow() {
 
 //players
 
-ipcMain.handle("add-player", (event, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
+ipcMain.handle("add-player", (event, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) => (
+  addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference)
+));
 
-  const playerId = addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender);
-
-  if(playerId.message && playerId.message === 'Player already exists.'){
-    return {message: playerId.message};
-  }
-
-  return {
-    success: true,
-    id: playerId
-  };
-
-});
+ipcMain.handle("get-player-management-data", () => getPlayerManagementData());
 
 ipcMain.handle('search-players', (event, name) =>{
   const players = searchPlayers(name);
@@ -119,8 +117,8 @@ ipcMain.handle('remove-registered-player', (event, id) => {
   return removeRegisteredPlayer(id);
 });
 
-ipcMain.handle("update-player-info", (event, id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender) => {
-  return updatePlayerInfo(id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender);
+ipcMain.handle("update-player-info", (event, id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) => {
+  return updatePlayerInfo(id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference);
 });
 
 ipcMain.handle("delete-players-profile", (event, id) => {
@@ -206,58 +204,69 @@ ipcMain.handle("remove-court", (event, id)=>{
 
 });
 
-//queue
-ipcMain.handle("get-queue", () => {
+//rotation queue
+ipcMain.handle("get-rotation-state", () => getRotationState());
 
-  const queue = getQueue();
+ipcMain.handle("get-eligible-rotation-players", () => (
+  getEligibleRotationPlayers()
+));
 
-  return queue;
+ipcMain.handle("get-active-team-locks", () => getActiveTeamLocks());
 
-});
+ipcMain.handle(
+  "create-team-lock",
+  (event, firstPlayerId, secondPlayerId, matchType, category) => (
+    createTeamLock(firstPlayerId, secondPlayerId, matchType, category)
+  ),
+);
 
+ipcMain.handle("remove-team-lock", (event, lockId) => removeTeamLock(lockId));
 
-ipcMain.handle("add-queue", (event, playerId) => {
+ipcMain.handle(
+  "update-rotation-rank-preference",
+  (event, playerId, preference) => (
+    updateRotationRankPreference(playerId, preference)
+  ),
+);
 
-  return addToQueue(playerId);
+ipcMain.handle(
+  "generate-rotation-matches",
+  (event, playerIds, matchType, category) => (
+    generateAndSaveRotationMatches(playerIds, matchType, category)
+  ),
+);
 
-});
+ipcMain.handle("get-rotation-matches", () => getRotationMatches());
 
+ipcMain.handle(
+  "update-waiting-match",
+  (event, matchId, teamAIds, teamBIds) => (
+    updateWaitingMatch(matchId, teamAIds, teamBIds)
+  ),
+);
 
-ipcMain.handle("remove-queue", (event, id) => {
+ipcMain.handle("rebalance-waiting-match", (event, matchId) => (
+  rebalanceWaitingMatch(matchId)
+));
 
-  return removeFromQueue(id);
+ipcMain.handle("reorder-waiting-match", (event, matchId, direction) => (
+  reorderWaitingMatch(matchId, direction)
+));
 
-});
+ipcMain.handle("cancel-waiting-match", (event, matchId) => (
+  cancelWaitingMatch(matchId)
+));
 
-//matches
-ipcMain.handle("preview-next-match", (event, matchType) => {
-  return previewNextMatch(matchType || 'singles');
-});
+ipcMain.handle("start-rotation-match", (event, matchId, courtId) => (
+  startRotationMatch(matchId, courtId)
+));
 
-ipcMain.handle("create-match", (event, matchType) => {
-
-  const match = createMatch(matchType || 'singles');
-
-  if (!match.success) {
-    return match;
-  }
-
-  return {
-    success: true,
-    match
-  };
-
-});
-
-ipcMain.handle("end-match", (event, courtId, requeue)=>{
-
-  endMatch(courtId, requeue);
-
-  return {
-    success:true
-  };
-
-});
+ipcMain.handle(
+  "finish-rotation-match",
+  (event, matchId, winnerTeam, donePlayerIds) => (
+    finishRotationMatch(matchId, winnerTeam, donePlayerIds)
+  ),
+);
 
 // Round Robin
 

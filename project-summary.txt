@@ -1,449 +1,564 @@
 ================================================================================
-BADMINTON QUEUE - SYSTEM SUMMARY
-Codebase snapshot reviewed: August 6, 2026
+BADMINTON QUEUE - PLAIN-ENGLISH SYSTEM SUMMARY
+Codebase reviewed and updated: August 6, 2026
 ================================================================================
 
-1. WHAT THIS SYSTEM IS
+1. WHAT THE APPLICATION DOES
 --------------------------------------------------------------------------------
 
-Badminton Queue is a Windows desktop application for running a badminton venue
-or club session from one computer. It is intended to manage:
+Badminton Queue is a local Windows desktop application for operating a badminton
+club session from one computer. It manages:
 
 - permanent player profiles;
-- the players who are attending today;
-- a rotation queue for casual singles or doubles games;
-- court availability and active games;
-- a full-screen public display; and
-- singles or doubles tournaments.
+- attendance for the current day;
+- balanced casual games through the Rotation Queue;
+- courts and currently playing games;
+- a public TV/monitor display; and
+- round-robin tournaments.
 
-The application is local-first. It does not use a web server, cloud database,
-user accounts, or an internet connection. The interface, application logic, and
+The application is local-first. There is no web server, cloud database, login,
+or internet requirement. The React interface, Electron application process, and
 SQLite database all run on the same computer.
 
-IMPORTANT CURRENT STATUS
+CURRENT FEATURE STATUS
 
-- Player profile and daily-registration work is implemented and is the most
-  complete part of the system.
-- The new round-robin tournament workflow is implemented for singles, standard
-  doubles, and mixed doubles, including rounds, court assignment, live court
-  display, winners, standings, and automatic tournament completion.
-- The rotation queue is NOT WORKING RIGHT NOW because its older queries have not
-  yet been updated to the newer daily-registration data model. It was intentionally
-  left unchanged while the tournament workflow was completed and should not be
-  presented as a finished feature.
-- Tournament court occupancy and tournament matches on the public display are
-  implemented independently of the broken queue. Normal/casual match creation and
-  the public display's "Next Up" queue still depend on the old queue model.
+- Rotation Queue: implemented using the current daily-registration model.
+- Tournament: implemented as a separate round-robin workflow.
+- Courts: displays and protects both Rotation and Tournament matches.
+- Public Display: shows only playing matches on courts and shows waiting Rotation
+  matches in Next Up.
+- Player Management: modern profile and daily-registration workflows are
+  implemented with local filters, accurate cards, and modal add/edit/register.
+- The former queue/match implementation was removed from the application because
+  it depended on obsolete columns. Its old SQLite tables are preserved so startup
+  never silently deletes existing user data.
 
 
-2. TECHNOLOGY AND DELIVERY
+2. TECHNOLOGY
 --------------------------------------------------------------------------------
 
-User interface:      React 19 with JSX
-Desktop shell:       Electron 43
+User interface:      React 19 and JSX
+Desktop application: Electron 43
 Build tool:          Vite 8
-Styling:             Tailwind CSS 4 plus CSS design tokens
+Styling:             Tailwind CSS 4 and CSS theme variables
 Icons:               Lucide React
 Database:            SQLite through better-sqlite3
-Installer:           electron-builder, targeting a Windows NSIS installer
-Language:            JavaScript (no TypeScript)
+Language:            JavaScript only
+Windows installer:   electron-builder / NSIS
 
 Useful commands:
 
-  npm run dev      Start Vite and Electron together for development
-  npm run build    Build the React frontend into dist/
-  npm run lint     Run ESLint
-  npm run dist     Build the frontend and create the Windows installer
-
-The package version is currently 0.0.0, while the visible UI says v1.0.0. These
-two version values are not yet synchronized.
+  npm run dev      Start Vite and Electron for development
+  npm run build    Build the renderer into dist/
+  npm run lint     Check the complete repository with ESLint
+  npm run dist     Build the app and Windows installer
 
 
-3. HIGH-LEVEL ARCHITECTURE
+3. SIMPLE ARCHITECTURE
 --------------------------------------------------------------------------------
 
 The system has four layers:
 
-  React renderer (src/)
-       |
-       | calls window.api methods
-       v
+  React page or component
+      -> calls a window.api method
   Electron preload bridge (electron/preload.cjs)
-       |
-       | sends named IPC requests
-       v
+      -> invokes a named IPC channel
   Electron main process (electron/main.js)
-       |
-       | calls synchronous query functions
-       v
-  SQLite data layer (database/)
+      -> calls a synchronous database function
+  SQLite query module (database/)
+      -> reads/writes badminton.db and returns a result
+      -> React refreshes its state and redraws the screen
 
-React renderer
-  Displays pages and components, keeps temporary screen state, and handles user
-  interaction. It has no direct Node.js or database access.
+React cannot access SQLite or Node.js directly. The preload file exposes only the
+approved methods on window.api. Electron's main process owns database access.
+better-sqlite3 calls are synchronous in the main process, while React still uses
+await because ipcRenderer.invoke() returns a Promise.
 
-Preload bridge
-  Exposes a fixed window.api object to React. This is the boundary between the
-  browser-style UI and privileged Electron code.
-
-Electron main process
-  Creates and maximizes the desktop window, removes the application menu,
-  registers F11 for full screen, loads the Vite server during development or
-  dist/index.html in a packaged app, and maps IPC requests to database functions.
-  Developer Tools currently open automatically whenever the app starts.
-
-SQLite data layer
-  database/init.js creates tables. Query modules group operations by feature:
-  players, queue, courts, matches, tournaments, settings, and reset. Database
-  calls are synchronous and use prepared statements. Foreign keys are enabled.
-
-There is no HTTP API or separate backend service. A typical request is:
-
-  button click -> React handler -> window.api -> Electron IPC handler
-  -> database query -> result returned to React -> component state refresh
+Multi-step database changes use SQLite transactions. This is especially important
+for generating matches, editing/cancelling matches, assigning courts, and finishing
+matches. A failure rolls the whole operation back instead of leaving half-updated
+players, matches, or courts.
 
 
-4. USER INTERFACE AND VISUAL DESIGN
---------------------------------------------------------------------------------
-
-The app uses a desktop admin-dashboard layout:
-
-- a collapsible left sidebar for navigation;
-- a header above the active page;
-- cards, tables, forms, modals, status badges, and confirmation dialogs;
-- responsive Tailwind grid layouts; and
-- a separate full-screen public-display layout.
-
-Navigation is controlled by activePage state in App.jsx rather than a routing
-library or URLs. The initial page is Rotation Queue. The sidebar contains Queue,
-Tournament, Courts, Players, Public Display, and Settings. A Dashboard component
-exists, but its navigation item is commented out and its values are demo data.
-
-The visual system is defined in src/index.css with reusable CSS variables:
-
-- light background, white surfaces, slate text, and blue as the primary color;
-- green for success/available, amber for warning, and red for danger;
-- light, dark, and operating-system theme modes; and
-- Segoe UI/Inter/system fonts, rounded cards, soft borders, and subtle shadows.
-
-Some newer player screens still contain hard-coded white/gray colors, so their
-dark-theme behavior is less consistent than the queue, court, and settings UI.
-
-
-5. MAIN FEATURES AND USER FLOWS
---------------------------------------------------------------------------------
-
-A. Player profiles and today's registration
-
-A permanent player profile stores a name, gender, skill level, contact number,
-match preferences, lifetime match totals, and creation time. Names are checked
-for exact duplicates when a profile is created.
-
-A profile is separate from attendance. To take part in a session, an existing
-profile is registered for the current date. The daily record stores today's
-status, match count, wins/losses, and whether the player is done for the day.
-Removing someone from today's list marks that daily record as done rather than
-deleting the permanent profile. Registering them again reactivates the record.
-
-The Players page supports:
-
-- creating, editing, searching, and deleting permanent profiles;
-- selecting one or more preferred match categories;
-- registering an existing player for today;
-- viewing/removing today's registered players; and
-- summary cards for permanent and daily-player counts.
-
-Lifetime match totals and the "Total Matches" player card are not currently
-updated by the match workflow, so those values are placeholders/incomplete.
-
-B. Rotation queue - intended behavior, currently broken
-
-The intended casual-session flow is:
-
-  choose a player -> add to FIFO queue -> preview compatible players
-  -> start singles/doubles match on the first available court
-  -> finish match -> optionally return players to the queue
-
-Matching is intended to preserve arrival order while grouping players with the
-same skill level. Singles requires two same-level players; doubles requires four.
-The Settings page can choose the default match type and whether players should
-automatically rejoin the queue after a match.
-
-This workflow is not operational in the current branch. The queue table now
-stores registered_player_id (a daily attendance record), but queueQueries.js and
-matchQueries.js still read and write player_id and still expect a status column
-on players. That status was moved to registered_players_today. Match creation
-also writes a match_type column that is absent from the current matches table.
-These models must be reconciled before queue, preview, start-match, end-match,
-court assignment, and public queue display can be considered working.
-
-C. Court management
-
-The Courts page can create and remove courts, count available/playing courts,
-and show source-safe details for either a normal match or a tournament match.
-Tournament cards show the round, category, match type, two teams, and skill-level
-colors. A playing tournament court cannot be removed or ended from the Courts
-page; its winner must be selected from the Tournament page. Normal matches retain
-their existing End Match and optional requeue controls.
-
-Court status is stored as available or playing. Starting a tournament match
-requires an explicitly selected available court and atomically changes both the
-match and court to playing. Finishing it atomically saves the winner and releases
-only that match's court. Normal/casual match creation remains unreliable because
-the queue and normal match schema are still mismatched.
-
-D. Tournament management
-
-The current Tournament page provides:
-
-- Singles or Doubles selection;
-- No Gender, Men's, Women's, and (for doubles) Mixed categories;
-- a searchable list of players registered today;
-- skill-level counts derived only from currently selected participants;
-- individual or Select All participant selection;
-- gender filtering and server-side category validation;
-- random team creation rules;
-- a correct round-robin schedule grouped into numbered rounds;
-- available-court selection before a match can start;
-- pending, playing, and finished match states with assigned-court history;
-- winner selection only for playing matches, with confirmation and locked results;
-- reusable Beginner/Intermediate/Upper Intermediate/Advanced player colors;
-- automatic completion after the final match; and
-- wins/losses standings with a unique champion or an explicit tie in wins.
-
-Singles creates one-player teams. Standard doubles pairs shuffled players in
-twos. Mixed doubles shuffles male and female lists separately and pairs one of
-each. Men's and Women's categories reject an invalid gender.
-
-Creation is one SQLite transaction: validate real player records, insert the
-tournament and teams, create rounds with the circle method, insert every unique
-team pairing, and return grouped details to React. Validation failures roll back
-without leaving partial rows. Only one generated tournament can remain ongoing.
-
-The page reloads the newest saved tournament on startup. It shows all rounds,
-pending/playing/completed matches, assigned courts, teams, saved winners, and
-standings. Pending matches open an available-court selector. Playing matches can
-record either participating team as winner. Finished results keep their court ID
-for history and cannot be edited. Match results do not include scores. The legacy
-round_robin_matches table is intentionally not part of this tournament system.
-
-E. Public display
-
-Selecting Public Display replaces the normal admin shell with a screen designed
-for a TV or monitor. It shows the current time/date, only active playing courts,
-and up to the next six queued players. Tournament courts show the round, category,
-format, Team A, Team B, a clear VS marker, and level-colored player names. Normal
-matches use the same source-safe shape and remain supported when normal match data
-is valid. Court and queue requests are loaded separately every ten seconds, so a
-broken queue request no longer hides active tournament courts. The "Next Up"
-section still inherits the current queue failure. F11 toggles full screen.
-
-F. Settings and data reset
-
-Settings are stored as string key/value pairs in SQLite. Current settings are:
-
-- theme: light, dark, or system;
-- defaultMatchType: singles or doubles; and
-- autoRequeue: true or false.
-
-Settings includes overview cards and a destructive Reset All Data action. The
-overview currently calls the removed getRRMatches IPC handler; that rejection
-causes the whole combined stats load to fail and can leave all cards at zero.
-
-Reset currently clears normal/round-robin matches, match-player links, queue,
-players, and courts, then creates Court 1, Court 2, and Court 3. It does not clear
-daily registrations, tournament tables, or settings. Because daily registrations
-reference players and foreign keys are enabled, reset may fail when attendance
-records exist. Its UI description is therefore broader than its actual behavior.
-
-
-6. DATABASE MODEL
---------------------------------------------------------------------------------
-
-The application defines 13 tables:
-
-players
-  Permanent identity, level, gender, contact details, match preferences, and
-  lifetime statistics.
-
-registered_players_today
-  A dated attendance/session record linked to players. Holds today's state and
-  statistics. This is now intended to be the source for queue participants.
-
-queue
-  Ordered waiting entries linked to registered_players_today. Stores position
-  and join time. Current queue code still expects its old players link.
-
-courts
-  Named courts with available/playing status.
-
-matches
-  Normal matches assigned to a court, with two legacy player columns, timing,
-  status, and optional winner. Current code expects an undeclared match_type.
-
-match_players
-  Flexible membership table for singles/doubles participants. Stores match,
-  player, team number, match type, and source (normal or round_robin).
-
-match_history
-  Legacy two-player history and optional winner. It is currently unused.
-
-round_robin_matches
-  Legacy two-player round-robin schedule table. Its active handlers were removed
-  while the new tournament system is being built.
-
-tournaments
-  Tournament format, gender category, lifecycle status, and creation time.
-
-tournament_teams
-  One- or two-player teams numbered within a tournament.
-
-tournament_rounds
-  Numbered rounds within a tournament.
-
-tournament_matches
-  Team-vs-team matches within a tournament round, including winner, nullable
-  assigned court, and pending/playing/finished status.
-
-settings
-  Persistent application preferences stored as key/value strings.
-
-The runtime database is badminton.db inside Electron's per-user application-data
-directory, obtained from app.getPath("userData"). The database.db file at the
-repository root is not the file opened by the current database connection and
-appears to be a development artifact.
-
-Most schema initialization still uses CREATE TABLE IF NOT EXISTS. A focused,
-non-destructive migration now checks PRAGMA table_info(tournament_matches) and
-adds the nullable court_id foreign key only when it is missing. It also adds a
-court lookup index and a partial unique index that prevents two playing tournament
-matches from using one court. Existing tournament rows are preserved. Future
-schema changes still need similar explicit migrations or a versioned system.
-
-
-7. REPOSITORY STRUCTURE
+4. REPOSITORY STRUCTURE
 --------------------------------------------------------------------------------
 
 database/
-  database.js             Opens the per-user SQLite database.
-  init.js                 Declares and creates all tables.
-  playerQueries.js        Profile and daily-registration operations.
-  queueQueries.js         Legacy queue operations; currently schema-incompatible.
-  matchQueries.js         Legacy queue match preview/start/end logic.
-  courtQueries.js         Court CRUD and active-player lookup.
-  tournamentLogic.js      Validation, team building, schedules, and standings.
-  tournamentQueries.js    Atomic tournament persistence, reads, and results.
-  settingsQueries.js      Settings read/write helpers.
-  resetQueries.js         Partial application-data reset.
+  database.js             Opens the real per-user SQLite database.
+  init.js                 Creates tables, indexes, triggers, and safe migrations.
+  playerQueries.js        Player profiles and today's attendance.
+  rotationLogic.js        Pure rank normalization and matchmaking algorithms.
+  rotationQueries.js      Rotation persistence, locks, editing, courts, and stats.
+  courtQueries.js         Court CRUD and source-safe active-match retrieval.
+  tournamentLogic.js      Tournament validation, teams, schedule, and standings.
+  tournamentQueries.js    Tournament transactions and lifecycle.
+  settingsQueries.js      Persistent settings.
+  resetQueries.js         Transactional reset in foreign-key-safe order.
 
 electron/
-  main.js                 Desktop window setup and IPC request handlers.
-  preload.cjs             Safe renderer-facing window.api bridge.
-  tournamentHandler.js    Comment-only reference for the tournament IPC flow.
+  main.js                 Window setup and IPC handlers.
+  preload.cjs             The renderer-facing window.api bridge.
 
 src/
-  main.jsx                Mounts the React application.
-  App.jsx                 Top-level layout, page switching, and startup theme.
-  index.css               Tailwind import, theme tokens, and global styling.
-  pages/                   Queue, Tournament, Courts, Players, Public Display,
-                           Settings, and the currently hidden demo Dashboard.
-  components/              Shared UI plus feature-specific player/tournament UI.
+  App.jsx                 Main layout and page selection.
+  pages/Queue.jsx         Rotation Queue screen and modal workflows.
+  pages/Tournament.jsx    Tournament workflow.
+  pages/Courts.jsx        Court management.
+  pages/Players.jsx       Profiles and daily attendance.
+  pages/PublicDisplayPage.jsx
+                           Refreshes playing courts and Next Up every 10 seconds.
+  pages/Settings.jsx      Theme, defaults, overview, and reset.
+  components/rotation/    Rotation player pool and match cards.
+  components/tournament/  Tournament configuration and matches.
+  components/players/     Player tables, modals, and reusable badges.
+  utils/playerLevel.js    Shared normalized level labels and colors.
 
-public/                    Static favicon and icon assets.
-dist/                      Generated production frontend output.
-package.json               Dependencies, scripts, and installer configuration.
-README.md                  Still mostly the default Vite template.
-TODO.md                    Older settings-page task notes.
-project-summary.txt        This system overview and code-review snapshot.
-tests/                     Isolated tournament database integration verification.
+tests/
+  playerManagementIntegration.js
+                           Profile, attendance, statistics, and safety test.
+  rotationIntegration.js  Rotation migration, logic, editing, and lifecycle test.
+  tournamentIntegration.js
+                           Tournament and court integration test.
+
+project-summary.txt       This document.
 
 
-8. CURRENT CODE-REVIEW FINDINGS AND RISKS
+5. PLAYER DATA AND DAILY LIFECYCLE
 --------------------------------------------------------------------------------
 
-Critical functional issues
+There are two different kinds of player record:
 
-1. Queue schema mismatch
-   queue.registered_player_id and registered_players_today.status replaced the
-   old queue.player_id and players.status model, but queue/match queries were not
-   migrated. This is the main reason the queue is not working.
+players
+  The permanent profile: name, gender, level, match-category preferences,
+  rank-match preference, contact information, and lifetime totals.
 
-2. Match schema mismatch
-   matchQueries.js inserts and reads matches.match_type, but init.js does not
-   define that column. Starting a match will fail on a freshly created schema.
+registered_players_today
+  Today's attendance record: daily status, daily match count, wins/losses,
+  done flag, and the time the player most recently became available.
 
-3. Daily-player table refresh loop
-   RegisteredPlayersTable fetches data whenever refreshData changes, then flips
-   refreshData after every fetch. That can continuously trigger new fetches and
-   renders while the Players page is open.
+The daily record is the source of truth for Rotation participation. Rotation does
+not store temporary playing status on the permanent player profile.
 
-4. Reset is incomplete and may violate foreign keys
-   Attendance and tournament data are not cleared before deleting players.
+Daily statuses have one clear meaning:
 
-Other correctness and maintainability concerns
+  available  The player may be selected for matchmaking.
+  assigned   The player belongs to a waiting or incomplete Rotation match.
+  playing    The player is currently on a court.
+  done       The player is finished for the day.
 
-- The daily skill-level count does not filter to the current date or active
-  players, so its numbers can include previous sessions.
-- The court query now separates normal and tournament SQL and returns an explicit
-  source, so equal numeric match IDs cannot cross-associate players. The legacy
-  round_robin_matches workflow remains outside the new tournament path.
-- Several database operations that change multiple tables are not transactional.
-- Player deletion contains legacy references to queue.player_id.
-- Automated coverage currently focuses on tournament, migration, court lifecycle,
-  active-court retrieval, level normalization, and selected-level count logic;
-  most other application flows and UI interaction do not have automated tests.
-- Error handling often only logs to Developer Tools, giving the operator no
-  visible recovery message.
-- Several source files contain mojibake characters from an encoding mismatch.
-- README.md is still template text and does not explain the application.
+When a match finishes, the operator chooses which players are done. Everyone else
+returns to available with a new available_since time, placing them behind people
+who have waited longer. Daily and lifetime match/win/loss totals are updated in
+the same transaction.
+
+The Player Management page loads one renderer-friendly snapshot through
+getPlayerManagementData(). Players Today is the primary section and includes done
+players so they can be reactivated without creating a second daily row. All Player
+Profiles is a separate permanent-record section. Search and filters are local after
+the snapshot loads, so typing does not invoke SQLite on every keystroke.
+
+The five Player cards mean:
+
+  Total Profiles          All permanent rows in players.
+  Registered Today        All CURRENT_DATE registrations, split active/done.
+  Available Today         Current-date rows not assigned, playing, or done.
+  Currently Playing       Current-date players in an active match source.
+  Rotation Matches Today  Finished Rotation matches whose end date is today.
+
+The last card is deliberately labeled Rotation Matches rather than claiming to be
+an all-source match total. Tournament matches have no finish timestamp in the
+current schema, so an accurate all-source "Matches Played Today" value is not
+available.
 
 
-9. BUILD AND QUALITY CHECK SNAPSHOT
+6. ROTATION QUEUE WORKFLOW
 --------------------------------------------------------------------------------
 
-Checks run during this review on August 6, 2026:
+The operator's normal flow is:
 
-- npm run build: PASSED. Vite produced the frontend bundle successfully.
-- npm run lint: FAILED with 11 errors and 4 warnings in older player and queue
-  components. The focused tournament/court/public-display lint check passed.
-- Tournament/court integration test: PASSED using a temporary Electron database,
-  including an old-schema migration and equal normal/tournament numeric IDs.
+  register players today
+      -> select eligible players
+      -> choose Singles/Doubles and a category
+      -> optionally create teammate locks for Doubles
+      -> generate complete balanced matches
+      -> edit/reorder/cancel waiting matches if needed
+      -> choose an available court and start
+      -> select the winning player/team
+      -> return players to Rotation or mark selected players done
 
-The lint failures include unused imports/variables, effect dependency warnings,
-and React warnings about state updates initiated through effects. A successful
-frontend build proves that the JSX bundles; it does not prove Electron IPC or
-database workflows work at runtime.
+This is rotation matchmaking, not round robin. It does not schedule everyone
+against everyone.
+
+ELIGIBILITY
+
+A selectable player must:
+
+- have a permanent profile;
+- be registered for CURRENT_DATE;
+- be active and not done;
+- not be playing a Rotation, Tournament, or legacy normal match;
+- not already belong to another waiting/incomplete/playing Rotation match; and
+- satisfy the selected gender/category preference.
+
+The UI explains why unavailable players cannot be selected. The database checks
+eligibility again inside transactions, so stale React data cannot bypass the rule.
+
+SELECTION UI
+
+The player pool supports individual selection, Select All for visible eligible
+players, Clear Selection, name search, level filter, and gender filter. Search and
+visual filters do not discard existing selection. Configuration changes remove
+newly incompatible selections with a visible message.
+
+Rotation opens with Doubles and No Gender selected. The operator's temporary
+selection and configuration draft survives navigating away and back within the
+same Electron session; saved application settings do not replace this required
+initial Doubles default.
+
+Counters are derived from the selected IDs and the already-loaded player objects.
+They count only selected players: total, four levels, male, female, and locked
+teams. They do not count every registered profile and do not query SQLite again.
+
+LEVEL NORMALIZATION AND COLORS
+
+Stored spelling/capitalization variants are normalized to:
+
+  beginner            yellow
+  intermediate        green
+  upper_intermediate  blue
+  advanced            red
+
+The same helper is used in selection, Rotation matches, Court cards, Tournament,
+and Public Display. Matchmaking values are 1, 2, 3, and 4 respectively; stored
+text is not rewritten.
 
 
-10. RECOMMENDED IMPLEMENTATION ORDER
+7. ROTATION MATCHMAKING RULES
 --------------------------------------------------------------------------------
 
-1. Decide and document the single source of truth for a session participant:
-   registered_players_today is the natural choice.
-2. Add database migrations and align queue, matches, match_players, courts, and
-   player status around that model.
-3. Repair and test the full casual flow: register -> queue -> preview -> court ->
-   end match -> update counts -> optional requeue.
-4. Make Reset All Data accurately and safely clear every intended table.
-5. Fix the Players refresh loop and remaining lint errors.
-6. Add integration and UI tests for the operator's non-tournament session flows.
-7. Replace the template README and synchronize application version numbers.
+Every generated match is complete. Unplaced players remain available and appear
+in an Unmatched section with a reason; no incomplete match is created silently.
+
+Rank preferences:
+
+same_rank
+  Strict. Every participant in that match must have the same normalized rank.
+
+adjacent_rank
+  Exact-rank matches are still preferred. A one-level difference is allowed only
+  when every affected player permits adjacent ranks. Beginner/Advanced and other
+  large automatic gaps are rejected.
+
+Singles:
+
+- needs at least two selected eligible players;
+- creates pairs using a maximum-compatible-pair search;
+- prioritizes the greatest number of matches, exact ranks, longest waiting time,
+  fewer daily games, and fewer repeated opponents; and
+- uses randomization only to break an otherwise equal choice.
+
+Doubles:
+
+- needs at least four selected eligible players;
+- evaluates complete groups of four and all three possible team arrangements;
+- preserves active teammate locks;
+- validates gender/category and rank rules;
+- minimizes the difference between Team A and Team B strength;
+- prefers exact rank, waiting fairness, fewer daily games, and fewer repeated
+  teammates/opponents; and
+- uses randomization only as the final tie-breaker.
+
+Mixed Doubles requires one male and one female on each team. Men's and Women's
+categories reject the wrong gender. No Gender permits any gender combination.
+
+Selection IDs are de-duplicated before matching. The result contract is always:
+
+  { success: true, data: { matches, generatedCount, unmatchedPlayers,
+                           warnings, summary } }
+
+or:
+
+  { success: false, message: "Useful operator-facing explanation" }
 
 
-11. ONE-PARAGRAPH HANDOFF
+8. TEAMMATE LOCKS
 --------------------------------------------------------------------------------
 
-Badminton Queue is a local Electron/React/SQLite desktop manager for badminton
-players, daily attendance, queues, courts, public displays, and tournaments. The
-UI talks through a preload IPC bridge to synchronous SQLite query modules. Player
-profiles and today's registration are the current foundation. The tournament
-feature now creates an atomic round-robin schedule, reloads saved tournaments,
-requires an available court before play, displays live tournament courts, releases
-courts with locked winners, calculates standings, and completes automatically.
-The older rotation queue is still not working because its queries target the
-former player-based schema while session state moved to registered_players_today.
-The next developer can leave the tournament flow intact and focus separately on
-the normal queue/match path and the public display's "Next Up" data.
+The UI implements Today Only locks for Doubles. A player can belong to only one
+active lock, the two IDs are stored in sorted order, and self/duplicate/overlapping
+or category-incompatible locks are rejected.
+
+While active, locked teammates are treated as one fixed unit and are never split
+by generation, editing, or rebalancing. A lock can be removed while players are
+available or assigned to a waiting/incomplete match. The existing arrangement is
+kept but immediately revalidated. Unlocking is rejected while either player is
+playing in Rotation, Tournament, or a legacy normal match.
+
+A different-rank locked team is accepted only if every participant allows flexible
+rank matching and a close-strength opponent can balance it. Otherwise it remains
+unmatched with a clear warning. The generator never splits the locked pair merely
+to make another match.
+
+The schema understands a permanent lock type, but Permanent Preferred Team is not
+exposed in the UI. Today Only is the currently supported operator workflow.
+
+
+9. WAITING MATCHES AND EDITING
+--------------------------------------------------------------------------------
+
+Generated matches are saved in rotation_matches and rotation_match_players with
+queue order, type, category, status, teams/slots, strengths, warnings, and lock IDs.
+
+Waiting and incomplete matches may be edited. The operator can:
+
+- remove or replace a player;
+- fill an empty slot;
+- rearrange or swap teams;
+- rebalance automatically;
+- unlock an active team;
+- move a match up or down; or
+- cancel it and return its players to availability.
+
+Every save checks registration, done/playing/assigned state, duplicate players,
+category, rank rules, team locks, team size, strength, and balance. Removing a
+player saves an incomplete match instead of deleting it. Incomplete matches cannot
+start. Playing and finished matches cannot be edited.
+
+Queue positions are changed transactionally and normalized after starts/cancels.
+React uses in-memory guards and disabled controls to stop double-click requests;
+the database status checks provide the final protection.
+
+
+10. COURT AND MATCH LIFECYCLE
+--------------------------------------------------------------------------------
+
+Starting a Rotation match is one transaction:
+
+  verify waiting and complete
+      -> recheck every player and active lock
+      -> recheck the selected court against all match sources
+      -> set court playing
+      -> set match playing and record start time
+      -> set all daily players playing
+
+A match cannot start without a court. The court list is loaded when the modal
+opens, but the database checks again when Confirm is clicked. This safely handles
+a court becoming occupied while the modal is open.
+
+Finishing is also one transaction:
+
+  verify playing and winner 1/2
+      -> save winner/end time and mark finished
+      -> update daily and lifetime statistics
+      -> mark selected players done and return others to available
+      -> release only this match's court if no active source still uses it
+
+A waiting match cannot choose a winner. A finished match cannot be completed a
+second time. A winner outside the two sides is rejected.
+
+Court occupancy is source-safe. An active court object contains source equal to
+"rotation", "tournament", or "normal". Numeric IDs from different tables are
+never used alone to associate matches, so Rotation match 5 and Tournament match 5
+remain distinct.
+
+
+11. TOURNAMENT WORKFLOW
+--------------------------------------------------------------------------------
+
+Tournament is separate from Rotation and uses only tournaments, tournament_teams,
+tournament_rounds, and tournament_matches.
+
+The operator chooses Singles/Doubles and No Gender/Men's/Women's/Mixed, selects
+registered players, and creates the tournament atomically. Teams are generated,
+then the circle method creates a proper round-robin schedule with byes for odd
+team counts. Each team pair plays exactly once.
+
+Tournament matches move from pending to playing only after selecting a currently
+available court. Playing matches accept either participating team as winner and
+finished results are locked. The final result automatically completes the
+tournament. Standings show played/wins/losses and report a unique champion or a
+tie in wins without inventing a tiebreaker.
+
+Tournament and Rotation check each other's active court records. Rotation also
+rechecks whether one of its queued players began a Tournament match before it
+starts, preventing stale-data double booking.
+
+
+12. PUBLIC DISPLAY
+--------------------------------------------------------------------------------
+
+Public Display refreshes every ten seconds.
+
+Currently Playing contains only courts with an active status=playing match.
+Rotation and Tournament teams are loaded by their explicit source and show the
+correct singles Player A/Player B or doubles Team 1/Team 2 names, match type,
+category, VS separator, and level-colored player names.
+
+Next Up reads persisted Rotation matches with status=waiting, orders them by
+queue position, and shows up to six matchups. Finished and incomplete matches are
+not presented as active or Next Up matches.
+
+
+13. SQLITE TABLES AND MIGRATIONS
+--------------------------------------------------------------------------------
+
+Active current-model tables:
+
+  players
+  registered_players_today
+  courts
+  player_team_locks
+  rotation_matches
+  rotation_match_players
+  tournaments
+  tournament_teams
+  tournament_rounds
+  tournament_matches
+  settings
+
+Legacy tables kept for non-destructive compatibility:
+
+  queue
+  matches
+  match_players
+  match_history
+  round_robin_matches
+
+New Rotation code does not persist into the legacy queue or matches tables.
+
+The real database is:
+
+  <Electron app.getPath("userData")>/badminton.db
+
+On the reviewed Windows account this resolved to:
+
+  C:\Users\Raidou\AppData\Roaming\badminton-queue\badminton.db
+
+The repository's database.db file is not the runtime database.
+
+Startup migration behavior is non-destructive:
+
+- adds players.rank_match_preference when absent;
+- adds registered_players_today.available_since when absent;
+- fills missing available_since values;
+- maps old waiting/finished daily statuses to available and done flags to done;
+- creates player_team_locks, rotation_matches, and rotation_match_players;
+- adds indexes for match status/order, courts, participants, and locks;
+- adds partial unique indexes for waiting queue positions and active Rotation
+  court use; and
+- adds a trigger preventing overlapping active teammate locks for the same day.
+
+Foreign keys remain enabled. No runtime database is deleted or reset automatically.
+The migration runs on the next application startup. A manual database reset is not
+required. Reset All Data is a separate confirmed operator action and now clears
+Rotation, Tournament, attendance, players, legacy match data, and courts in a
+foreign-key-safe transaction before recreating three default courts.
+
+
+14. ROTATION WINDOW.API CONTRACT
+--------------------------------------------------------------------------------
+
+The method names and argument order match React, preload, Electron handlers, and
+database functions:
+
+  getRotationState()
+  getEligibleRotationPlayers()
+  getActiveTeamLocks()
+  createTeamLock(firstPlayerId, secondPlayerId, matchType, category)
+  removeTeamLock(lockId)
+  updateRotationRankPreference(playerId, preference)
+  generateRotationMatches(playerIds, matchType, category)
+  getRotationMatches()
+  updateWaitingMatch(matchId, teamAIds, teamBIds)
+  rebalanceWaitingMatch(matchId)
+  reorderWaitingMatch(matchId, direction)
+  cancelWaitingMatch(matchId)
+  startRotationMatch(matchId, courtId)
+  finishRotationMatch(matchId, winnerTeam, donePlayerIds)
+
+Shared court APIs used by Rotation are:
+
+  getAvailableCourts()
+  getCourts()
+
+The obsolete getQueue/addToQueue/previewMatches/createMatch/endMatch renderer IPC
+path was removed, along with its unreferenced query modules and QueueList component.
+
+
+15. VERIFICATION SNAPSHOT
+--------------------------------------------------------------------------------
+
+Rotation integration test uses a temporary Electron user-data directory and does
+not touch the real badminton.db. It verified:
+
+- migration from an existing schema without new Rotation columns;
+- no/one/duplicate selections and rollback without partial matches;
+- normalized level and gender variants;
+- Singles exact, odd count, adjacent fallback, strict rank, large rank gap,
+  waiting fairness, and repeated-opponent avoidance;
+- Doubles groups of four/eight, balanced arrangements, and leftovers;
+- valid/invalid Mixed and Men's/Women's selections;
+- same-rank and different-rank locks, overlapping/duplicate/self/category lock
+  rejection, unlock while waiting, and unlock rejection while playing;
+- remove/fill/swap/rebalance/edit/cancel/reorder behavior;
+- incomplete match start rejection and playing match edit rejection;
+- no court, stale occupied court, start, duplicate start, and occupied court;
+- invalid/waiting/duplicate finish attempts;
+- equal Rotation/Tournament numeric IDs on different courts;
+- stale Tournament player conflict before Rotation start;
+- source-safe court data and court release;
+- daily/lifetime wins, losses, match counts, return/done state;
+- persistence, indexes, transactions, and foreign keys.
+
+The existing Tournament integration test also passes after the shared court work.
+The Player Management integration test uses its own temporary database and verifies
+profile validation, case-insensitive duplicate names, registration, duplicate-click
+protection, done/reactivation using the same daily row, daily/lifetime fields,
+assigned-player protection, safe deletion, date filtering, integrity, and foreign
+keys.
+
+Latest command results:
+
+- npm run build: PASSED.
+- focused ESLint for every modified/new file: PASSED.
+- npm run lint: PASSED.
+- Player Management integration test: PASSED.
+- Rotation integration test: PASSED.
+- Tournament and court integration test: PASSED.
+
+
+16. KNOWN LIMITATIONS
+--------------------------------------------------------------------------------
+
+- Permanent Preferred Team is not available in the UI; locks are Today Only.
+- Match results record only a winning player/team, not badminton scores.
+- There is no automatic operator override for an incompatible or badly unbalanced
+  group. The players remain unmatched until selection/preferences change.
+- The exact Doubles optimizer evaluates many possible groups. This produces good
+  fairness and balance for normal club-sized selections, but exceptionally large
+  selections may take longer because the search is combinatorial.
+- Finished Rotation history is kept in SQLite; the Queue page shows only the ten
+  most recent finished cards to avoid an endlessly growing screen.
+- The old normal-match tables remain for historical compatibility but are not the
+  active Rotation implementation.
+- An accurate all-source Matches Played Today card is unavailable because finished
+  Tournament rows do not store a completion timestamp. The Player page therefore
+  reports completed Rotation matches today explicitly.
+
+
+17. ONE-PARAGRAPH HANDOFF
+--------------------------------------------------------------------------------
+
+Badminton Queue is an Electron/React/SQLite desktop manager whose renderer calls
+safe window.api methods, whose Electron main process owns synchronous database
+queries, and whose SQLite transactions protect multi-step work. Today's attendance
+record is the Rotation source of truth. The new Rotation Queue selects eligible
+daily players, honors strict/adjacent rank preferences and teammate locks, creates
+balanced Singles/Doubles/Mixed matches, persists an editable ordered waiting list,
+starts only on a revalidated available court, records winners and statistics, and
+returns or completes players safely. Tournament remains a separate round-robin
+system. Courts and Public Display use explicit match sources so Rotation and
+Tournament IDs cannot be confused. Startup migrations preserve existing data.
 
 ================================================================================
 END OF SUMMARY

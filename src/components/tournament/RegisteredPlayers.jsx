@@ -15,7 +15,7 @@ export default function RegisteredPlayers({
     const [players, setPlayers] = useState([]);
     const [search, setSearch] = useState('');
 
-    const handleSelectPlayer = (e, player) => {
+    const updatePlayerSelection = (player, shouldSelect) => {
         const selectedPlayer = {
             id: player.id,
             name: player.name,
@@ -23,7 +23,7 @@ export default function RegisteredPlayers({
             level: player.level,
         };
 
-        if (e.target.checked) {
+        if (shouldSelect) {
             setSelectedPlayers((prev) => {
                 const alreadySelected = prev.some(
                     (selected) => selected.id === player.id
@@ -42,6 +42,11 @@ export default function RegisteredPlayers({
                 )
             );
         }
+    };
+
+    const handlePlayerRowClick = (event, player, isSelected) => {
+        if (event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
+        updatePlayerSelection(player, !isSelected);
     };
 
     const filteredPlayers = players.filter((player) => {
@@ -206,9 +211,10 @@ export default function RegisteredPlayers({
                     );
 
                     return (
-                        <label
+                        <div
                             key={player.id}
-                            className="flex justify-between items-center p-4 hover:bg-black/5 cursor-pointer"
+                            onClick={(event) => handlePlayerRowClick(event, player, isSelected)}
+                            className={`flex cursor-pointer items-center justify-between border-l-4 p-4 transition-colors duration-150 ${isSelected ? 'border-l-[var(--primary)] bg-[var(--primary-light)]/70' : 'border-l-transparent hover:bg-[var(--surface-hover)]/70'}`}
                         >
 
                             <div className="flex items-center gap-3">
@@ -216,9 +222,9 @@ export default function RegisteredPlayers({
                                 <input
                                     type="checkbox"
                                     checked={isSelected}
-                                    onChange={(e) =>
-                                        handleSelectPlayer(e, player)
-                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(event) => updatePlayerSelection(player, event.target.checked)}
+                                    aria-label={`Select ${player.name}`}
                                 />
 
                                 <div>
@@ -246,7 +252,7 @@ export default function RegisteredPlayers({
 
                             </div>
 
-                        </label>
+                        </div>
                     );
                 })}
 
