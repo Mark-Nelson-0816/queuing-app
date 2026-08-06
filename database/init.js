@@ -50,49 +50,88 @@ CREATE TABLE IF NOT EXISTS registered_players_today (
     FOREIGN KEY (player_id) REFERENCES players(id)
 );
 
-
-CREATE TABLE tournament_teams(
+CREATE TABLE IF NOT EXISTS tournaments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+    match_type TEXT NOT NULL DEFAULT 'doubles',
+    -- singles | doubles
 
-    player_1_id INTEGER REFERENCES players(id),
-    player_2_id INTEGER REFERENCES players(id)
+    category TEXT NOT NULL DEFAULT 'mens',
+    -- no_gender | mens | womens | mixed
+
+    status TEXT NOT NULL DEFAULT 'ongoing',
+    -- ongoing | finished
+
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE tournament_rounds (
+CREATE TABLE IF NOT EXISTS tournament_teams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+
+    player_1_id INTEGER DEFAULT NULL,
+    player_2_id INTEGER DEFAULT NULL,
+
+    team_number INTEGER NOT NULL,
+
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tournament_rounds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
 
     round_number INTEGER NOT NULL,
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS tournaments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    match_type VARCHAR(50) DEFAULT 'double',
-    category VARCHAR(50) DEFAULT 'mens',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS tournament_matches (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    tournament_id INTEGER NOT NULL REFERENCES tournaments(id),
+    tournament_id INTEGER NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
 
-    round_id INTEGER NOT NULL REFERENCES tournament_rounds(id),
+    round_id INTEGER NOT NULL REFERENCES tournament_rounds(id) ON DELETE CASCADE,
 
     team_a_id INTEGER NOT NULL REFERENCES tournament_teams(id),
 
     team_b_id INTEGER NOT NULL REFERENCES tournament_teams(id),
 
-    winner_team_id INTEGER DEFAULT NULL REFERENCES tournament_teams(id),
+    winner_team_id INTEGER REFERENCES tournament_teams(id),
+
+    court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL,
+
+    status TEXT NOT NULL DEFAULT 'pending',
+    -- pending | playing | finished
 
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX IF NOT EXISTS idx_tournament_teams_tournament_id
+    ON tournament_teams(tournament_id);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_rounds_tournament_id
+    ON tournament_rounds(tournament_id);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_matches_tournament_id
+    ON tournament_matches(tournament_id);
+
+CREATE INDEX IF NOT EXISTS idx_tournament_matches_round_id
+    ON tournament_matches(round_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tournament_teams_number
+    ON tournament_teams(tournament_id, team_number);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tournament_rounds_number
+    ON tournament_rounds(tournament_id, round_number);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_tournament_matches_pair
+    ON tournament_matches(
+        tournament_id,
+        (CASE WHEN team_a_id < team_b_id THEN team_a_id ELSE team_b_id END),
+        (CASE WHEN team_a_id < team_b_id THEN team_b_id ELSE team_a_id END)
+    );
 
 
 
@@ -164,6 +203,42 @@ CREATE TABLE IF NOT EXISTS round_robin_matches (
     FOREIGN KEY (court_id) REFERENCES courts(id)
 );
 
+CREATE TABLE IF NOT EXISTS match_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+    match_id INTEGER NOT NULL REFERENCES matches(id),
+    player_id INTEGER NOT NULL REFERENCES players(id),
+
+    team INTEGER DEFAULT NULL,
+
+    match_type TEXT NOT NULL DEFAULT 'singles',
+    source TEXT NOT NULL DEFAULT 'normal'
+);
+
+`);
+
+const tournamentMatchColumns = db.prepare(`
+    PRAGMA table_info(tournament_matches)
+`).all();
+
+const hasTournamentCourtId = tournamentMatchColumns.some(
+    (column) => column.name === "court_id"
+);
+
+if (!hasTournamentCourtId) {
+    db.exec(`
+        ALTER TABLE tournament_matches
+        ADD COLUMN court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL
+    `);
+}
+
+db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_tournament_matches_court_id
+        ON tournament_matches(court_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_tournament_matches_active_court
+        ON tournament_matches(court_id)
+        WHERE court_id IS NOT NULL AND status = 'playing';
 `);
 
 });

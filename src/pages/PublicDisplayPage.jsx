@@ -1,51 +1,70 @@
 import { useEffect, useState } from "react";
 import PublicDisplay from "../components/PublicDisplay";
 
+function formatTime(dateStr) {
+  if (!dateStr) return "";
+  const date = new Date(`${dateStr}Z`);
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function PublicDisplayPage() {
   const [courts, setCourts] = useState([]);
   const [queueNext, setQueueNext] = useState([]);
-
-  function formatTime(dateStr) {
-    if (!dateStr) return "";
-    const date = new Date(dateStr + "Z");
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
+  const [courtError, setCourtError] = useState("");
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [courtsData, queueData] = await Promise.all([
-          window.api.getCourts(),
-          window.api.getQueue(),
-        ]);
+    let isCancelled = false;
 
-        setCourts(courtsData);
+    const refreshData = () => {
+      window.api.getCourts()
+        .then((courtsData) => {
+          if (isCancelled) return;
+          setCourts(Array.isArray(courtsData) ? courtsData : []);
+          setCourtError("");
+        })
+        .catch(() => {
+          if (!isCancelled) {
+            setCourtError("Unable to load court information.");
+          }
+        });
 
-        
-        const mappedQueue = queueData.map((entry) => ({
-          id: entry.id,
-          name: entry.name,
-          timeJoined: formatTime(entry.joined_at),
-        }));
+      window.api.getQueue()
+        .then((queueData) => {
+          if (isCancelled) return;
 
-        setQueueNext(mappedQueue);
-      } catch (err) {
-        console.error("Failed to load public display data:", err);
-      }
-    }
+          const mappedQueue = (Array.isArray(queueData) ? queueData : []).map(
+            (entry) => ({
+              id: entry.id,
+              name: entry.name,
+              timeJoined: formatTime(entry.joined_at),
+            }),
+          );
 
-    
-    loadData();
+          setQueueNext(mappedQueue);
+        })
+        .catch(() => {
+          if (!isCancelled) setQueueNext([]);
+        });
+    };
 
-    
-    const interval = setInterval(loadData, 10000);
+    const initialRefresh = setTimeout(refreshData, 0);
+    const interval = setInterval(refreshData, 10000);
 
-    return () => clearInterval(interval);
+    return () => {
+      isCancelled = true;
+      clearTimeout(initialRefresh);
+      clearInterval(interval);
+    };
   }, []);
 
-  return <PublicDisplay courts={courts} queueNext={queueNext} />;
+  return (
+    <PublicDisplay
+      courts={courts}
+      queueNext={queueNext}
+      courtError={courtError}
+    />
+  );
 }
-

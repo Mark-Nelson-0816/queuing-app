@@ -30,15 +30,37 @@ export default function Courts() {
   const [courts, setCourts] = useState([]);
   const [courtName, setCourtName] = useState("");
   const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [requeuePlayers, setRequeuePlayers] = useState(true);
 
   const loadCourts = async () => {
-    const data = await window.api.getCourts();
-    setCourts(data);
+    try {
+      const data = await window.api.getCourts();
+      setCourts(Array.isArray(data) ? data : []);
+    } catch {
+      setMessage("Unable to load court information.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadCourts();
+    let isCancelled = false;
+
+    window.api.getCourts()
+      .then((data) => {
+        if (!isCancelled) setCourts(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!isCancelled) setMessage("Unable to load court information.");
+      })
+      .finally(() => {
+        if (!isCancelled) setIsLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -71,7 +93,11 @@ export default function Courts() {
       return;
     }
 
-    await window.api.removeCourt(id);
+    const result = await window.api.removeCourt(id);
+    if (result?.success === false) {
+      showMessage(result.error || "Unable to remove court.");
+      return;
+    }
     loadCourts();
   };
 
@@ -121,6 +147,9 @@ export default function Courts() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {isLoading && (
+          <p className="text-sm text-[var(--text)]">Loading courts...</p>
+        )}
         {courts.map((court) => (
           <CourtCard
             key={court.id}

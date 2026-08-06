@@ -7,6 +7,7 @@ export default function ConfirmDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   variant = "danger",
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }) {
@@ -27,7 +28,8 @@ export default function ConfirmDialog({
         </button>
         <button
           onClick={onConfirm}
-          className={`px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors ${confirmColor}`}
+          disabled={confirmDisabled}
+          className={`px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${confirmColor}`}
         >
           {confirmLabel}
         </button>

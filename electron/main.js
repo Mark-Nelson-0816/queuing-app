@@ -6,18 +6,22 @@ import { fileURLToPath } from "url";
 import "../database/init.js";
 
 import { ipcMain } from "electron";
-import { getPlayers } from "../database/playerQueries.js";
-import { searchPlayers } from "../database/playerQueries.js";
-import { registerPlayer } from "../database/playerQueries.js";
-import { getRegisteredPlayersToday } from "../database/playerQueries.js";
-import { getRegisteredPlayersTodayLevelCount } from "../database/playerQueries.js";
-import { removeRegisteredPlayer } from "../database/playerQueries.js";
-import { getPlayersProfile } from "../database/playerQueries.js";
-import { updatePlayerInfo } from "../database/playerQueries.js";
-import { deletePlayerProfile } from "../database/playerQueries.js";
-import { getPlayerCards } from "../database/playerQueries.js";
+//players
+import { getPlayers, searchPlayers, registerPlayer, getRegisteredPlayersToday, getRegisteredPlayersTodayLevelCount, removeRegisteredPlayer, getPlayersProfile, updatePlayerInfo, deletePlayerProfile, getPlayerCards, } from "../database/playerQueries.js";
 
-import { getCourts } from "../database/courtQueries.js";
+//tournament
+import {
+  createRoundRobinTournament,
+  finishTournament,
+  finishTournamentMatch,
+  getLatestTournament,
+  getTournamentById,
+  getTournamentMatches,
+  getTournamentStandings,
+  startTournamentMatch,
+} from "../database/tournamentQueries.js";
+
+import { getAvailableCourts, getCourts } from "../database/courtQueries.js";
 import { 
   getQueue,
   addToQueue,
@@ -32,14 +36,7 @@ import {
 import {
   endMatch
 } from "../database/matchQueries.js";
-import {
-  getAllPlayers,
-  generateRoundRobinMatches,
-  saveRoundRobinMatches,
-  getRoundRobinMatches,
-  assignMatchToCourt,
-  endRoundRobinMatch
-} from "../database/roundRobinQueries.js";
+
 import { resetAllData } from "../database/resetQueries.js";
 import { getSetting, getAllSettings, setSetting } from "../database/settingsQueries.js";
 
@@ -64,12 +61,6 @@ function createWindow() {
 
   mainWindow.maximize();
    mainWindow.webContents.openDevTools();
-  const indexPath = path.join(
-    app.getAppPath(),
-    "dist",
-    "index.html"
-  );
-
   if (app.isPackaged) {
     const indexPath = path.join(
       app.getAppPath(),
@@ -156,11 +147,50 @@ ipcMain.handle("update-player", (event, id, name, level) => {
   return updatePlayer(id, name, level);
 });
 
+//tournament
+ipcMain.handle('create-round-robin-tournament', (event, selectedPlayers, matchType, category) => {
+  return createRoundRobinTournament(selectedPlayers, matchType, category);
+});
+
+ipcMain.handle('get-tournament', (event, tournamentId) => {
+  return getTournamentById(tournamentId);
+});
+
+ipcMain.handle('get-latest-tournament', () => {
+  return getLatestTournament();
+});
+
+ipcMain.handle('get-tournament-matches', (event, tournamentId) => {
+  return getTournamentMatches(tournamentId);
+});
+
+ipcMain.handle('get-tournament-standings', (event, tournamentId) => {
+  return getTournamentStandings(tournamentId);
+});
+
+ipcMain.handle('start-tournament-match', (event, matchId, courtId) => {
+  return startTournamentMatch(matchId, courtId);
+});
+
+ipcMain.handle('finish-tournament-match', (event, matchId, winnerTeamId) => {
+  return finishTournamentMatch(matchId, winnerTeamId);
+});
+
+ipcMain.handle('finish-tournament', (event, tournamentId) => {
+  return finishTournament(tournamentId);
+});
+
+
+
 //courts
 ipcMain.handle("get-courts", () => {
   const courts = getCourts();
 
   return courts;
+});
+
+ipcMain.handle("get-available-courts", () => {
+  return getAvailableCourts();
 });
 
 ipcMain.handle("add-court", (event, name)=>{
@@ -230,27 +260,6 @@ ipcMain.handle("end-match", (event, courtId, requeue)=>{
 });
 
 // Round Robin
-ipcMain.handle("get-rr-players", () => {
-  return getAllPlayers();
-});
-
-ipcMain.handle("generate-rr-matches", (event, playerIds, matchType) => {
-  const matches = generateRoundRobinMatches(playerIds, matchType || 'singles');
-  saveRoundRobinMatches(matches);
-  return { success: true };
-});
-
-ipcMain.handle("get-rr-matches", () => {
-  return getRoundRobinMatches();
-});
-
-ipcMain.handle("assign-rr-match", (event, matchId, courtId) => {
-  return assignMatchToCourt(matchId, courtId);
-});
-
-ipcMain.handle("end-rr-match", (event, matchId, courtId, requeue) => {
-  return endRoundRobinMatch(matchId, courtId, requeue);
-});
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);

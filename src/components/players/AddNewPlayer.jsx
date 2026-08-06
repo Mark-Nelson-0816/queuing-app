@@ -5,7 +5,7 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
   
   const [addPlayerLoading, setAddPlayerLoading] = useState(false);
   const [name, setName] = useState('');
-  const [level, setLevel] = useState('Beginner');
+  const [level, setLevel] = useState('beginner');
   const [gender, setGender] = useState('male');
   const [contact, setContact] = useState('');
   const [preferMens, setPreferMens] = useState(false);
@@ -81,7 +81,7 @@ export default function AddNewPlayer({setError, refreshData, setRefreshData}) {
             <option value='female'>Female</option>
           </select>
         </div>
-
+        
         <div>
           <label className="mb-1 block text-sm font-medium">
             Skill Level

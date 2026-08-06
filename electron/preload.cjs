@@ -49,10 +49,39 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("update-player", id, name, level),
 
 
+  //tournament
+  createRoundRobinTournament: (players, matchType, category) =>
+    ipcRenderer.invoke('create-round-robin-tournament', players, matchType, category),
+
+  getTournament: (tournamentId) =>
+    ipcRenderer.invoke('get-tournament', tournamentId),
+
+  getLatestTournament: () =>
+    ipcRenderer.invoke('get-latest-tournament'),
+
+  getTournamentMatches: (tournamentId) =>
+    ipcRenderer.invoke('get-tournament-matches', tournamentId),
+
+  getTournamentStandings: (tournamentId) =>
+    ipcRenderer.invoke('get-tournament-standings', tournamentId),
+
+  startTournamentMatch: (matchId, courtId) =>
+    ipcRenderer.invoke('start-tournament-match', matchId, courtId),
+
+  finishTournamentMatch: (matchId, winnerTeamId) =>
+    ipcRenderer.invoke('finish-tournament-match', matchId, winnerTeamId),
+
+  finishTournament: (tournamentId) =>
+    ipcRenderer.invoke('finish-tournament', tournamentId),
+
+
 
   // Courts
   getCourts: () =>
       ipcRenderer.invoke("get-courts"),
+
+  getAvailableCourts: () =>
+      ipcRenderer.invoke("get-available-courts"),
 
   addCourt: (name) =>
       ipcRenderer.invoke("add-court", name),
@@ -83,18 +112,6 @@ contextBridge.exposeInMainWorld("api", {
       courtId,
       requeue
     ),
-
-  // Round Robin
-  getRRPlayers: () =>
-    ipcRenderer.invoke("get-rr-players"),
-  generateRRMatches: (playerIds, matchType) =>
-    ipcRenderer.invoke("generate-rr-matches", playerIds, matchType),
-  getRRMatches: () =>
-    ipcRenderer.invoke("get-rr-matches"),
-  assignRRMatch: (matchId, courtId) =>
-    ipcRenderer.invoke("assign-rr-match", matchId, courtId),
-  endRRMatch: (matchId, courtId, requeue) =>
-    ipcRenderer.invoke("end-rr-match", matchId, courtId, requeue),
 
   //datas
   resetAllData: () => 

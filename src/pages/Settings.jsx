@@ -156,17 +156,16 @@ export default function Settings() {
 
   async function loadStats() {
     try {
-      const [players, courts, queue, rrMatches] = await Promise.all([
+      const [players, courts, queue] = await Promise.all([
         window.api.getPlayers(),
         window.api.getCourts(),
         window.api.getQueue(),
-        window.api.getRRMatches(),
       ]);
       setStats({
         players: players.length,
         courts: courts.length,
         queue: queue.length,
-        matches: rrMatches.length,
+        matches: 0,
       });
     } catch (err) {
       console.error("Failed to load stats:", err);

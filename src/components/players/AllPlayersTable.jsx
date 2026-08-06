@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import EditPlayer from "../EditPlayer";
+import EditPlayer from "./EditPlayer";
 import ConfirmDialog from "../ConfirmDialog";
 
 export default function AllPlayersTable({searchInput}) {

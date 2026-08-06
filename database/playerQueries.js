@@ -7,7 +7,7 @@ export function addPlayer(name, level, gender, contact, preferMens, preferWomens
     const preferWomensNum = preferWomens ? 1 : 0;
     const preferMixedNum = preferMixed ? 1 : 0;
     const preferNoGenderNum = preferNoGender ? 1 : 0;
-
+    
     const existingPlayer = db.prepare(`
         SELECT id
         FROM players
