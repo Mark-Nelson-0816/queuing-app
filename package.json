@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "main": "electron/main.js",
+
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "vite build",
@@ -12,22 +13,29 @@
     "electron": "electron .",
     "dist": "npm run build && electron-builder"
   },
+
   "build": {
     "appId": "com.badminton.queue",
     "productName": "Badminton Queue",
+
     "files": [
       "dist/**/*",
       "electron/**/*",
       "database/**/*",
+      "public/icon.ico",
       "package.json"
     ],
+
     "nsis": {
       "deleteAppDataOnUninstall": true
     },
+
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/icon.ico"
     }
   },
+
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "better-sqlite3": "^13.0.2",
@@ -36,6 +44,7 @@
     "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.3"
   },
+
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@eslint/js": "^10.0.1",

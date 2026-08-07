@@ -56,6 +56,8 @@ function createWindow() {
     height: 800,
     fullscreenable: true,
 
+    icon: path.join(__dirname, "../public/icon.ico"),
+
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
     },
