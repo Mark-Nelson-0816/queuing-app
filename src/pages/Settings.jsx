@@ -339,11 +339,11 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card title="Round Robin Defaults" description="Starting options for newly created tournaments." icon={Trophy} footer={savedMessage}>
+        <Card title="Tournament Defaults" description="Starting options for newly created Tournaments." icon={Trophy} footer={savedMessage}>
           <div className="divide-y divide-[var(--border)]">
             <SegmentedControl label="Default Match Type" value={settings.defaultTournamentMatchType} options={[{ value: "singles", label: "Singles" }, { value: "doubles", label: "Doubles" }]} onChange={handleTournamentMatchType} />
             <SegmentedControl label="Default Category" value={settings.defaultTournamentCategory} options={[{ value: "mens", label: "Men's" }, { value: "womens", label: "Women's" }, { value: "mixed", label: "Mixed", disabled: settings.defaultTournamentMatchType === "singles" }, { value: "no_gender", label: "No Gender" }]} onChange={(value) => handleSettingChange("defaultTournamentCategory", value)} />
-            <div className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-medium text-[var(--text-h)]">Shuffle Players Before Team Creation</p><p className="mt-0.5 text-xs text-[var(--text)]">Built into the current tournament team generator.</p></div><span className="rounded-full bg-[var(--success-light)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--success)]">Always On</span></div>
+            <div className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-medium text-[var(--text-h)]">Shuffle Players Before Team Creation</p><p className="mt-0.5 text-xs text-[var(--text)]">Built into the current Tournament team generator.</p></div><span className="rounded-full bg-[var(--success-light)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--success)]">Always On</span></div>
             <ComingSoonRow label="Auto Generate Teams" hint="Tournament generation still requires an operator action." />
           </div>
         </Card>
@@ -371,7 +371,7 @@ export default function Settings() {
         <Card title="About" description="Application, runtime, and local database information." icon={Info}>
           <div className="mb-4 flex items-center gap-3">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)] text-lg font-bold text-white">BQ</span>
-            <div><p className="font-semibold text-[var(--text-h)]">{appInfo.applicationName || "Badminton Queue"}</p><p className="text-xs text-[var(--text)]">Queue, court, player, and tournament management.</p></div>
+            <div><p className="font-semibold text-[var(--text-h)]">{appInfo.applicationName || "Badminton Queue"}</p><p className="text-xs text-[var(--text)]">Queue, court, player, and Tournament management.</p></div>
           </div>
           <dl className="grid gap-2 sm:grid-cols-2">
             <InfoItem label="Version" value={appInfo.version} />

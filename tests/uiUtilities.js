@@ -5,6 +5,10 @@ import {
   countRankPreferences,
   getPlayerConfigurationReason,
 } from "../src/utils/rotationUi.js";
+import {
+  isTournamentCategoryEligible,
+  isTournamentPlayerEligible,
+} from "../src/utils/tournamentUi.js";
 
 const players = Array.from({ length: 5 }, (_, index) => ({
   id: index + 1,
@@ -79,5 +83,16 @@ assert.deepEqual(countRankPreferences(players.slice(0, 3)), {
   same_rank: 2,
   adjacent_rank: 1,
 });
+
+assert.equal(isTournamentPlayerEligible({ status: "available", gender: "male" }, "mens"), true);
+assert.equal(isTournamentPlayerEligible({ status: "waiting", gender: "female" }, "womens"), true);
+assert.equal(isTournamentPlayerEligible({ status: "playing", gender: "male" }, "mens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "assigned", gender: "male" }, "mens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "finished", gender: "female" }, "womens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "done", gender: "female" }, "no_gender"), false);
+assert.equal(isTournamentCategoryEligible({ gender: "female" }, "mens"), false);
+assert.equal(isTournamentCategoryEligible({ gender: "male" }, "womens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female" }, "mens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female" }, "mixed"), true);
 
 console.log("UI utility tests passed.");

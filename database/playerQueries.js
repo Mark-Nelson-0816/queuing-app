@@ -611,32 +611,10 @@ export function deletePlayerProfile(playerId) {
 // Kept for Tournament and older callers. This intentionally returns only active
 // current-date registrations, not Player Management's done rows.
 export function getRegisteredPlayersToday() {
-  return db.prepare(`
-    SELECT
-      players.id,
-      players.name,
-      players.level,
-      players.gender,
-      players.rank_match_preference,
-      registered_players_today.status,
-      registered_players_today.match_count,
-      registered_players_today.wins,
-      registered_players_today.losses,
-      registered_players_today.available_since
-    FROM players
-    JOIN registered_players_today
-      ON registered_players_today.player_id = players.id
-    WHERE registered_players_today.registered_date = CURRENT_DATE
-      AND registered_players_today.is_done_today = 0
-      AND registered_players_today.id = (
-        SELECT MAX(current_registration.id)
-        FROM registered_players_today AS current_registration
-        WHERE current_registration.player_id = registered_players_today.player_id
-          AND current_registration.registered_date = CURRENT_DATE
-          AND current_registration.is_done_today = 0
-      )
-    ORDER BY registered_players_today.created_at ASC
-  `).all();
+  return playerManagementTodayStatement
+    .all()
+    .map(mapTodayPlayer)
+    .filter((player) => !player.isDoneToday);
 }
 
 export function searchPlayers(name = "") {

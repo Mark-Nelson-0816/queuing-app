@@ -59,7 +59,7 @@ export default function Tournament() {
         if (isCancelled) return;
 
         if (!result.success) {
-          setError(result.message || "Failed to load tournament.");
+          setError(result.message || "Failed to load Tournament.");
           return;
         }
 
@@ -67,7 +67,7 @@ export default function Tournament() {
       })
       .catch((loadError) => {
         if (!isCancelled) {
-          setError(getErrorMessage(loadError, "Failed to load tournament."));
+          setError(getErrorMessage(loadError, "Failed to load Tournament."));
         }
       })
       .finally(() => {
@@ -94,7 +94,7 @@ export default function Tournament() {
       );
 
       if (!result.success) {
-        setError(result.message || "Failed to create tournament.");
+        setError(result.message || "Failed to create Tournament.");
         return;
       }
 
@@ -102,7 +102,7 @@ export default function Tournament() {
       setSelectedPlayers([]);
       setNotice("Tournament matches generated successfully.");
     } catch (createError) {
-      setError(getErrorMessage(createError, "Failed to create tournament."));
+      setError(getErrorMessage(createError, "Failed to create Tournament."));
     } finally {
       setIsGenerating(false);
     }
@@ -122,7 +122,7 @@ export default function Tournament() {
       const result = await window.api.startTournamentMatch(matchId, courtId);
 
       if (!result.success) {
-        setError(result.message || "Failed to start tournament match.");
+        setError(result.message || "Failed to start Tournament match.");
         return result;
       }
 
@@ -133,7 +133,7 @@ export default function Tournament() {
       setNotice(`Match started on ${startedMatch?.court?.name || "the selected court"}.`);
       return result;
     } catch (startError) {
-      const message = getErrorMessage(startError, "Failed to start tournament match.");
+      const message = getErrorMessage(startError, "Failed to start Tournament match.");
       setError(message);
       return { success: false, message };
     } finally {
@@ -171,7 +171,7 @@ export default function Tournament() {
       );
 
       if (!result.success) {
-        setError(result.message || "Failed to complete tournament match.");
+        setError(result.message || "Failed to complete Tournament match.");
         return false;
       }
 
@@ -179,7 +179,7 @@ export default function Tournament() {
       setNotice("Match completed and its court is available again.");
       return true;
     } catch (saveError) {
-      setError(getErrorMessage(saveError, "Failed to complete tournament match."));
+      setError(getErrorMessage(saveError, "Failed to complete Tournament match."));
       return false;
     } finally {
       savingMatchLockRef.current = false;
@@ -254,7 +254,7 @@ export default function Tournament() {
           <p className="text-2xl font-bold text-[var(--success)]">
             {summary.completedMatches}
           </p>
-          <p className="text-sm text-[var(--text)]">Completed</p>
+          <p className="text-sm text-[var(--text)]">Finished</p>
         </div>
       </div>
 

@@ -13,6 +13,78 @@ const getPlayerStatement = db.prepare(`
   WHERE id = ?
 `);
 
+const getTournamentPlayerUnavailableStatusStatement = db.prepare(`
+  SELECT CASE
+    WHEN EXISTS (
+      SELECT 1
+      FROM registered_players_today
+      WHERE player_id = ?
+        AND registered_date = CURRENT_DATE
+        AND (
+          is_done_today = 1
+          OR LOWER(status) IN ('done', 'finished')
+        )
+    ) THEN 'finished'
+    WHEN EXISTS (
+      SELECT 1
+      FROM rotation_match_players
+      JOIN rotation_matches
+        ON rotation_matches.id = rotation_match_players.rotation_match_id
+      WHERE rotation_match_players.player_id = ?
+        AND rotation_matches.status = 'playing'
+    ) OR EXISTS (
+      SELECT 1
+      FROM tournament_matches
+      JOIN tournament_teams AS team_a
+        ON team_a.id = tournament_matches.team_a_id
+      JOIN tournament_teams AS team_b
+        ON team_b.id = tournament_matches.team_b_id
+      WHERE tournament_matches.status = 'playing'
+        AND ? IN (
+          team_a.player_1_id,
+          team_a.player_2_id,
+          team_b.player_1_id,
+          team_b.player_2_id
+        )
+    ) OR EXISTS (
+      SELECT 1
+      FROM matches
+      LEFT JOIN match_players
+        ON match_players.match_id = matches.id
+        AND match_players.source = 'normal'
+      WHERE matches.status = 'playing'
+        AND (
+          matches.player_one = ?
+          OR matches.player_two = ?
+          OR match_players.player_id = ?
+        )
+    ) OR EXISTS (
+      SELECT 1
+      FROM registered_players_today
+      WHERE player_id = ?
+        AND registered_date = CURRENT_DATE
+        AND status = 'playing'
+        AND is_done_today = 0
+    ) THEN 'playing'
+    WHEN EXISTS (
+      SELECT 1
+      FROM rotation_match_players
+      JOIN rotation_matches
+        ON rotation_matches.id = rotation_match_players.rotation_match_id
+      WHERE rotation_match_players.player_id = ?
+        AND rotation_matches.status IN ('waiting', 'incomplete')
+    ) OR EXISTS (
+      SELECT 1
+      FROM registered_players_today
+      WHERE player_id = ?
+        AND registered_date = CURRENT_DATE
+        AND status = 'assigned'
+        AND is_done_today = 0
+    ) THEN 'assigned'
+    ELSE NULL
+  END AS unavailable_status
+`);
+
 const getTournamentStatement = db.prepare(`
   SELECT id, match_type, category, status, created_at
   FROM tournaments
@@ -264,6 +336,21 @@ function resolveSelectedPlayers(selectedPlayers) {
     const player = getPlayerStatement.get(playerId);
     if (!player) {
       throw new Error("One or more selected players could not be found.");
+    }
+
+    const availability = getTournamentPlayerUnavailableStatusStatement.get(
+      playerId,
+      playerId,
+      playerId,
+      playerId,
+      playerId,
+      playerId,
+      playerId,
+      playerId,
+      playerId,
+    );
+    if (availability?.unavailable_status) {
+      throw new Error(`${player.name} is not currently available for Tournament selection.`);
     }
 
     return {

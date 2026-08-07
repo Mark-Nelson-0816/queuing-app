@@ -10,17 +10,14 @@ export default function TournamentOptions({
   const generateDisabled = isGenerating || generationDisabled;
 
   return (
-    <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 space-y-6">
+    <section className="self-start rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 xl:sticky xl:top-0">
       <div>
         <h2 className="text-lg font-semibold text-[var(--text-h)]">
           Tournament Configuration
         </h2>
-        <p className="text-sm text-[var(--text)] mt-1">
-          Configure the tournament before selecting participants.
-        </p>
       </div>
 
-      <div>
+      <div className="mt-6">
         <label className="block text-sm font-medium mb-2">
           Match Type
         </label>
@@ -55,7 +52,7 @@ export default function TournamentOptions({
         </div>
       </div>
 
-      <div>
+      <div className="mt-6">
         <label className="block text-sm font-medium mb-2">
           Category
         </label>
@@ -113,7 +110,7 @@ export default function TournamentOptions({
         </div>
       </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3 text-sm text-[var(--text)] text-center">
+      <div className="mt-5 rounded-xl border border-[var(--primary)]/30 p-3 text-center text-sm text-[var(--text)]">
         {category === "mens" && "Men vs Men."}
         {category === "womens" && "Women vs Women."}
         {category === "mixed" && "1 Man + 1 Woman vs 1 Man + 1 Woman."}
@@ -121,19 +118,19 @@ export default function TournamentOptions({
       </div>
 
       {generationDisabled && (
-        <p className="text-sm text-center text-[var(--warning)]">
-          Finish the current tournament before generating another one.
+        <p className="mt-4 text-center text-sm text-[var(--warning)]">
+          Finish the current Tournament before generating another one.
         </p>
       )}
 
       <button
         type="button"
-        className="w-full py-3 rounded-xl bg-[var(--primary)] text-white font-semibold hover:bg-[var(--primary-hover)] transition disabled:opacity-50 disabled:cursor-not-allowed"
+        className="mt-4 w-full rounded-xl bg-[var(--primary)] py-3 font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
         onClick={onGenerate}
         disabled={generateDisabled}
       >
         {isGenerating ? "Generating..." : "Generate Matches"}
       </button>
-    </div>
+    </section>
   );
 }

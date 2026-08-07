@@ -228,6 +228,18 @@ try {
     /only include female players/,
   );
 
+  const busyMatchResult = db.prepare(`
+    INSERT INTO matches (player_one, player_two, status)
+    VALUES (?, ?, 'playing')
+  `).run(malePlayers[0].id, malePlayers[1].id);
+  assertFailure(
+    createRoundRobinTournament(malePlayers.slice(0, 2), "singles", "mens"),
+    /not currently available for Tournament selection/,
+  );
+  db.prepare("DELETE FROM matches WHERE id = ?").run(
+    Number(busyMatchResult.lastInsertRowid),
+  );
+
   for (const tableName of tournamentTableNames) {
     const rowCount = db.prepare(
       `SELECT COUNT(*) AS count FROM ${tableName}`,
