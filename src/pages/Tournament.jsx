@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import RegisteredPlayers from "../components/tournament/RegisteredPlayers";
 import TournamentOptions from "../components/tournament/TournamentOptions";
 import Matches from "../components/tournament/Matches";
@@ -22,6 +22,7 @@ export default function Tournament() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [startingMatchId, setStartingMatchId] = useState(null);
   const [savingMatchId, setSavingMatchId] = useState(null);
+  const generationLockRef = useRef(false);
   const startingMatchLockRef = useRef(false);
   const savingMatchLockRef = useRef(false);
 
@@ -85,8 +86,9 @@ export default function Tournament() {
 
   // Generate a complete Tournament from the selected players once per click.
   const handleGenerateTournament = async () => {
-    if (isGenerating) return;
+    if (generationLockRef.current) return;
 
+    generationLockRef.current = true;
     setIsGenerating(true);
     setError("");
     setNotice("");
@@ -109,12 +111,13 @@ export default function Tournament() {
     } catch (createError) {
       setError(getErrorMessage(createError, "Failed to create Tournament."));
     } finally {
+      generationLockRef.current = false;
       setIsGenerating(false);
     }
   };
 
   // Start one pending Tournament match on an available court.
-  const handleStartMatch = async (matchId, courtId) => {
+  const handleStartMatch = useCallback(async (matchId, courtId) => {
     if (startingMatchLockRef.current) {
       return { success: false, message: "A match is already being started." };
     }
@@ -146,7 +149,7 @@ export default function Tournament() {
       startingMatchLockRef.current = false;
       setStartingMatchId(null);
     }
-  };
+  }, []);
 
   // Change category and remove players with an incompatible gender.
   const handleCategoryChange = (nextCategory) => {
@@ -164,7 +167,7 @@ export default function Tournament() {
   };
 
   // Save one Tournament winner and apply the refreshed Tournament data.
-  const handleFinishMatch = async (matchId, winnerTeamId) => {
+  const handleFinishMatch = useCallback(async (matchId, winnerTeamId) => {
     if (savingMatchLockRef.current) return false;
 
     savingMatchLockRef.current = true;
@@ -193,7 +196,7 @@ export default function Tournament() {
       savingMatchLockRef.current = false;
       setSavingMatchId(null);
     }
-  };
+  }, []);
 
   // Provide zeroed summary values before a Tournament is loaded.
   const summary = tournamentData?.summary || {

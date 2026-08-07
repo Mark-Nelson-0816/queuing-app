@@ -7,8 +7,8 @@ import {
   validateTournamentPlayers,
 } from "./tournamentLogic.js";
 
-// Loads the canonical database values for one selected player.
-const getPlayerStatement = db.prepare(`
+// Loads all selected player profiles in one database query.
+const getSelectedPlayersStatement = db.prepare(`
   SELECT
     id,
     name,
@@ -19,80 +19,121 @@ const getPlayerStatement = db.prepare(`
     prefer_mixed,
     prefer_no_gender
   FROM players
-  WHERE id = ?
+  WHERE id IN (
+    SELECT CAST(value AS INTEGER)
+    FROM json_each(?)
+  )
 `);
 
-// Detects done, playing, or assigned players across every match source.
-const getTournamentPlayerUnavailableStatusStatement = db.prepare(`
-  SELECT CASE
-    WHEN EXISTS (
-      SELECT 1
-      FROM registered_players_today
-      WHERE player_id = ?
-        AND registered_date = CURRENT_DATE
-        AND (
-          is_done_today = 1
-          OR LOWER(status) IN ('done', 'finished')
-        )
-    ) THEN 'finished'
-    WHEN EXISTS (
-      SELECT 1
-      FROM rotation_match_players
-      JOIN rotation_matches
-        ON rotation_matches.id = rotation_match_players.rotation_match_id
-      WHERE rotation_match_players.player_id = ?
-        AND rotation_matches.status = 'playing'
-    ) OR EXISTS (
-      SELECT 1
-      FROM tournament_matches
-      JOIN tournament_teams AS team_a
-        ON team_a.id = tournament_matches.team_a_id
-      JOIN tournament_teams AS team_b
-        ON team_b.id = tournament_matches.team_b_id
-      WHERE tournament_matches.status = 'playing'
-        AND ? IN (
-          team_a.player_1_id,
-          team_a.player_2_id,
-          team_b.player_1_id,
-          team_b.player_2_id
-        )
-    ) OR EXISTS (
-      SELECT 1
-      FROM matches
-      LEFT JOIN match_players
-        ON match_players.match_id = matches.id
-        AND match_players.source = 'normal'
-      WHERE matches.status = 'playing'
-        AND (
-          matches.player_one = ?
-          OR matches.player_two = ?
-          OR match_players.player_id = ?
-        )
-    ) OR EXISTS (
-      SELECT 1
-      FROM registered_players_today
-      WHERE player_id = ?
-        AND registered_date = CURRENT_DATE
-        AND status = 'playing'
-        AND is_done_today = 0
-    ) THEN 'playing'
-    WHEN EXISTS (
-      SELECT 1
-      FROM rotation_match_players
-      JOIN rotation_matches
-        ON rotation_matches.id = rotation_match_players.rotation_match_id
-      WHERE rotation_match_players.player_id = ?
-        AND rotation_matches.status IN ('waiting', 'incomplete')
-    ) OR EXISTS (
-      SELECT 1
-      FROM registered_players_today
-      WHERE player_id = ?
-        AND registered_date = CURRENT_DATE
-        AND status = 'assigned'
-        AND is_done_today = 0
-    ) THEN 'assigned'
-    ELSE NULL
-  END AS unavailable_status
+// Resolves every selected player's strongest unavailable status in one pass.
+const getSelectedPlayerUnavailableStatusesStatement = db.prepare(`
+  WITH selected_ids AS (
+    SELECT CAST(value AS INTEGER) AS player_id
+    FROM json_each(?)
+  ),
+  unavailable_players AS (
+    SELECT player_id, 3 AS priority
+    FROM registered_players_today
+    WHERE registered_date = CURRENT_DATE
+      AND (is_done_today = 1 OR LOWER(status) IN ('done', 'finished'))
+
+    UNION ALL
+
+    SELECT rotation_match_players.player_id, 2
+    FROM rotation_match_players
+    JOIN rotation_matches
+      ON rotation_matches.id = rotation_match_players.rotation_match_id
+    WHERE rotation_matches.status = 'playing'
+
+    UNION ALL
+
+    SELECT team_a.player_1_id, 2
+    FROM tournament_matches
+    JOIN tournament_teams AS team_a
+      ON team_a.id = tournament_matches.team_a_id
+    WHERE tournament_matches.status = 'playing'
+
+    UNION ALL
+
+    SELECT team_a.player_2_id, 2
+    FROM tournament_matches
+    JOIN tournament_teams AS team_a
+      ON team_a.id = tournament_matches.team_a_id
+    WHERE tournament_matches.status = 'playing'
+
+    UNION ALL
+
+    SELECT team_b.player_1_id, 2
+    FROM tournament_matches
+    JOIN tournament_teams AS team_b
+      ON team_b.id = tournament_matches.team_b_id
+    WHERE tournament_matches.status = 'playing'
+
+    UNION ALL
+
+    SELECT team_b.player_2_id, 2
+    FROM tournament_matches
+    JOIN tournament_teams AS team_b
+      ON team_b.id = tournament_matches.team_b_id
+    WHERE tournament_matches.status = 'playing'
+
+    UNION ALL
+
+    SELECT player_one, 2
+    FROM matches
+    WHERE status = 'playing'
+
+    UNION ALL
+
+    SELECT player_two, 2
+    FROM matches
+    WHERE status = 'playing'
+
+    UNION ALL
+
+    SELECT match_players.player_id, 2
+    FROM match_players
+    JOIN matches
+      ON matches.id = match_players.match_id
+    WHERE matches.status = 'playing'
+      AND match_players.source = 'normal'
+
+    UNION ALL
+
+    SELECT player_id, 2
+    FROM registered_players_today
+    WHERE registered_date = CURRENT_DATE
+      AND status = 'playing'
+      AND is_done_today = 0
+
+    UNION ALL
+
+    SELECT rotation_match_players.player_id, 1
+    FROM rotation_match_players
+    JOIN rotation_matches
+      ON rotation_matches.id = rotation_match_players.rotation_match_id
+    WHERE rotation_matches.status IN ('waiting', 'incomplete')
+
+    UNION ALL
+
+    SELECT player_id, 1
+    FROM registered_players_today
+    WHERE registered_date = CURRENT_DATE
+      AND status = 'assigned'
+      AND is_done_today = 0
+  )
+  SELECT
+    unavailable_players.player_id,
+    CASE MAX(unavailable_players.priority)
+      WHEN 3 THEN 'finished'
+      WHEN 2 THEN 'playing'
+      ELSE 'assigned'
+    END AS unavailable_status
+  FROM unavailable_players
+  JOIN selected_ids
+    ON selected_ids.player_id = unavailable_players.player_id
+  WHERE unavailable_players.player_id IS NOT NULL
+  GROUP BY unavailable_players.player_id
 `);
 
 // Loads the base tournament record.
@@ -355,24 +396,25 @@ function resolveSelectedPlayers(selectedPlayers) {
     throw new Error("A player can only be selected once.");
   }
 
+  const serializedPlayerIds = JSON.stringify(playerIds);
+  const playerById = new Map(
+    getSelectedPlayersStatement.all(serializedPlayerIds).map((player) => (
+      [Number(player.id), player]
+    )),
+  );
+  const unavailableStatusByPlayerId = new Map(
+    getSelectedPlayerUnavailableStatusesStatement
+      .all(serializedPlayerIds)
+      .map((row) => [Number(row.player_id), row.unavailable_status]),
+  );
+
   return playerIds.map((playerId) => {
-    const player = getPlayerStatement.get(playerId);
+    const player = playerById.get(playerId);
     if (!player) {
       throw new Error("One or more selected players could not be found.");
     }
 
-    const availability = getTournamentPlayerUnavailableStatusStatement.get(
-      playerId,
-      playerId,
-      playerId,
-      playerId,
-      playerId,
-      playerId,
-      playerId,
-      playerId,
-      playerId,
-    );
-    if (availability?.unavailable_status) {
+    if (unavailableStatusByPlayerId.has(playerId)) {
       throw new Error(`${player.name} is not currently available for Tournament selection.`);
     }
 

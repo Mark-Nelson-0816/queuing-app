@@ -437,82 +437,292 @@ function getArrangements(group) {
   ];
 }
 
-// Builds every valid four-player doubles arrangement for the solver.
-function buildDoublesCandidates(players, category, lockPairs, random) {
-  const candidates = [];
-  const indexById = new Map(
-    players.map((player, index) => [Number(player.id), index]),
+// Creates one valid doubles candidate with its local balancing scores.
+function createDoublesCandidate(teamA, teamB, category, lockPairs, random) {
+  if (category === "mixed" && (!isMixedTeam(teamA) || !isMixedTeam(teamB))) {
+    return null;
+  }
+  if (!arrangementRespectsLocks(teamA, teamB, lockPairs)) return null;
+
+  const rankCompatibility = getDoublesRankCompatibility(teamA, teamB, lockPairs);
+  if (!rankCompatibility) return null;
+
+  const players = [...teamA, ...teamB];
+  const playerIds = new Set(players.map((player) => Number(player.id)));
+  const teamAStrength = teamA.reduce(
+    (total, player) => total + getRotationLevelValue(player.level),
+    0,
   );
+  const teamBStrength = teamB.reduce(
+    (total, player) => total + getRotationLevelValue(player.level),
+    0,
+  );
+  const balanceDifference = Math.abs(teamAStrength - teamBStrength);
 
-  for (let a = 0; a < players.length - 3; a += 1) {
-    for (let b = a + 1; b < players.length - 2; b += 1) {
-      for (let c = b + 1; c < players.length - 1; c += 1) {
-        for (let d = c + 1; d < players.length; d += 1) {
-          const group = [players[a], players[b], players[c], players[d]];
-          const groupIds = new Set(group.map((player) => Number(player.id)));
-          const hasPartialLock = lockPairs.some((lock) => (
-            groupIds.has(lock.player1Id) !== groupIds.has(lock.player2Id)
-          ));
-          if (hasPartialLock) continue;
+  return {
+    categoryFallbackCount: countCategoryFallbacks(players, category),
+    exact: rankCompatibility.exact,
+    fairnessValue: players.reduce(
+      (total, player) => total + fairnessTime(player),
+      0,
+    ),
+    balanceDifference,
+    teammateRepeatCount:
+      teammateRepeatCount(teamA) + teammateRepeatCount(teamB),
+    opponentRepeatCount: opponentRepeatCount(teamA, teamB),
+    randomScore: random(),
+    match: {
+      teamA,
+      teamB,
+      teamAStrength,
+      teamBStrength,
+      balanceDifference,
+      warnings: rankCompatibility.warnings,
+      lockIds: lockPairs
+        .filter((lock) => (
+          playerIds.has(lock.player1Id) && playerIds.has(lock.player2Id)
+        ))
+        .map((lock) => lock.id),
+    },
+  };
+}
 
-          for (const [teamA, teamB] of getArrangements(group)) {
-            if (category === "mixed" && (!isMixedTeam(teamA) || !isMixedTeam(teamB))) {
-              continue;
-            }
-            if (!arrangementRespectsLocks(teamA, teamB, lockPairs)) continue;
+// Prefers exact categories/ranks, longer waits, balance, and fewer repeats.
+function compareDoublesCandidates(first, second) {
+  if (!second) return 1;
+  return second.categoryFallbackCount - first.categoryFallbackCount
+    || Number(first.exact) - Number(second.exact)
+    || second.fairnessValue - first.fairnessValue
+    || second.balanceDifference - first.balanceDifference
+    || second.teammateRepeatCount - first.teammateRepeatCount
+    || second.opponentRepeatCount - first.opponentRepeatCount
+    || second.randomScore - first.randomScore;
+}
 
-            const rankCompatibility = getDoublesRankCompatibility(
-              teamA,
-              teamB,
-              lockPairs,
-            );
-            if (!rankCompatibility) continue;
+// Chooses the best of the three team arrangements for four fixed players.
+function getBestDoublesArrangement(group, category, lockPairs, random) {
+  let best = null;
+  for (const [teamA, teamB] of getArrangements(group)) {
+    const candidate = createDoublesCandidate(
+      teamA,
+      teamB,
+      category,
+      lockPairs,
+      random,
+    );
+    if (candidate && compareDoublesCandidates(candidate, best) > 0) {
+      best = candidate;
+    }
+  }
+  return best;
+}
 
-            const teamAStrength = teamA.reduce(
-              (total, player) => total + getRotationLevelValue(player.level),
-              0,
-            );
-            const teamBStrength = teamB.reduce(
-              (total, player) => total + getRotationLevelValue(player.level),
-              0,
-            );
-            const mask = group.reduce(
-              (value, player) => value | (1n << BigInt(indexById.get(Number(player.id)))),
-              0n,
-            );
-            const lockIds = lockPairs
-              .filter((lock) => groupIds.has(lock.player1Id))
-              .map((lock) => lock.id);
+// Prioritizes strict-rank players, exact categories, then queue fairness.
+function compareDoublesPlayerPriority(first, second, category) {
+  const firstStrict = normalizeRankPreference(first.rankPreference) === "same_rank";
+  const secondStrict = normalizeRankPreference(second.rankPreference) === "same_rank";
+  return Number(secondStrict) - Number(firstStrict)
+    || (getCategoryPreferencePriority(first, category) || 0)
+      - (getCategoryPreferencePriority(second, category) || 0)
+    || compareFairness(first, second);
+}
 
-            candidates.push({
-              mask,
-              categoryFallbackCount: countCategoryFallbacks(group, category),
-              exact: rankCompatibility.exact,
-              fairnessScore: group.reduce(
-                (score, player) => score + (players.length - indexById.get(Number(player.id))),
-                0,
-              ),
-              balanceDifference: Math.abs(teamAStrength - teamBStrength),
-              teammateRepeatCount:
-                teammateRepeatCount(teamA) + teammateRepeatCount(teamB),
-              opponentRepeatCount: opponentRepeatCount(teamA, teamB),
-              randomScore: random(),
-              match: {
-                teamA,
-                teamB,
-                teamAStrength,
-                teamBStrength,
-                balanceDifference: Math.abs(teamAStrength - teamBStrength),
-                warnings: rankCompatibility.warnings,
-                lockIds,
-              },
-            });
-          }
+// Generates matches containing locked teams using bounded local pair checks.
+function generateLockedDoublesMatches(players, lockPairs, category, random) {
+  const playerById = new Map(players.map((player) => [Number(player.id), player]));
+  const lockedPlayerIds = new Set();
+  const lockedTeams = [];
+
+  for (const lock of lockPairs) {
+    const first = playerById.get(lock.player1Id);
+    const second = playerById.get(lock.player2Id);
+    if (first) lockedPlayerIds.add(lock.player1Id);
+    if (second) lockedPlayerIds.add(lock.player2Id);
+    if (first && second) lockedTeams.push({ lockId: lock.id, players: [first, second] });
+  }
+
+  const freePlayers = players.filter((player) => !lockedPlayerIds.has(Number(player.id)));
+  const availableFreeIds = new Set(freePlayers.map((player) => Number(player.id)));
+  const usedLockedTeamIndexes = new Set();
+  const matches = [];
+
+  for (let index = 0; index < lockedTeams.length; index += 1) {
+    if (usedLockedTeamIndexes.has(index)) continue;
+    const lockedTeam = lockedTeams[index];
+    let best = null;
+    let bestResource = null;
+
+    for (let otherIndex = index + 1; otherIndex < lockedTeams.length; otherIndex += 1) {
+      if (usedLockedTeamIndexes.has(otherIndex)) continue;
+      const candidate = createDoublesCandidate(
+        lockedTeam.players,
+        lockedTeams[otherIndex].players,
+        category,
+        lockPairs,
+        random,
+      );
+      if (candidate && compareDoublesCandidates(candidate, best) > 0) {
+        best = candidate;
+        bestResource = { lockedTeamIndex: otherIndex, freePlayerIds: [] };
+      }
+    }
+
+    const availableFreePlayers = freePlayers.filter((player) => (
+      availableFreeIds.has(Number(player.id))
+    ));
+    for (let firstIndex = 0; firstIndex < availableFreePlayers.length - 1; firstIndex += 1) {
+      for (let secondIndex = firstIndex + 1; secondIndex < availableFreePlayers.length; secondIndex += 1) {
+        const opponentTeam = [
+          availableFreePlayers[firstIndex],
+          availableFreePlayers[secondIndex],
+        ];
+        const candidate = createDoublesCandidate(
+          lockedTeam.players,
+          opponentTeam,
+          category,
+          lockPairs,
+          random,
+        );
+        if (candidate && compareDoublesCandidates(candidate, best) > 0) {
+          best = candidate;
+          bestResource = {
+            lockedTeamIndex: null,
+            freePlayerIds: opponentTeam.map((player) => Number(player.id)),
+          };
         }
       }
     }
+
+    if (!best || !bestResource) continue;
+    matches.push(best.match);
+    usedLockedTeamIndexes.add(index);
+    if (bestResource.lockedTeamIndex !== null) {
+      usedLockedTeamIndexes.add(bestResource.lockedTeamIndex);
+    }
+    bestResource.freePlayerIds.forEach((playerId) => availableFreeIds.delete(playerId));
   }
-  return candidates;
+
+  return {
+    matches,
+    remainingPlayers: freePlayers.filter((player) => (
+      availableFreeIds.has(Number(player.id))
+    )),
+  };
+}
+
+// Builds exact-rank groups directly from the four supported level buckets.
+function generateExactRankDoublesMatches(players, lockPairs, category, random) {
+  const matchedIds = new Set();
+  const matches = [];
+
+  for (const level of Object.keys(LEVEL_VALUES)) {
+    const levelPlayers = players
+      .filter((player) => normalizeRotationLevel(player.level) === level)
+      .sort((first, second) => compareDoublesPlayerPriority(first, second, category));
+
+    if (category === "mixed") {
+      const males = levelPlayers.filter((player) => player.gender === "male");
+      const females = levelPlayers.filter((player) => player.gender === "female");
+      while (males.length >= 2 && females.length >= 2) {
+        const group = [males[0], males[1], females[0], females[1]];
+        const best = getBestDoublesArrangement(group, category, lockPairs, random);
+        if (!best) break;
+        males.splice(0, 2);
+        females.splice(0, 2);
+        group.forEach((player) => matchedIds.add(Number(player.id)));
+        matches.push(best.match);
+      }
+      continue;
+    }
+
+    while (levelPlayers.length >= 4) {
+      const group = levelPlayers.slice(0, 4);
+      const best = getBestDoublesArrangement(group, category, lockPairs, random);
+      if (!best) break;
+      levelPlayers.splice(0, 4);
+      group.forEach((player) => matchedIds.add(Number(player.id)));
+      matches.push(best.match);
+    }
+  }
+
+  return { matches, matchedIds };
+}
+
+// Finds a four-player adjacent-rank group around one fairness-ordered seed.
+function getAdjacentDoublesCandidate(
+  seed,
+  orderedPlayers,
+  availableIds,
+  category,
+  lockPairs,
+  random,
+) {
+  const seedLevel = getRotationLevelValue(seed.level);
+  const windows = [];
+  if (seedLevel > 1) windows.push([seedLevel - 1, seedLevel]);
+  if (seedLevel < 4) windows.push([seedLevel, seedLevel + 1]);
+  let best = null;
+
+  for (const [minimumLevel, maximumLevel] of windows) {
+    const candidates = orderedPlayers.filter((player) => {
+      const playerId = Number(player.id);
+      const level = getRotationLevelValue(player.level);
+      return playerId !== Number(seed.id)
+        && availableIds.has(playerId)
+        && level >= minimumLevel
+        && level <= maximumLevel;
+    });
+    let group;
+    if (category === "mixed") {
+      const maleNeeded = seed.gender === "male" ? 1 : 2;
+      const femaleNeeded = seed.gender === "female" ? 1 : 2;
+      const males = candidates.filter((player) => player.gender === "male").slice(0, maleNeeded);
+      const females = candidates.filter((player) => player.gender === "female").slice(0, femaleNeeded);
+      if (males.length !== maleNeeded || females.length !== femaleNeeded) continue;
+      group = [seed, ...males, ...females];
+    } else {
+      if (candidates.length < 3) continue;
+      group = [seed, ...candidates.slice(0, 3)];
+    }
+
+    const candidate = getBestDoublesArrangement(group, category, lockPairs, random);
+    if (candidate && compareDoublesCandidates(candidate, best) > 0) {
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
+// Uses adjacent-rank leftovers without exploring global match combinations.
+function generateAdjacentRankDoublesMatches(players, lockPairs, category, random) {
+  const orderedPlayers = players
+    .filter((player) => normalizeRankPreference(player.rankPreference) === "adjacent_rank")
+    .sort((first, second) => compareDoublesPlayerPriority(first, second, category));
+  const availableIds = new Set(orderedPlayers.map((player) => Number(player.id)));
+  const matches = [];
+
+  for (const seed of orderedPlayers) {
+    if (!availableIds.has(Number(seed.id))) continue;
+    const best = getAdjacentDoublesCandidate(
+      seed,
+      orderedPlayers,
+      availableIds,
+      category,
+      lockPairs,
+      random,
+    );
+    if (!best) continue;
+    const matchPlayers = [...best.match.teamA, ...best.match.teamB];
+    matchPlayers.forEach((player) => availableIds.delete(Number(player.id)));
+    matches.push(best.match);
+  }
+
+  return { matches, matchedIds: new Set(
+    matches.flatMap((match) => (
+      [...match.teamA, ...match.teamB].map((player) => Number(player.id))
+    )),
+  ) };
 }
 
 // Explains why a doubles player could not be placed in a complete match.
@@ -533,7 +743,7 @@ function doublesUnmatchedReason(player, selectedPlayers, lockPairs, category) {
   return "Doubles requires four compatible players per match.";
 }
 
-// Finds the best non-overlapping set of balanced doubles matches.
+// Builds a fair doubles batch with bounded bucket and local candidate checks.
 export function generateDoublesMatches(
   players,
   locks = [],
@@ -542,58 +752,41 @@ export function generateDoublesMatches(
 ) {
   const orderedPlayers = [...players].sort(compareFairness);
   const lockPairs = buildLockPairs(locks);
-  const candidates = buildDoublesCandidates(
+  const lockedResult = generateLockedDoublesMatches(
     orderedPlayers,
-    category,
     lockPairs,
+    category,
     random,
   );
-  const candidatesByIndex = new Map(
-    orderedPlayers.map((_, index) => [index, []]),
+  const exactResult = generateExactRankDoublesMatches(
+    lockedResult.remainingPlayers,
+    lockPairs,
+    category,
+    random,
   );
-  for (const candidate of candidates) {
-    for (let index = 0; index < orderedPlayers.length; index += 1) {
-      if ((candidate.mask & (1n << BigInt(index))) !== 0n) {
-        candidatesByIndex.get(index).push(candidate);
-      }
-    }
-  }
-
-  const memo = new Map();
-  // Uses memoized search to choose the best non-overlapping candidates.
-  function solve(mask) {
-    if (mask === 0n) return createEmptySolution();
-    const memoKey = mask.toString();
-    if (memo.has(memoKey)) return memo.get(memoKey);
-
-    let firstIndex = 0;
-    while ((mask & (1n << BigInt(firstIndex))) === 0n) firstIndex += 1;
-    let best = solve(mask & ~(1n << BigInt(firstIndex)));
-
-    for (const candidate of candidatesByIndex.get(firstIndex)) {
-      if ((mask & candidate.mask) !== candidate.mask) continue;
-      const proposed = addCandidateToSolution(
-        candidate,
-        solve(mask & ~candidate.mask),
-      );
-      if (compareSolutions(proposed, best) > 0) best = proposed;
-    }
-
-    memo.set(memoKey, best);
-    return best;
-  }
-
-  const fullMask = (1n << BigInt(orderedPlayers.length)) - 1n;
-  const solution = solve(fullMask);
+  const adjacentPlayers = lockedResult.remainingPlayers.filter((player) => (
+    !exactResult.matchedIds.has(Number(player.id))
+  ));
+  const adjacentResult = generateAdjacentRankDoublesMatches(
+    adjacentPlayers,
+    lockPairs,
+    category,
+    random,
+  );
+  const matches = [
+    ...lockedResult.matches,
+    ...exactResult.matches,
+    ...adjacentResult.matches,
+  ];
   const matchedIds = new Set(
-    solution.matches.flatMap((match) => [
+    matches.flatMap((match) => [
       ...match.teamA.map((player) => Number(player.id)),
       ...match.teamB.map((player) => Number(player.id)),
     ]),
   );
 
   return {
-    matches: solution.matches.sort((first, second) => (
+    matches: matches.sort((first, second) => (
       Math.min(...[...first.teamA, ...first.teamB].map(fairnessTime))
       - Math.min(...[...second.teamA, ...second.teamB].map(fairnessTime))
     )),

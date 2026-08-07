@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { getPagination } from "../src/utils/pagination.js";
+import { comparePlayerLevels } from "../src/utils/playerLevel.js";
 import {
   buildRotationPreview,
+  buildRotationSelectionStatus,
   countRankPreferences,
   getPlayerConfigurationReason,
 } from "../src/utils/rotationUi.js";
@@ -27,6 +29,17 @@ const players = Array.from({ length: 5 }, (_, index) => ({
   teammateCounts: {},
   opponentCounts: {},
 }));
+
+const unsortedLevels = ["Advanced", "upper_intermediate", "Beginner", "Intermediate"];
+assert.deepEqual(
+  [...unsortedLevels].sort((first, second) => comparePlayerLevels(first, second, "asc")),
+  ["Beginner", "Intermediate", "upper_intermediate", "Advanced"],
+);
+assert.deepEqual(
+  [...unsortedLevels].sort((first, second) => comparePlayerLevels(first, second, "desc")),
+  ["Advanced", "upper_intermediate", "Intermediate", "Beginner"],
+);
+assert.equal(comparePlayerLevels("unexpected", "beginner", "asc") > 0, true);
 
 assert.deepEqual(getPagination(138, 1, 25), {
   currentPage: 1,
@@ -67,6 +80,27 @@ const completeDoubles = buildRotationPreview({
 assert.equal(completeDoubles.canGenerate, true);
 assert.equal(completeDoubles.matches.length, 1);
 assert.equal(completeDoubles.unmatchedPlayers.length, 0);
+
+for (const playerCount of [10, 25, 50, 100]) {
+  const selectionStatus = buildRotationSelectionStatus({
+    selectedPlayers: Array.from({ length: playerCount }, (_, index) => ({
+      id: index + 1,
+      gender: index % 2 === 0 ? "male" : "female",
+    })),
+    matchType: "doubles",
+    category: "no_gender",
+  });
+  assert.equal(selectionStatus.canGenerate, true);
+  assert.equal(selectionStatus.estimatedMatches, Math.floor(playerCount / 4));
+}
+
+const invalidMixedStatus = buildRotationSelectionStatus({
+  selectedPlayers: players.slice(0, 4),
+  matchType: "doubles",
+  category: "mixed",
+});
+assert.equal(invalidMixedStatus.canGenerate, false);
+assert.equal(invalidMixedStatus.estimatedMatches, 0);
 
 const extraPlayer = buildRotationPreview({
   players,

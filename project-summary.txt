@@ -314,8 +314,6 @@ Settings are saved immediately. The Rotation page keeps its current selection
 and configuration in sessionStorage while navigating during the renderer
 session, so that draft takes priority over the default match type.
 
-Backup, restore, export, queue-only reset, archive, and automatic Tournament
-generation controls are visibly marked Coming Soon and do not change data.
 Winner and destructive confirmations currently remain always enabled.
 
 Reset Application Data requires confirmation and runs atomically. It clears

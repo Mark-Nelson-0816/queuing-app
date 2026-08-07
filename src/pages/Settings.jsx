@@ -1,9 +1,6 @@
 import {
-  Archive,
   Check,
   Database,
-  Download,
-  FileText,
   Info,
   LayoutGrid,
   ListOrdered,
@@ -12,11 +9,9 @@ import {
   Palette,
   Play,
   RotateCcw,
-  Shield,
   SlidersHorizontal,
   Sun,
   Trophy,
-  Upload,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -153,22 +148,6 @@ function Toggle({ checked, onChange, label, hint }) {
       >
         <span className={`h-4 w-4 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
       </button>
-    </div>
-  );
-}
-
-// Displays a disabled future setting without implying it is active.
-function ComingSoonRow({ label, hint, icon: Icon = Shield }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-3 opacity-60">
-      <div className="flex min-w-0 items-start gap-3">
-        <Icon className="mt-0.5 shrink-0 text-[var(--text)]" size={16} />
-        <div>
-          <p className="text-sm font-medium text-[var(--text-h)]">{label}</p>
-          {hint && <p className="mt-0.5 text-xs text-[var(--text)]">{hint}</p>}
-        </div>
-      </div>
-      <span className="shrink-0 rounded-full bg-[var(--surface-hover)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Coming Soon</span>
     </div>
   );
 }
@@ -354,8 +333,6 @@ export default function Settings() {
           <div className="divide-y divide-[var(--border)]">
             <SegmentedControl label="Default Match Type" hint="Used when Rotation Queue has no saved session draft." value={settings.defaultMatchType} options={[{ value: "singles", label: "Singles" }, { value: "doubles", label: "Doubles" }]} onChange={(value) => handleSettingChange("defaultMatchType", value)} />
             <Toggle checked={settings.autoRequeue !== "false"} onChange={(value) => handleSettingChange("autoRequeue", String(value))} label="Auto Requeue Players" hint="Return players to availability after a completed Rotation match." />
-            <ComingSoonRow label="Confirm Before Ending Match" hint="Confirmation is currently always shown." />
-            <ComingSoonRow label="Confirm Before Removing Player" hint="Player removal confirmation is currently always shown." />
           </div>
         </Card>
 
@@ -364,23 +341,11 @@ export default function Settings() {
             <SegmentedControl label="Default Match Type" value={settings.defaultTournamentMatchType} options={[{ value: "singles", label: "Singles" }, { value: "doubles", label: "Doubles" }]} onChange={handleTournamentMatchType} />
             <SegmentedControl label="Default Category" value={settings.defaultTournamentCategory} options={[{ value: "mens", label: "Men's" }, { value: "womens", label: "Women's" }, { value: "mixed", label: "Mixed", disabled: settings.defaultTournamentMatchType === "singles" }, { value: "no_gender", label: "No Gender" }]} onChange={(value) => handleSettingChange("defaultTournamentCategory", value)} />
             <div className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-medium text-[var(--text-h)]">Shuffle Players Before Team Creation</p><p className="mt-0.5 text-xs text-[var(--text)]">Built into the current Tournament team generator.</p></div><span className="rounded-full bg-[var(--success-light)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--success)]">Always On</span></div>
-            <ComingSoonRow label="Auto Generate Teams" hint="Tournament generation still requires an operator action." />
           </div>
         </Card>
 
-        <Card title="Player Management" description="Session cleanup and history utilities." icon={Users}>
-          <div className="divide-y divide-[var(--border)]">
-            <ComingSoonRow label="Clear Today's Registered Players" hint="Players and statistics are unchanged." icon={UserCheck} />
-            <ComingSoonRow label="Reset Today's Queue" hint="No queue records are changed from this page." icon={RotateCcw} />
-            <ComingSoonRow label="Archive Finished Matches" hint="Finished match history remains available." icon={Archive} />
-          </div>
-        </Card>
-
-        <Card title="Database Management" description="Backup, restore, export, or reset local data." icon={Database}>
-          <div className="divide-y divide-[var(--border)]">
-            <ComingSoonRow label="Backup Database" icon={Download} />
-            <ComingSoonRow label="Restore Database" icon={Upload} />
-            <ComingSoonRow label="Export Player Profiles" icon={FileText} />
+        <Card title="Database Management" description="Reset local application data." icon={Database}>
+          <div>
             <div className="flex items-center justify-between gap-4 py-3">
               <div><p className="text-sm font-medium text-[var(--text-h)]">Reset Application Data</p><p className="mt-0.5 text-xs text-[var(--text)]">Deletes players, matches, tournaments, queue data, and courts before restoring the default courts.</p></div>
               <button type="button" onClick={() => setShowResetConfirm(true)} className="shrink-0 rounded-xl bg-[var(--danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Reset Data</button>
@@ -388,7 +353,7 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card title="About" description="Application, runtime, and local database information." icon={Info}>
+        <Card title="About" description="Application, runtime, and local database information." icon={Info} className="xl:col-span-2">
           <div className="mb-4 flex items-center gap-3">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)] text-lg font-bold text-white">BQ</span>
             <div><p className="font-semibold text-[var(--text-h)]">{appInfo.applicationName || "Badminton Queue"}</p><p className="text-xs text-[var(--text)]">Queue, court, player, and Tournament management.</p></div>

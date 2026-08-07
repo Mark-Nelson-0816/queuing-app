@@ -30,6 +30,54 @@ export function playerFitsConfiguration(player, matchType, category) {
   return !getPlayerConfigurationReason(player, matchType, category);
 }
 
+// Checks lightweight selection readiness without running the match generator.
+export function buildRotationSelectionStatus({ selectedPlayers, matchType, category }) {
+  const required = matchType === "doubles" ? 4 : 2;
+  const counts = selectedPlayers.reduce((summary, player) => {
+    if (player.gender === "male") summary.male += 1;
+    if (player.gender === "female") summary.female += 1;
+    return summary;
+  }, { male: 0, female: 0 });
+
+  if (selectedPlayers.length === 0) {
+    return {
+      canGenerate: false,
+      estimatedMatches: 0,
+      tone: "blocked",
+      message: `Select at least ${required} available players to build a ${matchType} match.`,
+    };
+  }
+  if (selectedPlayers.length < required) {
+    const remaining = required - selectedPlayers.length;
+    return {
+      canGenerate: false,
+      estimatedMatches: 0,
+      tone: "blocked",
+      message: `Need ${remaining} more compatible player${remaining === 1 ? "" : "s"} for ${matchType}.`,
+    };
+  }
+
+  const estimatedMatches = category === "mixed"
+    ? Math.min(Math.floor(counts.male / 2), Math.floor(counts.female / 2))
+    : Math.floor(selectedPlayers.length / required);
+  if (estimatedMatches === 0) {
+    return {
+      canGenerate: false,
+      estimatedMatches: 0,
+      tone: "blocked",
+      message: "Mixed doubles requires at least two male and two female players.",
+    };
+  }
+
+  const placedPlayerEstimate = estimatedMatches * required;
+  return {
+    canGenerate: true,
+    estimatedMatches,
+    tone: placedPlayerEstimate < selectedPlayers.length ? "attention" : "ready",
+    message: `Ready to generate up to ${estimatedMatches} match${estimatedMatches === 1 ? "" : "es"}. Compatibility is checked when Generate Matches is clicked.`,
+  };
+}
+
 // Builds the same match preview used by saved Rotation generation.
 export function buildRotationPreview({
   players,

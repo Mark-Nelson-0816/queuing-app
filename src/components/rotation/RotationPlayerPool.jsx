@@ -1,10 +1,10 @@
 import { AlertTriangle, CheckCircle2, Link2, Search, Settings2, Users, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import Modal from "../Modal";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
 import { getLevelClasses, getLevelLabel, normalizePlayerLevel } from "../../utils/playerLevel";
-import { buildRotationPreview, getPlayerConfigurationReason } from "../../utils/rotationUi";
+import { buildRotationSelectionStatus, getPlayerConfigurationReason } from "../../utils/rotationUi";
 
 const LEVELS = [
   ["beginner", "Beginner"],
@@ -35,25 +35,54 @@ function isDoneForToday(player) {
   return player.isDoneToday || player.status === "done";
 }
 
-// Displays one team in the generated match preview.
-function PreviewTeam({ label, players, tone }) {
-  const background = tone === "primary"
-    ? "bg-[var(--primary-light)]/50"
-    : "bg-[var(--warning-light)]/50";
+// Displays one selectable Rotation player without rerendering unchanged rows.
+const RotationPlayerRow = memo(function RotationPlayerRow({
+  player,
+  reason,
+  selected,
+  showGender,
+  onToggle,
+  onOpenSettings,
+}) {
+  const badge = getStatusBadge(player, reason);
   return (
-    <div className={`min-w-0 rounded-xl p-3 ${background}`}>
-      <p className={`text-[10px] font-semibold uppercase tracking-wider ${tone === "primary" ? "text-[var(--primary)]" : "text-[var(--warning)]"}`}>{label}</p>
-      <div className="mt-1.5 space-y-1.5">
-        {players.map((player) => (
-          <div key={player.id} className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate text-xs font-semibold text-[var(--text-h)]">{player.name}</span>
-            <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${getLevelClasses(player.level)}`}>{getLevelLabel(player.level)}</span>
-          </div>
-        ))}
+    <div
+      title={reason || undefined}
+      onClick={(event) => {
+        if (reason || event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
+        onToggle(player.id);
+      }}
+      className={`flex items-center gap-3 border-l-4 px-4 py-2.5 transition-colors duration-150 ${selected ? "border-l-[var(--primary)] bg-[var(--primary-light)]/70" : "border-l-transparent hover:bg-[var(--surface-hover)]/70"} ${reason ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        disabled={Boolean(reason)}
+        onClick={(event) => event.stopPropagation()}
+        onChange={() => onToggle(player.id)}
+        aria-label={`Select ${player.name}`}
+      />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name.toUpperCase()}</span>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{getLevelLabel(player.level)}</span>
+        {showGender && <span className="text-xs capitalize text-[var(--text)]">{player.gender}</span>}
+        {player.lockedTeammateName && <span title={`Locked with ${player.lockedTeammateName}`} className="text-purple-700"><Link2 size={13} /></span>}
       </div>
+      <span title={reason || undefined} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badge.classes}`}>{badge.label}</span>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenSettings(player.id);
+        }}
+        title="Player match settings"
+        className="rounded-lg p-2 text-[var(--text)] hover:bg-[var(--surface-hover)]"
+      >
+        <Settings2 size={15} />
+      </button>
     </div>
   );
-}
+});
 
 // Manages Rotation configuration, player selection, locks, and preview.
 export default function RotationPlayerPool({
@@ -89,72 +118,112 @@ export default function RotationPlayerPool({
   const selectedPlayers = useMemo(() => players.filter((player) => selectedIdSet.has(player.id)), [players, selectedIdSet]);
   // Hide players who are finished for today from matchmaking selection.
   const visiblePlayers = useMemo(() => players.filter((player) => !isDoneForToday(player)), [players]);
-  const preview = useMemo(() => buildRotationPreview({ players, selectedPlayerIds, locks, matchType, category }), [category, locks, matchType, players, selectedPlayerIds]);
+  const playerReasonById = useMemo(() => new Map(players.map((player) => [
+    player.id,
+    getPlayerConfigurationReason(player, matchType, category),
+  ])), [category, matchType, players]);
 
-  const maleCount = selectedPlayers.filter((player) => player.gender === "male").length;
-  const femaleCount = selectedPlayers.filter((player) => player.gender === "female").length;
-  const selectedLockIds = [...new Set(selectedPlayers.map((player) => player.lock?.id).filter(Boolean))];
-  const selectedLocks = locks.filter((lock) => selectedLockIds.includes(lock.id));
-  const lockCandidates = selectedPlayers.filter((player) => player.eligible && !player.lock);
+  // Gather selection counts, locks, and lock candidates in one pass.
+  const selectionDetails = useMemo(() => selectedPlayers.reduce((details, player) => {
+    if (player.gender === "male") details.maleCount += 1;
+    if (player.gender === "female") details.femaleCount += 1;
+    if (player.lock?.id) details.lockIds.add(player.lock.id);
+    if (player.eligible && !player.lock) details.lockCandidates.push(player);
+    return details;
+  }, {
+    maleCount: 0,
+    femaleCount: 0,
+    lockIds: new Set(),
+    lockCandidates: [],
+  }), [selectedPlayers]);
+  const selectedLocks = useMemo(
+    () => locks.filter((lock) => selectionDetails.lockIds.has(lock.id)),
+    [locks, selectionDetails],
+  );
+  const preview = useMemo(() => buildRotationSelectionStatus({
+    selectedPlayers,
+    matchType,
+    category,
+  }), [category, matchType, selectedPlayers]);
 
   // Count player states without removing done players from the summary.
   const availability = useMemo(() => players.reduce((summary, player) => {
     if (isDoneForToday(player)) summary.done += 1;
-    const reason = getPlayerConfigurationReason(player, matchType, category);
+    const reason = playerReasonById.get(player.id);
     if (!reason) summary.available += 1;
     else if (player.eligible) summary.categoryBlocked += 1;
     if (player.status === "playing") summary.playing += 1;
     if (player.status === "assigned") summary.assigned += 1;
     return summary;
-  }, { available: 0, categoryBlocked: 0, playing: 0, assigned: 0, done: 0 }), [category, matchType, players]);
+  }, { available: 0, categoryBlocked: 0, playing: 0, assigned: 0, done: 0 }), [playerReasonById, players]);
 
   // Filter and sort visible players for the current configuration.
   const filteredPlayers = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = visiblePlayers.filter((player) => {
-      const reason = getPlayerConfigurationReason(player, matchType, category);
+      const reason = playerReasonById.get(player.id);
       return (!query || player.name.toLowerCase().includes(query))
         && (levelFilter === "all" || normalizePlayerLevel(player.level) === levelFilter)
         && (genderFilter === "all" || player.gender === genderFilter)
         && (availabilityFilter === "all" || (availabilityFilter === "available" ? !reason : Boolean(reason)));
     });
     return filtered.sort((first, second) => {
-      const firstReason = getPlayerConfigurationReason(first, matchType, category);
-      const secondReason = getPlayerConfigurationReason(second, matchType, category);
+      const firstReason = playerReasonById.get(first.id);
+      const secondReason = playerReasonById.get(second.id);
       return Number(Boolean(firstReason)) - Number(Boolean(secondReason)) || first.name.localeCompare(second.name);
     });
-  }, [availabilityFilter, category, genderFilter, levelFilter, matchType, search, visiblePlayers]);
+  }, [availabilityFilter, genderFilter, levelFilter, playerReasonById, search, visiblePlayers]);
 
   // Limit filtered players to the current page.
-  const pagination = getPagination(filteredPlayers.length, page, pageSize);
-  const pagedPlayers = filteredPlayers.slice(pagination.startIndex, pagination.endIndex);
-  const selectablePagePlayers = pagedPlayers.filter((player) => !getPlayerConfigurationReason(player, matchType, category));
+  const pagination = useMemo(
+    () => getPagination(filteredPlayers.length, page, pageSize),
+    [filteredPlayers.length, page, pageSize],
+  );
+  const pagedPlayers = useMemo(
+    () => filteredPlayers.slice(pagination.startIndex, pagination.endIndex),
+    [filteredPlayers, pagination.endIndex, pagination.startIndex],
+  );
+  const pageRows = useMemo(() => pagedPlayers.map((player) => ({
+    player,
+    reason: playerReasonById.get(player.id),
+  })), [pagedPlayers, playerReasonById]);
+  const selectablePagePlayerIds = useMemo(
+    () => pageRows.filter((row) => !row.reason).map((row) => row.player.id),
+    [pageRows],
+  );
+  const selectablePagePlayers = useMemo(
+    () => pageRows.filter((row) => !row.reason).map((row) => row.player),
+    [pageRows],
+  );
   const allPageSelected = selectablePagePlayers.length > 0 && selectablePagePlayers.every((player) => selectedIdSet.has(player.id));
-  const primaryPreview = preview.matches[0] || null;
-  const previewWarnings = [...new Set([...preview.warnings, ...(primaryPreview?.warnings || [])])];
-  const preferencePlayer = players.find((player) => player.id === preferencePlayerId) || null;
+  const preferencePlayer = useMemo(
+    () => players.find((player) => player.id === preferencePlayerId) || null,
+    [players, preferencePlayerId],
+  );
 
   // Toggle one player without losing selections on other pages.
-  const togglePlayer = (playerId) => {
-    const next = new Set(selectedIdSet);
-    if (next.has(playerId)) next.delete(playerId);
-    else next.add(playerId);
-    onSelectionChange([...next]);
-  };
-  // Toggle a row unless an interactive child handled the click.
-  const handlePlayerRowClick = (event, playerId, disabled) => {
-    if (disabled || event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
-    togglePlayer(playerId);
-  };
-  // Select or clear every eligible player on the current page.
-  const toggleSelectPage = () => {
-    const next = new Set(selectedIdSet);
-    selectablePagePlayers.forEach((player) => {
-      if (allPageSelected) next.delete(player.id);
-      else next.add(player.id);
+  const togglePlayer = useCallback((playerId) => {
+    onSelectionChange((current) => {
+      const next = new Set(current.map(Number));
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return [...next];
     });
-    onSelectionChange([...next]);
-  };
+  }, [onSelectionChange]);
+  const openPlayerSettings = useCallback((playerId) => {
+    setPreferencePlayerId(playerId);
+  }, []);
+  // Select or clear every eligible player on the current page.
+  const toggleSelectPage = useCallback(() => {
+    onSelectionChange((current) => {
+      const next = new Set(current.map(Number));
+      selectablePagePlayerIds.forEach((playerId) => {
+        if (allPageSelected) next.delete(playerId);
+        else next.add(playerId);
+      });
+      return [...next];
+    });
+  }, [allPageSelected, onSelectionChange, selectablePagePlayerIds]);
   // Apply a player filter and return to the first page.
   const updateFilter = (setter) => (event) => {
     setter(event.target.value);
@@ -208,12 +277,16 @@ export default function RotationPlayerPool({
               <p className="text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">Match Preview</p>
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ${readinessClasses[preview.tone]}`}><ReadinessIcon size={11} /> {preview.canGenerate ? "Ready" : "Not ready"}</span>
             </div>
-            {primaryPreview && <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2"><PreviewTeam label={matchType === "singles" ? "Player A" : "Team A"} players={primaryPreview.teamA} tone="primary" /><span className="text-xs font-bold text-[var(--text)]/50">VS</span><PreviewTeam label={matchType === "singles" ? "Player B" : "Team B"} players={primaryPreview.teamB} tone="warning" /></div>}
+            {selectedPlayers.length > 0 && (
+              <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--surface-hover)] px-3 py-2 text-xs text-[var(--text)]">
+                <span>{selectedPlayers.length} selected players</span>
+                <strong className="text-[var(--text-h)]">Up to {preview.estimatedMatches} matches</strong>
+              </div>
+            )}
             <p className="mt-3 text-sm text-[var(--text)]">{preview.message}</p>
-            {(preview.unmatchedPlayers[0]?.reason || previewWarnings[0]) && <p className="mt-2 rounded-lg bg-[var(--warning-light)] px-2.5 py-2 text-xs text-[var(--warning)]">{preview.unmatchedPlayers[0]?.reason || previewWarnings[0]}</p>}
           </div>
 
-          <button type="button" disabled={isGenerating || !preview.canGenerate} onClick={onGenerate} className="mt-4 w-full rounded-xl bg-[var(--primary)] py-3 font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{isGenerating ? "Generating..." : preview.matches.length > 0 ? `Generate ${preview.matches.length} Match${preview.matches.length === 1 ? "" : "es"}` : "Generate Matches"}</button>
+          <button type="button" disabled={isGenerating || !preview.canGenerate} onClick={onGenerate} className="mt-4 w-full rounded-xl bg-[var(--primary)] py-3 font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{isGenerating ? "Generating..." : "Generate Matches"}</button>
         </section>
 
         {/* Available player selection */}
@@ -225,7 +298,7 @@ export default function RotationPlayerPool({
             </div>
             <div className="mb-4 rounded-xl bg-[var(--surface-hover)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div><p className="text-sm font-semibold text-[var(--text-h)]">Selected: {selectedPlayers.length} players</p><p className="mt-0.5 text-xs text-[var(--text)]">{preview.canGenerate ? "Ready to generate" : preview.message}{category === "mixed" && selectedPlayers.length > 0 ? ` · ${maleCount} male, ${femaleCount} female` : ""}</p></div>
+                <div><p className="text-sm font-semibold text-[var(--text-h)]">Selected: {selectedPlayers.length} players</p><p className="mt-0.5 text-xs text-[var(--text)]">{preview.canGenerate ? "Ready to generate" : preview.message}{category === "mixed" && selectedPlayers.length > 0 ? ` · ${selectionDetails.maleCount} male, ${selectionDetails.femaleCount} female` : ""}</p></div>
                 <div className="flex items-center gap-2 text-xs">{matchType === "doubles" && <button type="button" disabled={selectedPlayers.length < 2} onClick={() => setLockModalOpen(true)} className="rounded-lg bg-purple-100 px-2.5 py-1 font-semibold text-purple-800 disabled:opacity-40"><Link2 className="mr-1 inline h-3 w-3" /> Manage Locks</button>}<button type="button" disabled={selectedPlayers.length === 0} onClick={() => onSelectionChange([])} className="font-semibold text-[var(--primary)] disabled:opacity-40">Clear</button></div>
               </div>
               {selectedPlayers.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{selectedPlayers.slice(0, 8).map((player) => <button key={player.id} type="button" onClick={() => togglePlayer(player.id)} title={`Remove ${player.name}`} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{player.name} ×</button>)}{selectedPlayers.length > 8 && <span className="px-2 py-0.5 text-[10px] font-semibold text-[var(--text)]">+{selectedPlayers.length - 8} more</span>}</div>}
@@ -240,46 +313,17 @@ export default function RotationPlayerPool({
           </div>
 
           <div className="divide-y divide-[var(--border)]">
-            {isLoading ? <p className="p-10 text-center text-sm text-[var(--text)]">Loading today&apos;s players...</p> : visiblePlayers.length === 0 ? <div className="p-10 text-center"><Users className="mx-auto h-7 w-7 text-[var(--text)]" /><p className="mt-2 font-medium text-[var(--text-h)]">No players are currently available for matchmaking.</p><p className="mt-1 text-xs text-[var(--text)]">Players marked done remain recorded in Player Management and match history.</p></div> : filteredPlayers.length === 0 ? <div className="p-10 text-center"><Users className="mx-auto h-7 w-7 text-[var(--text)]" /><p className="mt-2 font-medium text-[var(--text-h)]">No players match these filters</p><p className="mt-1 text-xs text-[var(--text)]">Change the category or clear a filter.</p></div> : pagedPlayers.map((player) => {
-              const reason = getPlayerConfigurationReason(player, matchType, category);
-              const selected = selectedIdSet.has(player.id);
-              const badge = getStatusBadge(player, reason);
-              return (
-                <div
-                  key={player.id}
-                  title={reason || undefined}
-                  onClick={(event) => handlePlayerRowClick(event, player.id, Boolean(reason))}
-                  className={`flex items-center gap-3 border-l-4 px-4 py-2.5 transition-colors duration-150 ${selected ? "border-l-[var(--primary)] bg-[var(--primary-light)]/70" : "border-l-transparent hover:bg-[var(--surface-hover)]/70"} ${reason ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    disabled={Boolean(reason)}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={() => togglePlayer(player.id)}
-                    aria-label={`Select ${player.name}`}
-                  />
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="truncate text-sm font-medium text-[var(--text-h)]">{(player.name).toUpperCase()}</span>
-                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{getLevelLabel(player.level)}</span>
-                    {category === "mixed" && <span className="text-xs capitalize text-[var(--text)]">{player.gender}</span>}
-                    {player.lockedTeammateName && <span title={`Locked with ${player.lockedTeammateName}`} className="text-purple-700"><Link2 size={13} /></span>}
-                  </div>
-                  <span title={reason || undefined} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badge.classes}`}>{badge.label}</span>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setPreferencePlayerId(player.id);
-                    }}
-                    title="Player match settings"
-                    className="rounded-lg p-2 text-[var(--text)] hover:bg-[var(--surface-hover)]"
-                  >
-                    <Settings2 size={15} />
-                  </button>
-                </div>
-              );
-            })}
+            {isLoading ? <p className="p-10 text-center text-sm text-[var(--text)]">Loading today&apos;s players...</p> : visiblePlayers.length === 0 ? <div className="p-10 text-center"><Users className="mx-auto h-7 w-7 text-[var(--text)]" /><p className="mt-2 font-medium text-[var(--text-h)]">No players are currently available for matchmaking.</p><p className="mt-1 text-xs text-[var(--text)]">Players marked done remain recorded in Player Management and match history.</p></div> : filteredPlayers.length === 0 ? <div className="p-10 text-center"><Users className="mx-auto h-7 w-7 text-[var(--text)]" /><p className="mt-2 font-medium text-[var(--text-h)]">No players match these filters</p><p className="mt-1 text-xs text-[var(--text)]">Change the category or clear a filter.</p></div> : pageRows.map(({ player, reason }) => (
+              <RotationPlayerRow
+                key={player.id}
+                player={player}
+                reason={reason}
+                selected={selectedIdSet.has(player.id)}
+                showGender={category === "mixed"}
+                onToggle={togglePlayer}
+                onOpenSettings={openPlayerSettings}
+              />
+            ))}
           </div>
           {/* Player pagination */}
           {!isLoading && filteredPlayers.length > 0 && <PaginationControls page={pagination.currentPage} pageSize={pageSize} totalRecords={filteredPlayers.length} itemLabel="players" onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
@@ -290,7 +334,7 @@ export default function RotationPlayerPool({
       <Modal open={lockModalOpen} onClose={() => setLockModalOpen(false)} title="Manage Teammate Lock">
         <div className="space-y-4">
           <p className="text-sm text-[var(--text)]">Lock two selected players together for today.</p>
-          <div className="grid gap-2 sm:grid-cols-2"><select value={firstLockPlayerId} onChange={(event) => setFirstLockPlayerId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"><option value="">First teammate</option>{lockCandidates.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><select value={secondLockPlayerId} onChange={(event) => setSecondLockPlayerId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"><option value="">Second teammate</option>{lockCandidates.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></div>
+          <div className="grid gap-2 sm:grid-cols-2"><select value={firstLockPlayerId} onChange={(event) => setFirstLockPlayerId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"><option value="">First teammate</option>{selectionDetails.lockCandidates.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><select value={secondLockPlayerId} onChange={(event) => setSecondLockPlayerId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"><option value="">Second teammate</option>{selectionDetails.lockCandidates.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></div>
           {selectedLocks.length > 0 && <div className="space-y-2">{selectedLocks.map((lock) => <div key={lock.id} className="flex items-center justify-between gap-3 rounded-xl bg-purple-50 px-3 py-2 text-sm text-purple-800"><span>{lock.player1Name} + {lock.player2Name}</span><button type="button" disabled={lockActionId !== null} onClick={() => onRemoveLock(lock.id)} className="font-semibold disabled:opacity-40">Unlock</button></div>)}</div>}
           <div className="flex justify-end gap-2"><button type="button" onClick={() => setLockModalOpen(false)} className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Close</button><button type="button" disabled={lockActionId !== null || !firstLockPlayerId || !secondLockPlayerId || firstLockPlayerId === secondLockPlayerId} onClick={handleCreateLock} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Lock Teammates</button></div>
         </div>

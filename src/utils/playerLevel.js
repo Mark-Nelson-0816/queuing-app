@@ -29,9 +29,32 @@ const DEFAULT_DETAILS = {
   textClasses: "text-slate-600 dark:text-slate-300",
 };
 
+const LEVEL_SORT_ORDER = {
+  beginner: 1,
+  intermediate: 2,
+  upper_intermediate: 3,
+  advanced: 4,
+};
+
 // Normalizes level values for consistent labels and colors.
 export function normalizePlayerLevel(level) {
   return normalizeRotationLevel(level);
+}
+
+// Compares player levels by skill hierarchy instead of alphabetically.
+export function comparePlayerLevels(first, second, direction = "asc") {
+  const firstLevel = normalizePlayerLevel(first);
+  const secondLevel = normalizePlayerLevel(second);
+  const firstOrder = LEVEL_SORT_ORDER[firstLevel];
+  const secondOrder = LEVEL_SORT_ORDER[secondLevel];
+  const multiplier = direction === "desc" ? -1 : 1;
+
+  if (firstOrder === undefined && secondOrder === undefined) {
+    return firstLevel.localeCompare(secondLevel) * multiplier;
+  }
+  if (firstOrder === undefined) return 1;
+  if (secondOrder === undefined) return -1;
+  return (firstOrder - secondOrder) * multiplier;
 }
 
 // Returns badge colors for a player level.

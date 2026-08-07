@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, History, Trophy } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import ConfirmDialog from "../ConfirmDialog";
 import Modal from "../Modal";
 import PaginationControls from "../PaginationControls";
@@ -249,7 +249,7 @@ function SectionHeader({ title, description, count, tone }) {
 }
 
 // Manages Tournament match sections, court assignment, and winner confirmation.
-export default function Matches({
+function Matches({
   tournamentData,
   isLoading = false,
   startingMatchId = null,
@@ -527,3 +527,5 @@ export default function Matches({
     </div>
   );
 }
+
+export default memo(Matches);

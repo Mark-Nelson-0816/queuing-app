@@ -373,10 +373,9 @@ function getEligibility(player) {
 }
 
 // Builds today's players with history, lock, and eligibility details.
-function loadDailyPlayers() {
+function loadDailyPlayers(locks = loadActiveLocks()) {
   const players = getDailyPlayersStatement.all().map(mapDailyPlayer);
   loadHistoryCounts(players);
-  const locks = loadActiveLocks();
   const lockByPlayerId = new Map();
   for (const lock of locks) {
     lockByPlayerId.set(lock.player1Id, lock);
@@ -702,6 +701,16 @@ function getNextQueuePosition() {
 }
 
 // Finds the active lock associated with a generated participant.
+function createLockByPlayerId(locks) {
+  const lockByPlayerId = new Map();
+  for (const lock of locks) {
+    lockByPlayerId.set(lock.player1Id, lock);
+    lockByPlayerId.set(lock.player2Id, lock);
+  }
+  return lockByPlayerId;
+}
+
+// Finds the active lock associated with a generated participant.
 function findPlayerLock(locks, playerId) {
   return locks.find((lock) => (
     lock.player1Id === Number(playerId) || lock.player2Id === Number(playerId)
@@ -758,6 +767,12 @@ const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType
     )
     VALUES (?, ?, ?, ?, ?, ?)
   `);
+  const updateAssignedStatus = db.prepare(`
+    UPDATE registered_players_today
+    SET status = 'assigned'
+    WHERE id = ? AND status IN ('available', 'waiting')
+  `);
+  const lockByPlayerId = createLockByPlayerId(locks);
 
   // Persist each match, participant slot, and assigned player status.
   for (const generatedMatch of generated.matches) {
@@ -773,7 +788,7 @@ const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType
     const matchId = Number(matchResult.lastInsertRowid);
     for (const [teamIndex, team] of [generatedMatch.teamA, generatedMatch.teamB].entries()) {
       for (const [slotIndex, player] of team.entries()) {
-        const lock = findPlayerLock(locks, player.id);
+        const lock = lockByPlayerId.get(Number(player.id));
         insertParticipant.run(
           matchId,
           player.registrationId,
@@ -782,18 +797,17 @@ const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType
           slotIndex + 1,
           lock?.id || null,
         );
-        db.prepare(`
-          UPDATE registered_players_today
-          SET status = 'assigned'
-          WHERE id = ? AND status IN ('available', 'waiting')
-        `).run(player.registrationId);
+        updateAssignedStatus.run(player.registrationId);
       }
     }
     queuePosition += 1;
   }
 
+  const currentLocks = loadActiveLocks();
   const currentMatches = loadRotationMatches();
   return {
+    players: loadDailyPlayers(currentLocks),
+    locks: currentLocks,
     matches: currentMatches,
     generatedCount,
     unmatchedPlayers: generated.unmatchedPlayers,

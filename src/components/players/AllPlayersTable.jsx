@@ -2,6 +2,7 @@ import { ArrowUpDown, Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
+import { comparePlayerLevels } from "../../utils/playerLevel";
 import { PlayerLevelBadge } from "./PlayerBadges";
 import { formatPlayerPreferences, genderLabel, rankPreferenceLabel } from "./playerDisplay";
 
@@ -56,7 +57,12 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
       matches: player.lifetimeMatches,
       results: player.lifetimeWins - player.lifetimeLosses,
     })[sort.field];
-    return filtered.sort((first, second) => compareValues(getValue(first), getValue(second)) * (sort.direction === "asc" ? 1 : -1));
+    return filtered.sort((first, second) => (
+      sort.field === "level"
+        ? comparePlayerLevels(first.level, second.level, sort.direction)
+        : compareValues(getValue(first), getValue(second))
+          * (sort.direction === "asc" ? 1 : -1)
+    ));
   }, [categoryFilter, genderFilter, levelFilter, profiles, rankFilter, search, sort]);
 
   // Limit the filtered profiles to the current page.

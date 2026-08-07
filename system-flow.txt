@@ -697,8 +697,6 @@ Active settings:
 - Tournament default Singles/Doubles
 - Tournament default category
 
-Coming Soon controls are disabled documentation only and do not call the backend.
-
 Reset flow:
 
 Choose Reset Application Data

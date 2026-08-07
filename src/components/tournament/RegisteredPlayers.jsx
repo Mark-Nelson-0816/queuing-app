@@ -1,5 +1,5 @@
 import { Search, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
 import {
@@ -50,6 +50,48 @@ function toSelectedPlayer(player) {
   };
 }
 
+// Displays one Tournament player without rerendering unchanged rows.
+const TournamentPlayerRow = memo(function TournamentPlayerRow({
+  player,
+  isSelected,
+  isEligible,
+  onToggle,
+}) {
+  const status = String(player.status || "available").toLowerCase();
+  return (
+    <div
+      onClick={(event) => {
+        if (!isEligible || event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
+        onToggle(player);
+      }}
+      className={`flex items-center gap-3 border-l-4 px-4 py-3 transition-colors duration-150 ${
+        isSelected
+          ? "border-l-[var(--primary)] bg-[var(--primary-light)]/70"
+          : `border-l-transparent ${isEligible ? "hover:bg-[var(--surface-hover)]/70" : "opacity-70"}`
+      } ${isEligible ? "cursor-pointer" : "cursor-not-allowed"}`}
+    >
+      <input
+        type="checkbox"
+        checked={isSelected}
+        disabled={!isEligible}
+        onClick={(event) => event.stopPropagation()}
+        onChange={() => onToggle(player)}
+        aria-label={`Select ${player.name}`}
+      />
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name.toUpperCase()}</span>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>
+          {getLevelLabel(player.level)}
+        </span>
+        <span className="text-xs capitalize text-[var(--text)]">{formatValue(player.gender)}</span>
+      </div>
+      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusClasses[status] || statusClasses.available}`}>
+        {status === "done" ? "Finished" : formatValue(status, "Available")}
+      </span>
+    </div>
+  );
+});
+
 // Loads and manages players selected for Tournament generation.
 export default function RegisteredPlayers({
   selectedPlayers,
@@ -85,9 +127,14 @@ export default function RegisteredPlayers({
           hasLoaded = true;
           setPlayers(currentPlayers);
           setLoadError("");
-          setSelectedPlayers((current) => (
-            current.filter((player) => eligibleIds.has(Number(player.id)))
-          ));
+          setSelectedPlayers((current) => {
+            const eligibleSelection = current.filter((player) => (
+              eligibleIds.has(Number(player.id))
+            ));
+            return eligibleSelection.length === current.length
+              ? current
+              : eligibleSelection;
+          });
           setIsLoading(false);
         })
         .catch(() => {
@@ -141,40 +188,54 @@ export default function RegisteredPlayers({
   }, [category, categoryPlayers, genderFilter, levelFilter, search]);
 
   // Limit filtered players to the current page.
-  const pagination = getPagination(filteredPlayers.length, page, pageSize);
-  const pagedPlayers = filteredPlayers.slice(pagination.startIndex, pagination.endIndex);
-  const eligiblePagePlayers = pagedPlayers.filter(
-    (player) => isTournamentPlayerEligible(player, category),
+  const pagination = useMemo(
+    () => getPagination(filteredPlayers.length, page, pageSize),
+    [filteredPlayers.length, page, pageSize],
+  );
+  const pagedPlayers = useMemo(
+    () => filteredPlayers.slice(pagination.startIndex, pagination.endIndex),
+    [filteredPlayers, pagination.endIndex, pagination.startIndex],
+  );
+  const pageRows = useMemo(() => pagedPlayers.map((player) => ({
+    player,
+    isEligible: isTournamentPlayerEligible(player, category),
+  })), [category, pagedPlayers]);
+  const eligiblePagePlayers = useMemo(
+    () => pageRows.filter((row) => row.isEligible).map((row) => row.player),
+    [pageRows],
   );
   const allPageSelected = eligiblePagePlayers.length > 0
     && eligiblePagePlayers.every((player) => selectedIdSet.has(Number(player.id)));
 
   // Add or remove one eligible Tournament player.
-  const updatePlayerSelection = (player, shouldSelect) => {
+  const updatePlayerSelection = useCallback((player, shouldSelect) => {
     setSelectedPlayers((current) => {
       if (shouldSelect && !isTournamentPlayerEligible(player, category)) return current;
-      const alreadySelected = current.some((selected) => selected.id === player.id);
+      const playerId = Number(player.id);
+      const alreadySelected = current.some((selected) => Number(selected.id) === playerId);
       if (shouldSelect) {
         return alreadySelected ? current : [...current, toSelectedPlayer(player)];
       }
-      return current.filter((selected) => selected.id !== player.id);
+      return current.filter((selected) => Number(selected.id) !== playerId);
     });
-  };
+  }, [category, setSelectedPlayers]);
 
-  // Toggle selection using the shared selection updater.
-  const togglePlayer = (player) => {
-    updatePlayerSelection(player, !selectedIdSet.has(Number(player.id)));
-  };
-
-  // Toggle a row unless an interactive child handled the click.
-  const handlePlayerRowClick = (event, player) => {
-    if (event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
-    if (!isTournamentPlayerEligible(player, category)) return;
-    togglePlayer(player);
-  };
+  // Toggle one player with a stable handler shared by every row.
+  const togglePlayer = useCallback((player) => {
+    setSelectedPlayers((current) => {
+      const playerId = Number(player.id);
+      const alreadySelected = current.some((selected) => Number(selected.id) === playerId);
+      if (alreadySelected) {
+        return current.filter((selected) => Number(selected.id) !== playerId);
+      }
+      return isTournamentPlayerEligible(player, category)
+        ? [...current, toSelectedPlayer(player)]
+        : current;
+    });
+  }, [category, setSelectedPlayers]);
 
   // Select or clear all eligible players on the current page.
-  const toggleSelectPage = () => {
+  const toggleSelectPage = useCallback(() => {
     setSelectedPlayers((current) => {
       const pageIdSet = new Set(eligiblePagePlayers.map((player) => Number(player.id)));
       if (allPageSelected) {
@@ -187,7 +248,7 @@ export default function RegisteredPlayers({
         .map(toSelectedPlayer);
       return [...current, ...additions];
     });
-  };
+  }, [allPageSelected, eligiblePagePlayers, setSelectedPlayers]);
 
   // Apply a player filter and return to the first page.
   const updateFilter = (setter) => (event) => {
@@ -316,41 +377,15 @@ export default function RegisteredPlayers({
             <p className="mt-2 font-medium text-[var(--text-h)]">No players match these filters</p>
             <p className="mt-1 text-xs text-[var(--text)]">Clear the search or change a filter.</p>
           </div>
-        ) : pagedPlayers.map((player) => {
-          const isSelected = selectedIdSet.has(Number(player.id));
-          const status = String(player.status || "available").toLowerCase();
-          const isEligible = isTournamentPlayerEligible(player, category);
-          return (
-            <div
-              key={player.id}
-              onClick={(event) => handlePlayerRowClick(event, player)}
-              className={`flex items-center gap-3 border-l-4 px-4 py-3 transition-colors duration-150 ${
-                isSelected
-                  ? "border-l-[var(--primary)] bg-[var(--primary-light)]/70"
-                  : `border-l-transparent ${isEligible ? "hover:bg-[var(--surface-hover)]/70" : "opacity-70"}`
-              } ${isEligible ? "cursor-pointer" : "cursor-not-allowed"}`}
-            >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                disabled={!isEligible}
-                onClick={(event) => event.stopPropagation()}
-                onChange={() => togglePlayer(player)}
-                aria-label={`Select ${player.name}`}
-              />
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name.toUpperCase()}</span>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>
-                  {getLevelLabel(player.level)}
-                </span>
-                <span className="text-xs capitalize text-[var(--text)]">{formatValue(player.gender)}</span>
-              </div>
-              <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusClasses[status] || statusClasses.available}`}>
-                {status === "done" ? "Finished" : formatValue(status, "Available")}
-              </span>
-            </div>
-          );
-        })}
+        ) : pageRows.map(({ player, isEligible }) => (
+          <TournamentPlayerRow
+            key={player.id}
+            player={player}
+            isSelected={selectedIdSet.has(Number(player.id))}
+            isEligible={isEligible}
+            onToggle={togglePlayer}
+          />
+        ))}
       </div>
 
       {/* Player pagination */}

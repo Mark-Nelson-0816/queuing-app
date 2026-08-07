@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Modal from "../components/Modal";
 import RotationMatches from "../components/rotation/RotationMatches";
@@ -54,13 +54,27 @@ function errorMessage(error, fallback) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+// Format level display
+function formatLevel(level) {
+    if (!level) return '';
+
+    return level
+        .split('_')
+        .map(
+            (word) =>
+                word.charAt(0).toUpperCase() +
+                word.slice(1).toLowerCase()
+        )
+        .join(' ');
+}
+
 // Displays one selectable player in the waiting-match editor.
 function PlayerOption({ player }) {
-  return (
-    <option value={player.id}>
-      {player.name} — {player.level}
-    </option>
-  );
+    return (
+        <option value={player.id}>
+            {player.name} — {formatLevel(player.level)}
+        </option>
+    );
 }
 
 // Manages the complete Rotation Queue operator workflow.
@@ -255,7 +269,7 @@ export default function Queue() {
       }
       setWarnings(result.data.warnings || []);
       setUnmatchedPlayers(result.data.unmatchedPlayers || []);
-      await loadState();
+      applyState(result.data);
       setNotice(
         result.data.generatedCount > 0
           ? "Rotation matches generated and saved in queue order."
@@ -462,12 +476,21 @@ export default function Queue() {
   };
 
   // Keep current match players available while editing their arrangement.
-  const editCurrentPlayerIds = new Set(editTarget?.players.map((player) => player.id) || []);
-  const editorPlayers = rotationState.players.filter((player) => (
-    player.eligible || editCurrentPlayerIds.has(player.id)
-  ));
+  const editorPlayers = useMemo(() => {
+    const editCurrentPlayerIds = new Set(
+      editTarget?.players.map((player) => player.id) || [],
+    );
+    return rotationState.players.filter((player) => (
+      player.eligible || editCurrentPlayerIds.has(player.id)
+    ));
+  }, [editTarget, rotationState.players]);
   const summary = rotationState.summary || EMPTY_STATE.summary;
-  const availablePlayerCount = rotationState.players.filter((player) => player.eligible).length;
+  const availablePlayerCount = useMemo(
+    () => rotationState.players.reduce((count, player) => (
+      count + (player.eligible ? 1 : 0)
+    ), 0),
+    [rotationState.players],
+  );
   const displayMatches = rotationState.matches;
 
   return (
