@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
-import Dashboard from "./pages/Dashboard";
 import Queue from "./pages/Queue";
 import Tournament from "./pages/Tournament";
 import Courts from "./pages/Courts";
@@ -10,7 +9,6 @@ import PublicDisplayPage from "./pages/PublicDisplayPage";
 import Settings from "./pages/Settings";
 
 const pageTitles = {
-  dashboard: "Dashboard",
   queue: "Rotation Queue Management",
   tournament: "Tournament Management",
   courts: "Court Management",
@@ -19,12 +17,14 @@ const pageTitles = {
   settings: "Settings",
 };
 
+// Controls application navigation, layout, and saved theme startup.
 function App() {
   const [activePage, setActivePage] = useState("queue");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Apply persisted theme preference on startup (before first paint matters little here)
+  // Apply the saved theme when the application starts.
   useEffect(() => {
+    // Load and apply the saved light, dark, or system theme.
     async function applySavedTheme() {
       try {
         const data = await window.api.getSettings();
@@ -44,10 +44,9 @@ function App() {
     applySavedTheme();
   }, []);
 
+  // Render the page selected in the sidebar.
   const renderPage = () => {
     switch (activePage) {
-      case "dashboard":
-        return <Dashboard />;
       case "queue":
         return <Queue />;
       case "tournament":
@@ -61,7 +60,7 @@ function App() {
       case "settings":
         return <Settings />;
       default:
-        return <Dashboard />;
+        return <Queue />;
     }
   };
 
@@ -73,6 +72,7 @@ function App() {
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg)]">
 
+      {/* Application navigation */}
       <Sidebar
         activePage={activePage}
         onNavigate={setActivePage}
@@ -81,8 +81,10 @@ function App() {
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        <Header title={pageTitles[activePage] || "Dashboard"} />
+        {/* Current page header */}
+        <Header title={pageTitles[activePage] || "Rotation Queue Management"} />
 
+        {/* Current page content */}
         <main className="flex-1 overflow-y-auto p-6">
           {renderPage()}
         </main>

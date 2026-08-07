@@ -28,6 +28,7 @@ const EMPTY_DATA = {
   },
 };
 
+// Displays one Player Management summary statistic.
 function SummaryCard({ icon: Icon, label, value, detail, tone = "primary" }) {
   const toneClasses = {
     primary: "bg-[var(--primary-light)] text-[var(--primary)]",
@@ -49,6 +50,7 @@ function SummaryCard({ icon: Icon, label, value, detail, tone = "primary" }) {
   );
 }
 
+// Manages player profiles and today's registered players.
 export default function Players() {
   const [data, setData] = useState(EMPTY_DATA);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,6 +63,7 @@ export default function Players() {
   const [busyPlayerId, setBusyPlayerId] = useState(null);
   const actionRef = useRef(false);
 
+  // Load complete Player Management data from the backend.
   const loadData = useCallback(async ({ quiet = false } = {}) => {
     if (!quiet) setIsLoading(true);
     try {
@@ -75,6 +78,7 @@ export default function Players() {
     }
   }, []);
 
+  // Load Player Management data when the page opens.
   useEffect(() => {
     let isCurrent = true;
     window.api.getPlayerManagementData()
@@ -100,6 +104,7 @@ export default function Players() {
     };
   }, []);
 
+  // Run one protected player action and refresh the page data.
   const runPlayerAction = async (player, action, successMessage) => {
     if (actionRef.current) return false;
     actionRef.current = true;
@@ -126,12 +131,14 @@ export default function Players() {
     }
   };
 
+  // Register or reactivate one player for today.
   const registerPlayer = (player) => runPlayerAction(
     player,
     () => window.api.registerPlayer(player.id),
     `${player.name} is ${player.todayRegistration?.isDone ? "active again" : "registered for today"}.`,
   );
 
+  // Confirm that a player has finished for today.
   const confirmMarkDone = async () => {
     const player = doneTarget;
     if (!player) return;
@@ -143,6 +150,7 @@ export default function Players() {
     if (completed) setDoneTarget(null);
   };
 
+  // Permanently delete an eligible player profile.
   const confirmDelete = async () => {
     const player = deleteTarget;
     if (!player) return;
@@ -158,6 +166,7 @@ export default function Players() {
 
   return (
     <div className="space-y-4">
+      {/* Page heading and primary actions */}
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-h)]">Player Management</h1>
@@ -175,6 +184,7 @@ export default function Players() {
         </div>
       </header>
 
+      {/* Action feedback */}
       {error && (
         <div role="alert" className="flex items-start justify-between gap-3 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-light)] p-4 text-sm text-[var(--danger)]">
           <p>{error}</p>
@@ -188,6 +198,7 @@ export default function Players() {
         </div>
       )}
 
+      {/* Player summary cards */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard icon={Users} label="Total Profiles" value={summary.totalProfiles} detail="Permanent player records" />
         <SummaryCard icon={UserCheck} label="Registered Today" value={summary.registeredToday} detail={`${summary.activeToday} active · ${summary.doneToday} done`} tone="success" />
@@ -196,6 +207,7 @@ export default function Players() {
         <SummaryCard icon={Gamepad2} label="Matches Today" value={summary.completedRotationMatchesToday} detail="Completed rotation matches" />
       </div>
 
+      {/* Players registered today */}
       <RegisteredPlayersTable
         players={data.todayPlayers}
         isLoading={isLoading}
@@ -206,6 +218,7 @@ export default function Players() {
         onOpenAdd={() => setProfileModal({ mode: "add", player: null })}
       />
 
+      {/* Permanent player profiles */}
       <AllPlayersTable
         profiles={data.profiles}
         isLoading={isLoading}
@@ -216,6 +229,7 @@ export default function Players() {
         onOpenAdd={() => setProfileModal({ mode: "add", player: null })}
       />
 
+      {/* Add or edit profile modal */}
       {profileModal && (
         <PlayerProfileModal
           key={`${profileModal.mode}-${profileModal.player?.id || "new"}`}
@@ -232,6 +246,7 @@ export default function Players() {
         />
       )}
 
+      {/* Register existing profile modal */}
       {registerModalOpen && (
         <RegisterPlayerToday
           key="register-player-today"
@@ -245,6 +260,7 @@ export default function Players() {
         />
       )}
 
+      {/* Mark-done confirmation */}
       <ConfirmDialog
         open={Boolean(doneTarget)}
         title="Mark Player Done"
@@ -258,6 +274,7 @@ export default function Players() {
         onCancel={() => !busyPlayerId && setDoneTarget(null)}
       />
 
+      {/* Profile deletion confirmation */}
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Delete Player Profile"

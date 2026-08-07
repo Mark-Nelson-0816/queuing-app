@@ -19,6 +19,7 @@ const STATUS_DETAILS = {
   },
 };
 
+// Displays a player's normalized skill-level badge.
 export function PlayerLevelBadge({ level }) {
   return (
     <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(level)}`}>
@@ -27,6 +28,7 @@ export function PlayerLevelBadge({ level }) {
   );
 }
 
+// Displays a normalized daily player status badge.
 export function PlayerStatusBadge({ status }) {
   const normalizedStatus = ["waiting", "finished"].includes(status)
     ? "available"

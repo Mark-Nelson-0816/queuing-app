@@ -10,6 +10,7 @@ app.setPath("userData", testUserData);
 
 let db;
 
+// Confirms an operation failed with the expected message.
 function expectFailure(result, expression) {
   assert.equal(result.success, false);
   assert.match(result.message, expression);
@@ -92,6 +93,10 @@ try {
   assert.equal(management.data.summary.registeredToday, 1);
   assert.equal(management.data.summary.availableToday, 1);
   assert.equal(management.data.todayPlayers[0].status, "available");
+  assert.equal(management.data.todayPlayers[0].preferMens, true);
+  assert.equal(management.data.todayPlayers[0].preferWomens, false);
+  assert.equal(management.data.todayPlayers[0].preferMixed, true);
+  assert.equal(management.data.todayPlayers[0].preferNoGender, true);
 
   const markedDone = players.removeRegisteredPlayer(first.data.id);
   assert.equal(markedDone.success, true);
@@ -165,7 +170,6 @@ try {
   management = players.getPlayerManagementData();
   assert.equal(management.data.summary.completedRotationMatchesToday, 1);
   assert.equal(management.data.profiles.find((player) => player.id === first.data.id).lifetimeMatches, 8);
-  assert.equal(players.getPlayerCards().totalMatches, 1);
 
   expectFailure(players.deletePlayerProfile(first.data.id), /mark this player done/i);
   assert.equal(players.removeRegisteredPlayer(first.data.id).success, true);

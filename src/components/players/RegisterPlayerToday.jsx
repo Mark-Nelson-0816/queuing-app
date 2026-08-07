@@ -10,6 +10,7 @@ import {
   rankPreferenceLabel,
 } from "./playerDisplay";
 
+// Selects an existing profile for today's active player list.
 export default function RegisterPlayerToday({
   open,
   profiles,
@@ -24,10 +25,12 @@ export default function RegisterPlayerToday({
   const [isRegistering, setIsRegistering] = useState(false);
   const submissionRef = useRef(false);
 
+  // Keep unregistered and done profiles available for registration.
   const eligibleProfiles = useMemo(() => profiles.filter((player) => (
     !player.todayRegistration || player.todayRegistration.isDone
   )), [profiles]);
 
+  // Filter eligible profiles by the operator's search and selections.
   const filteredProfiles = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     return eligibleProfiles.filter((player) => (
@@ -39,6 +42,7 @@ export default function RegisterPlayerToday({
 
   const selectedPlayer = eligibleProfiles.find((player) => player.id === selectedId);
 
+  // Register or reactivate the selected profile for today.
   const handleRegister = async () => {
     if (!selectedPlayer || submissionRef.current) return;
     submissionRef.current = true;
@@ -70,6 +74,7 @@ export default function RegisterPlayerToday({
       maxWidthClass="max-w-3xl"
     >
       <div className="space-y-4">
+        {/* Registration instructions and errors */}
         <p className="text-sm text-[var(--text)]">
           Select an existing profile to add to today&apos;s player list.
         </p>
@@ -80,6 +85,7 @@ export default function RegisterPlayerToday({
           </p>
         )}
 
+        {/* Profile search and filters */}
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem_9rem]">
           <label className="relative">
             <span className="sr-only">Search profiles</span>
@@ -116,6 +122,7 @@ export default function RegisterPlayerToday({
           </select>
         </div>
 
+        {/* Eligible profiles */}
         <div className="max-h-[46vh] space-y-2 overflow-y-auto pr-1">
           {filteredProfiles.map((player) => {
             const isSelected = player.id === selectedId;
@@ -169,6 +176,7 @@ export default function RegisterPlayerToday({
           )}
         </div>
 
+        {/* Registration actions */}
         <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
           <p className="text-xs text-[var(--text)]">
             {filteredProfiles.length} eligible profile{filteredProfiles.length === 1 ? "" : "s"}

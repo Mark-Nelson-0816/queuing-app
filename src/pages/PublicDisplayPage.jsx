@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import PublicDisplay from "../components/PublicDisplay";
 
+// Formats queue creation times for the public screen.
 function formatTime(dateStr) {
   if (!dateStr) return "";
   const date = new Date(`${dateStr}Z`);
@@ -10,14 +11,17 @@ function formatTime(dateStr) {
   });
 }
 
+// Loads and refreshes the data shown on the public display.
 export default function PublicDisplayPage() {
   const [courts, setCourts] = useState([]);
   const [queueNext, setQueueNext] = useState([]);
   const [courtError, setCourtError] = useState("");
 
+  // Refresh active courts and Rotation Queue Next Up matches every ten seconds.
   useEffect(() => {
     let isCancelled = false;
 
+    // Load both public-display data sources without blocking each other.
     const refreshData = () => {
       window.api.getCourts()
         .then((courtsData) => {

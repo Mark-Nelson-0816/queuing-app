@@ -13,6 +13,7 @@ const LEVELS = [
   ["advanced", "Advanced"],
 ];
 
+// Converts stored category values into readable labels.
 function categoryLabel(category) {
   if (category === "no_gender") return "No Gender";
   if (category === "mens") return "Men's";
@@ -20,6 +21,7 @@ function categoryLabel(category) {
   return "Mixed";
 }
 
+// Chooses the status badge shown for a selectable player.
 function getStatusBadge(player, reason) {
   if (!reason) return { label: "Available", classes: "bg-[var(--success-light)] text-[var(--success)]" };
   if (player.status === "playing") return { label: "Playing", classes: "bg-[var(--primary-light)] text-[var(--primary)]" };
@@ -28,10 +30,12 @@ function getStatusBadge(player, reason) {
   return { label: "Unavailable", classes: "bg-[var(--danger-light)] text-[var(--danger)]" };
 }
 
+// Checks both daily fields used to mark a player done.
 function isDoneForToday(player) {
   return player.isDoneToday || player.status === "done";
 }
 
+// Displays one team in the generated match preview.
 function PreviewTeam({ label, players, tone }) {
   const background = tone === "primary"
     ? "bg-[var(--primary-light)]/50"
@@ -51,6 +55,7 @@ function PreviewTeam({ label, players, tone }) {
   );
 }
 
+// Manages Rotation configuration, player selection, locks, and preview.
 export default function RotationPlayerPool({
   players,
   locks,
@@ -82,6 +87,7 @@ export default function RotationPlayerPool({
 
   const selectedIdSet = useMemo(() => new Set(selectedPlayerIds.map(Number)), [selectedPlayerIds]);
   const selectedPlayers = useMemo(() => players.filter((player) => selectedIdSet.has(player.id)), [players, selectedIdSet]);
+  // Hide players who are finished for today from matchmaking selection.
   const visiblePlayers = useMemo(() => players.filter((player) => !isDoneForToday(player)), [players]);
   const preview = useMemo(() => buildRotationPreview({ players, selectedPlayerIds, locks, matchType, category }), [category, locks, matchType, players, selectedPlayerIds]);
 
@@ -91,6 +97,7 @@ export default function RotationPlayerPool({
   const selectedLocks = locks.filter((lock) => selectedLockIds.includes(lock.id));
   const lockCandidates = selectedPlayers.filter((player) => player.eligible && !player.lock);
 
+  // Count player states without removing done players from the summary.
   const availability = useMemo(() => players.reduce((summary, player) => {
     if (isDoneForToday(player)) summary.done += 1;
     const reason = getPlayerConfigurationReason(player, matchType, category);
@@ -101,6 +108,7 @@ export default function RotationPlayerPool({
     return summary;
   }, { available: 0, categoryBlocked: 0, playing: 0, assigned: 0, done: 0 }), [category, matchType, players]);
 
+  // Filter and sort visible players for the current configuration.
   const filteredPlayers = useMemo(() => {
     const query = search.trim().toLowerCase();
     const filtered = visiblePlayers.filter((player) => {
@@ -117,6 +125,7 @@ export default function RotationPlayerPool({
     });
   }, [availabilityFilter, category, genderFilter, levelFilter, matchType, search, visiblePlayers]);
 
+  // Limit filtered players to the current page.
   const pagination = getPagination(filteredPlayers.length, page, pageSize);
   const pagedPlayers = filteredPlayers.slice(pagination.startIndex, pagination.endIndex);
   const selectablePagePlayers = pagedPlayers.filter((player) => !getPlayerConfigurationReason(player, matchType, category));
@@ -125,16 +134,19 @@ export default function RotationPlayerPool({
   const previewWarnings = [...new Set([...preview.warnings, ...(primaryPreview?.warnings || [])])];
   const preferencePlayer = players.find((player) => player.id === preferencePlayerId) || null;
 
+  // Toggle one player without losing selections on other pages.
   const togglePlayer = (playerId) => {
     const next = new Set(selectedIdSet);
     if (next.has(playerId)) next.delete(playerId);
     else next.add(playerId);
     onSelectionChange([...next]);
   };
+  // Toggle a row unless an interactive child handled the click.
   const handlePlayerRowClick = (event, playerId, disabled) => {
     if (disabled || event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
     togglePlayer(playerId);
   };
+  // Select or clear every eligible player on the current page.
   const toggleSelectPage = () => {
     const next = new Set(selectedIdSet);
     selectablePagePlayers.forEach((player) => {
@@ -143,10 +155,12 @@ export default function RotationPlayerPool({
     });
     onSelectionChange([...next]);
   };
+  // Apply a player filter and return to the first page.
   const updateFilter = (setter) => (event) => {
     setter(event.target.value);
     setPage(1);
   };
+  // Create a teammate lock from the selected modal players.
   const handleCreateLock = async () => {
     const firstId = Number(firstLockPlayerId);
     const secondId = Number(secondLockPlayerId);
@@ -169,6 +183,7 @@ export default function RotationPlayerPool({
   return (
     <>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        {/* Sticky match configuration and preview */}
         <section className="self-start rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 xl:sticky xl:top-0">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-h)]">Match Configuration</h2>
@@ -201,6 +216,7 @@ export default function RotationPlayerPool({
           <button type="button" disabled={isGenerating || !preview.canGenerate} onClick={onGenerate} className="mt-4 w-full rounded-xl bg-[var(--primary)] py-3 font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{isGenerating ? "Generating..." : preview.matches.length > 0 ? `Generate ${preview.matches.length} Match${preview.matches.length === 1 ? "" : "es"}` : "Generate Matches"}</button>
         </section>
 
+        {/* Available player selection */}
         <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] xl:col-span-2">
           <div className="border-b border-[var(--border)] p-4">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -244,7 +260,7 @@ export default function RotationPlayerPool({
                     aria-label={`Select ${player.name}`}
                   />
                   <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name}</span>
+                    <span className="truncate text-sm font-medium text-[var(--text-h)]">{(player.name).toUpperCase()}</span>
                     <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{getLevelLabel(player.level)}</span>
                     {category === "mixed" && <span className="text-xs capitalize text-[var(--text)]">{player.gender}</span>}
                     {player.lockedTeammateName && <span title={`Locked with ${player.lockedTeammateName}`} className="text-purple-700"><Link2 size={13} /></span>}
@@ -265,10 +281,12 @@ export default function RotationPlayerPool({
               );
             })}
           </div>
+          {/* Player pagination */}
           {!isLoading && filteredPlayers.length > 0 && <PaginationControls page={pagination.currentPage} pageSize={pageSize} totalRecords={filteredPlayers.length} itemLabel="players" onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
         </section>
       </div>
 
+      {/* Teammate lock modal */}
       <Modal open={lockModalOpen} onClose={() => setLockModalOpen(false)} title="Manage Teammate Lock">
         <div className="space-y-4">
           <p className="text-sm text-[var(--text)]">Lock two selected players together for today.</p>
@@ -278,6 +296,7 @@ export default function RotationPlayerPool({
         </div>
       </Modal>
 
+      {/* Player rank-preference modal */}
       <Modal open={preferencePlayer !== null} onClose={() => setPreferencePlayerId(null)} title={preferencePlayer ? `${preferencePlayer.name} Match Settings` : "Player Match Settings"}>
         {preferencePlayer && <div className="space-y-4">
           <div className="flex items-center justify-between gap-3"><div><p className="font-semibold text-[var(--text-h)]">{preferencePlayer.name}</p><p className="text-sm text-[var(--text)]">{getLevelLabel(preferencePlayer.level)} · {preferencePlayer.gender || "Unknown gender"}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadge(preferencePlayer, getPlayerConfigurationReason(preferencePlayer, matchType, category)).classes}`}>{getStatusBadge(preferencePlayer, getPlayerConfigurationReason(preferencePlayer, matchType, category)).label}</span></div>

@@ -6,6 +6,7 @@ import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
 import { getLevelClasses, getLevelLabel } from "../../utils/playerLevel";
 
+// Converts stored Tournament values into readable labels.
 function formatLabel(value) {
   if (value === "no_gender") return "No Gender";
   if (value === "mens") return "Men's";
@@ -15,12 +16,14 @@ function formatLabel(value) {
     : "Unknown";
 }
 
+// Builds a singles or doubles team name from its players.
 function getTeamName(team) {
   if (!team) return "Unknown Team";
   const playerNames = [team.player1?.name, team.player2?.name].filter(Boolean);
   return playerNames.length > 0 ? playerNames.join(" / ") : `Team ${team.teamNumber}`;
 }
 
+// Displays the players assigned to one Tournament team.
 function TeamPlayers({ team, centered = false }) {
   const players = [team?.player1, team?.player2].filter(Boolean);
   return (
@@ -38,6 +41,7 @@ function TeamPlayers({ team, centered = false }) {
   );
 }
 
+// Displays the Tournament champion or first-place tie.
 function TournamentOutcome({ outcome }) {
   if (!outcome) return null;
 
@@ -78,6 +82,7 @@ const statusClasses = {
   finished: "bg-[var(--success-light)] text-[var(--success)]",
 };
 
+// Displays one Tournament match and its available lifecycle action.
 function TournamentMatchCard({
   match,
   tournamentFinished,
@@ -188,6 +193,7 @@ function TournamentMatchCard({
   );
 }
 
+// Groups a flat match list into ascending Tournament rounds.
 function groupByRound(matches) {
   const groups = new Map();
   matches.forEach((match) => {
@@ -198,6 +204,7 @@ function groupByRound(matches) {
   return [...groups.entries()].sort(([first], [second]) => first - second);
 }
 
+// Displays Tournament matches grouped under their rounds.
 function RoundGroups({ matches, renderMatch, emptyTitle, emptyMessage }) {
   if (matches.length === 0) {
     return (
@@ -225,6 +232,7 @@ function RoundGroups({ matches, renderMatch, emptyTitle, emptyMessage }) {
   );
 }
 
+// Displays a consistent Tournament match-section heading.
 function SectionHeader({ title, description, count, tone }) {
   const badge = tone === "playing"
     ? "bg-[var(--primary-light)] text-[var(--primary)]"
@@ -240,6 +248,7 @@ function SectionHeader({ title, description, count, tone }) {
   );
 }
 
+// Manages Tournament match sections, court assignment, and winner confirmation.
 export default function Matches({
   tournamentData,
   isLoading = false,
@@ -261,6 +270,7 @@ export default function Matches({
   const [finishedPageSize, setFinishedPageSize] = useState(10);
   const [standingsOpen, setStandingsOpen] = useState(false);
 
+  // Load courts that can accept a Tournament match.
   const loadAvailableCourts = async () => {
     setIsLoadingCourts(true);
     try {
@@ -276,6 +286,7 @@ export default function Matches({
     }
   };
 
+  // Open court selection for a pending match.
   const openCourtSelection = async (match) => {
     if (startingMatchId !== null) return;
     setStartTarget(match);
@@ -287,6 +298,7 @@ export default function Matches({
     else if (result.courts.length === 0) setCourtError("No courts are currently available.");
   };
 
+  // Close court selection when no start request is active.
   const closeCourtSelection = () => {
     if (startingMatchId !== null) return;
     setStartTarget(null);
@@ -295,6 +307,7 @@ export default function Matches({
     setCourtError("");
   };
 
+  // Start the selected Tournament match on the chosen court.
   const handleConfirmStart = async () => {
     if (!startTarget || startingMatchId !== null) return;
     const numericCourtId = Number(selectedCourtId);
@@ -321,6 +334,7 @@ export default function Matches({
     setCourtError(refreshed.courts.length === 0 ? "No courts are currently available." : failureMessage);
   };
 
+  // Save the selected winner after confirmation.
   const handleConfirmWinner = async () => {
     if (!pendingWinner || savingMatchId !== null) return;
     const saved = await onFinishMatch?.(pendingWinner.matchId, pendingWinner.winnerTeamId);
@@ -345,6 +359,7 @@ export default function Matches({
   }
 
   const { tournament, rounds, standings, outcome, summary } = tournamentData;
+  // Split all matches into their current lifecycle sections.
   const tournamentFinished = tournament.status === "finished";
   const allMatches = rounds.flatMap((round) => round.matches.map((match) => ({
     ...match,
@@ -353,10 +368,12 @@ export default function Matches({
   const pendingMatches = allMatches.filter((match) => match.status === "pending");
   const playingMatches = allMatches.filter((match) => match.status === "playing");
   const finishedMatches = allMatches.filter((match) => match.status === "finished");
+  // Build independent pagination for pending and finished matches.
   const pendingPagination = getPagination(pendingMatches.length, pendingPage, pendingPageSize);
   const finishedPagination = getPagination(finishedMatches.length, finishedPage, finishedPageSize);
   const pagedPending = pendingMatches.slice(pendingPagination.startIndex, pendingPagination.endIndex);
   const pagedFinished = finishedMatches.slice(finishedPagination.startIndex, finishedPagination.endIndex);
+  // Render a match card with shared Tournament actions.
   const renderMatch = (match) => (
     <TournamentMatchCard
       key={match.id}
@@ -371,6 +388,7 @@ export default function Matches({
 
   return (
     <div className="space-y-6">
+      {/* Tournament summary and final outcome */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-col justify-between gap-4 border-b border-[var(--border)] p-5 lg:flex-row lg:items-center">
           <div>
@@ -392,6 +410,7 @@ export default function Matches({
         {outcome && <div className="p-5"><TournamentOutcome outcome={outcome} /></div>}
       </section>
 
+      {/* Pending matches */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <SectionHeader title="Pending Matches" description="Review each round and assign an available court when ready." count={pendingMatches.length} tone="pending" />
         <div className="p-5">
@@ -409,6 +428,7 @@ export default function Matches({
         )}
       </section>
 
+      {/* Playing matches */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <SectionHeader title="Playing Matches" description="Select the winning team when play is complete." count={playingMatches.length} tone="playing" />
         <div className="p-5">
@@ -416,6 +436,7 @@ export default function Matches({
         </div>
       </section>
 
+      {/* Finished match history */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <button type="button" onClick={() => setFinishedOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 p-5 text-left hover:bg-[var(--surface-hover)]/50">
           <div className="flex items-center gap-3">
@@ -446,6 +467,7 @@ export default function Matches({
         )}
       </section>
 
+      {/* Tournament standings */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <button type="button" onClick={() => setStandingsOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 p-5 text-left hover:bg-[var(--surface-hover)]/50">
           <div><h2 className="font-semibold text-[var(--text-h)]">Standings</h2><p className="mt-1 text-sm text-[var(--text)]">Sorted by wins, losses, then team number.</p></div>
@@ -471,6 +493,7 @@ export default function Matches({
         )}
       </section>
 
+      {/* Court selection */}
       <Modal open={startTarget !== null} onClose={closeCourtSelection} title="Select Court">
         <div className="space-y-4">
           <p className="text-sm text-[var(--text)]">Choose an available court for Round {startTarget?.roundNumber || ""}.</p>
@@ -490,6 +513,7 @@ export default function Matches({
         </div>
       </Modal>
 
+      {/* Winner confirmation */}
       <ConfirmDialog
         open={pendingWinner !== null}
         title="Confirm Match Winner"

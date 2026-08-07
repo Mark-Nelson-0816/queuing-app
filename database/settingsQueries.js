@@ -3,13 +3,7 @@ import path from "path";
 import process from "node:process";
 import { app } from "electron";
 
-// Get a single setting value (returns null if not set)
-export function getSetting(key) {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
-  return row ? row.value : null;
-}
-
-// Get all settings as a key -> value object
+// Returns all settings as a renderer-friendly key-value object.
 export function getAllSettings() {
   const rows = db.prepare("SELECT key, value FROM settings").all();
   const settings = {};
@@ -19,7 +13,7 @@ export function getAllSettings() {
   return settings;
 }
 
-// Set a setting value (insert or update)
+// Inserts or updates one setting value.
 export function setSetting(key, value) {
   db.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?)
@@ -29,6 +23,7 @@ export function setSetting(key, value) {
   return { success: true };
 }
 
+// Returns application, runtime, platform, and database metadata.
 export function getApplicationInfo() {
   const sqliteVersion = db.prepare("SELECT sqlite_version() AS version").get().version;
   const schemaVersion = Number(db.pragma("user_version", { simple: true }) || 0);

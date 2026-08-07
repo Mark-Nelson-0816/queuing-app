@@ -7,6 +7,7 @@ const COURT_COLS = {
   3: "grid-cols-3",
 };
 
+// Converts stored match values into public-facing labels.
 function formatLabel(value) {
   if (value === "no_gender") return "No Gender";
   if (value === "mens") return "Men's";
@@ -16,6 +17,7 @@ function formatLabel(value) {
     : "";
 }
 
+// Displays one team on an active public court card.
 function PublicTeam({ team, dense, accent = "primary", matchType }) {
   const isPrimary = accent === "primary";
   const sideLabel = matchType === "singles"
@@ -49,6 +51,7 @@ function PublicTeam({ team, dense, accent = "primary", matchType }) {
   );
 }
 
+// Displays active courts and Rotation Queue matches that are next up.
 export default function PublicDisplay({
   courts = [],
   queueNext = [],
@@ -65,7 +68,9 @@ export default function PublicDisplay({
   const courtGridCols = COURT_COLS[courtColCount];
   const dense = activeCourts.length > 4;
 
+  // Reload the public screen when Escape is pressed.
   useEffect(() => {
+    // Handle the public-display Escape shortcut.
     const handleEscape = (event) => {
       if (event.key === "Escape") {
         window.location.reload();
@@ -78,6 +83,7 @@ export default function PublicDisplay({
 
   return (
     <div className="h-screen overflow-hidden bg-[var(--bg)] text-[var(--text)] p-5 flex flex-col gap-4">
+      {/* Public display heading and clock */}
       <div className="shrink-0 flex items-center justify-between border-b border-[var(--border)] pb-3">
         <h1 className="text-3xl font-bold text-[var(--text-h)]">
           Badminton Queue
@@ -100,13 +106,16 @@ export default function PublicDisplay({
         </div>
       </div>
 
+      {/* Court loading error */}
       {courtError && (
         <div className="shrink-0 rounded-xl bg-[var(--danger-light)] text-[var(--danger)] px-4 py-2 text-center font-semibold">
           {courtError}
         </div>
       )}
 
+      {/* Active courts and Next Up queue */}
       <div className="grid grid-cols-4 gap-4 flex-1 min-h-0">
+        {/* Currently playing courts */}
         <div className="col-span-3 min-h-0 flex flex-col gap-3">
           <h2 className="shrink-0 text-xl font-semibold uppercase tracking-wide text-[var(--text-h)]">
             Currently Playing
@@ -170,6 +179,7 @@ export default function PublicDisplay({
           )}
         </div>
 
+        {/* Rotation Queue Next Up */}
         <div className="min-h-0 flex flex-col gap-3">
           <h2 className="shrink-0 text-xl font-semibold uppercase tracking-wide text-[var(--text-h)]">
             Next Up

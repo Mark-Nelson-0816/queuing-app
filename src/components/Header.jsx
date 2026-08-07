@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
+// Displays the current page title, time, date, and optional actions.
 export default function Header({ title, actions }) {
   const [now, setNow] = useState(new Date());
 
+  // Keep the operator clock current while the application is open.
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(new Date());
@@ -25,12 +27,14 @@ export default function Header({ title, actions }) {
   return (
     <header className="h-16 bg-[var(--surface)] border-b border-[var(--border)] flex items-center justify-between px-6">
 
+      {/* Current page title */}
       <div>
         <h1 className="text-xl font-bold text-[var(--text-h)]">
           {title}
         </h1>
       </div>
 
+      {/* Clock, page actions, and operator badge */}
       <div className="flex items-center gap-4">
         <div className="text-right">
           <p className="text-sm font-medium text-[var(--text-h)]">

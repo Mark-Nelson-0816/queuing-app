@@ -4,6 +4,7 @@ import {
   playerAllowsCategory,
 } from "../../database/rotationLogic.js";
 
+// Explains why a player cannot join the current Rotation configuration.
 export function getPlayerConfigurationReason(player, matchType, category) {
   if (!player.eligible) return player.reason || `Player is currently ${player.status || "unavailable"}.`;
   if (category === "mixed" && matchType !== "doubles") {
@@ -24,10 +25,12 @@ export function getPlayerConfigurationReason(player, matchType, category) {
   return "";
 }
 
+// Checks whether a player fits the current Rotation configuration.
 export function playerFitsConfiguration(player, matchType, category) {
   return !getPlayerConfigurationReason(player, matchType, category);
 }
 
+// Builds the same match preview used by saved Rotation generation.
 export function buildRotationPreview({
   players,
   selectedPlayerIds,
@@ -93,6 +96,7 @@ export function buildRotationPreview({
   }
 }
 
+// Counts selected same-rank and adjacent-rank preferences.
 export function countRankPreferences(players) {
   return players.reduce((counts, player) => {
     const preference = normalizeRankPreference(player.rankPreference);

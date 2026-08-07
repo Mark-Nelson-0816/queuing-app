@@ -9,6 +9,7 @@ import {
 const VALID_GENDERS = new Set(["male", "female"]);
 const VALID_RANK_PREFERENCES = new Set(["same_rank", "adjacent_rank"]);
 
+// Converts database errors into the consistent API failure shape.
 function failure(error, fallbackMessage) {
   return {
     success: false,
@@ -18,12 +19,14 @@ function failure(error, fallbackMessage) {
   };
 }
 
+// Validates and converts a player ID before using it in a query.
 function parsePlayerId(value) {
   const id = Number(value);
   if (!Number.isInteger(id) || id <= 0) throw new Error("Player not found.");
   return id;
 }
 
+// Normalizes and validates fields shared by player create and update operations.
 function normalizePlayerInput({
   name,
   level,
@@ -70,6 +73,7 @@ function normalizePlayerInput({
   };
 }
 
+// Finds another profile with the same trimmed, case-insensitive name.
 function findDuplicateName(name, excludedPlayerId = null) {
   return db.prepare(`
     SELECT id
@@ -80,6 +84,7 @@ function findDuplicateName(name, excludedPlayerId = null) {
   `).get(name, excludedPlayerId, excludedPlayerId);
 }
 
+// Maps a profile row into the Player Management response shape.
 function mapProfile(row) {
   const hasTodayRegistration = row.today_registration_id !== null
     && row.today_registration_id !== undefined;
@@ -108,6 +113,7 @@ function mapProfile(row) {
   };
 }
 
+// Maps today's registration data and computed activity status for the renderer.
 function mapTodayPlayer(row) {
   return {
     id: Number(row.id),
@@ -116,6 +122,10 @@ function mapTodayPlayer(row) {
     level: normalizeRotationLevel(row.level),
     gender: normalizeRotationGender(row.gender),
     rankPreference: normalizeRankPreference(row.rank_match_preference),
+    preferMens: Boolean(row.prefer_mens),
+    preferWomens: Boolean(row.prefer_womens),
+    preferMixed: Boolean(row.prefer_mixed),
+    preferNoGender: Boolean(row.prefer_no_gender),
     status: row.display_status,
     storedStatus: row.stored_status,
     isDoneToday: Boolean(row.is_done_today),
@@ -135,6 +145,7 @@ function mapTodayPlayer(row) {
   };
 }
 
+// Loads every profile with its latest registration for today, when present.
 const playerManagementProfilesStatement = db.prepare(`
   SELECT
     players.*,
@@ -154,6 +165,7 @@ const playerManagementProfilesStatement = db.prepare(`
   ORDER BY players.name COLLATE NOCASE ASC, players.id ASC
 `);
 
+// Computes today's real player status across every active match source.
 const playerManagementTodayStatement = db.prepare(`
   SELECT
     players.id,
@@ -161,6 +173,10 @@ const playerManagementTodayStatement = db.prepare(`
     players.level,
     players.gender,
     players.rank_match_preference,
+    players.prefer_mens,
+    players.prefer_womens,
+    players.prefer_mixed,
+    players.prefer_no_gender,
     registered_players_today.id AS registration_id,
     registered_players_today.status AS stored_status,
     registered_players_today.is_done_today,
@@ -254,6 +270,7 @@ const playerManagementTodayStatement = db.prepare(`
     players.name COLLATE NOCASE ASC
 `);
 
+// Builds the complete Player Management payload and summary counts.
 function loadPlayerManagementData() {
   const profiles = playerManagementProfilesStatement.all().map(mapProfile);
   const todayPlayers = playerManagementTodayStatement.all().map(mapTodayPlayer);
@@ -280,6 +297,7 @@ function loadPlayerManagementData() {
   };
 }
 
+// Returns profiles, today's players, and summary counts.
 export function getPlayerManagementData() {
   try {
     return { success: true, data: loadPlayerManagementData() };
@@ -288,6 +306,7 @@ export function getPlayerManagementData() {
   }
 }
 
+// Creates a validated player profile with match preferences.
 export function addPlayer(
   name,
   level,
@@ -348,6 +367,7 @@ export function addPlayer(
   }
 }
 
+// Updates all editable fields on an existing player profile.
 export function updatePlayerInfo(
   playerId,
   name,
@@ -412,12 +432,14 @@ export function updatePlayerInfo(
   }
 }
 
+// Registers a player for today or reactivates a player marked done.
 export function registerPlayer(playerId) {
   try {
     const id = parsePlayerId(playerId);
     const player = db.prepare(`SELECT id, name FROM players WHERE id = ?`).get(id);
     if (!player) return { success: false, message: "Player not found." };
 
+    // Prevents duplicate or partial daily registration changes.
     const transaction = db.transaction(() => {
       const registration = db.prepare(`
         SELECT id, is_done_today
@@ -427,6 +449,7 @@ export function registerPlayer(playerId) {
         LIMIT 1
       `).get(id);
 
+      // Create the first registration for this player today.
       if (!registration) {
         const result = db.prepare(`
           INSERT INTO registered_players_today (
@@ -443,6 +466,7 @@ export function registerPlayer(playerId) {
         throw new Error(`${player.name} is already registered today.`);
       }
 
+      // Reactivate the existing daily record instead of adding a duplicate.
       db.prepare(`
         UPDATE registered_players_today
         SET
@@ -463,6 +487,7 @@ export function registerPlayer(playerId) {
   }
 }
 
+// Finds whether a player is assigned or playing in any match source.
 function getPlayerActivity(playerId) {
   const rotation = db.prepare(`
     SELECT rotation_matches.status
@@ -510,6 +535,7 @@ function getPlayerActivity(playerId) {
   return normal ? "playing" : null;
 }
 
+// Marks a player done for today after confirming they have no active assignment.
 export function removeRegisteredPlayer(playerId) {
   try {
     const id = parsePlayerId(playerId);
@@ -552,6 +578,7 @@ export function removeRegisteredPlayer(playerId) {
   }
 }
 
+// Checks every match and lock table before allowing permanent profile deletion.
 function playerHasHistory(playerId) {
   const checks = [
     [`SELECT 1 FROM rotation_match_players WHERE player_id = ? LIMIT 1`, [playerId]],
@@ -565,6 +592,7 @@ function playerHasHistory(playerId) {
   return checks.some(([sql, parameters]) => db.prepare(sql).get(...parameters));
 }
 
+// Deletes a profile only when it has no active registration or saved history.
 export function deletePlayerProfile(playerId) {
   try {
     const id = parsePlayerId(playerId);
@@ -591,6 +619,7 @@ export function deletePlayerProfile(playerId) {
       };
     }
 
+    // Removes the profile and its unprotected registration data atomically.
     const transaction = db.transaction(() => {
       db.prepare(`
         DELETE FROM queue
@@ -615,112 +644,4 @@ export function getRegisteredPlayersToday() {
     .all()
     .map(mapTodayPlayer)
     .filter((player) => !player.isDoneToday);
-}
-
-export function searchPlayers(name = "") {
-  return db.prepare(`
-    SELECT
-      players.*,
-      CASE
-        WHEN registered_players_today.id IS NULL THEN 1
-        WHEN registered_players_today.is_done_today = 1 THEN 1
-        ELSE 0
-      END AS can_register,
-      CASE
-        WHEN registered_players_today.is_done_today = 1 THEN 1
-        ELSE 0
-      END AS can_reactivate
-    FROM players
-    LEFT JOIN registered_players_today
-      ON registered_players_today.id = (
-        SELECT current_registration.id
-        FROM registered_players_today AS current_registration
-        WHERE current_registration.player_id = players.id
-          AND current_registration.registered_date = CURRENT_DATE
-        ORDER BY current_registration.is_done_today ASC, current_registration.id DESC
-        LIMIT 1
-      )
-    WHERE players.name LIKE ?
-    ORDER BY players.name COLLATE NOCASE ASC
-  `).all(`%${String(name).trim()}%`);
-}
-
-export function getPlayersProfile(name = "") {
-  return db.prepare(`
-    SELECT *
-    FROM players
-    WHERE name LIKE ?
-    ORDER BY name COLLATE NOCASE ASC
-  `).all(`%${String(name).trim()}%`);
-}
-
-export function getRegisteredPlayersTodayLevelCount() {
-  return db.prepare(`
-    SELECT
-      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'beginner' THEN 1 ELSE 0 END) AS beginner,
-      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'intermediate' THEN 1 ELSE 0 END) AS intermediate,
-      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'upper_intermediate' THEN 1 ELSE 0 END) AS upper_intermediate,
-      SUM(CASE WHEN LOWER(REPLACE(p.level, ' ', '_')) = 'advanced' THEN 1 ELSE 0 END) AS advanced
-    FROM registered_players_today r
-    JOIN players p ON p.id = r.player_id
-    WHERE r.registered_date = CURRENT_DATE
-      AND r.is_done_today = 0
-      AND r.id = (
-        SELECT MAX(current_registration.id)
-        FROM registered_players_today AS current_registration
-        WHERE current_registration.player_id = r.player_id
-          AND current_registration.registered_date = CURRENT_DATE
-          AND current_registration.is_done_today = 0
-      )
-  `).get();
-}
-
-export function getPlayerCards() {
-  const data = loadPlayerManagementData();
-  return {
-    allPlayers: data.summary.totalProfiles,
-    currentPlayers: data.summary.activeToday,
-    overallPlayersToday: data.summary.registeredToday,
-    available: data.summary.availableToday,
-    assigned: data.summary.assignedToday,
-    playing: data.summary.playingToday,
-    done: data.summary.doneToday,
-    totalMatches: data.summary.completedRotationMatchesToday,
-  };
-}
-
-// Legacy general-player API retained for Settings and older screens.
-export function getPlayers() {
-  return db.prepare(`
-    SELECT
-      players.*,
-      COUNT(DISTINCT match_players.match_id) AS matches_played
-    FROM players
-    LEFT JOIN match_players
-      ON match_players.player_id = players.id
-      AND match_players.source IN ('normal', 'round_robin')
-    GROUP BY players.id
-    ORDER BY players.id DESC
-  `).all();
-}
-
-export function deletePlayer(id) {
-  const result = deletePlayerProfile(id);
-  return result.success
-    ? result
-    : { success: false, error: result.message, message: result.message };
-}
-
-export function updatePlayer(id, name, level) {
-  try {
-    const playerId = parsePlayerId(id);
-    const result = db.prepare(`
-      UPDATE players SET name = ?, level = ? WHERE id = ?
-    `).run(String(name || "").trim(), String(level || "").trim(), playerId);
-    return result.changes === 1
-      ? { success: true, data: { id: playerId } }
-      : { success: false, message: "Player not found." };
-  } catch (error) {
-    return failure(error, "Failed to update player.");
-  }
 }

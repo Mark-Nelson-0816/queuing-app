@@ -1,8 +1,10 @@
 import db from "./database.js";
 console.log("INIT DATABASE RUNNING");
 
+// Creates the schema and applies safe compatibility migrations atomically.
 const initDatabase = db.transaction(() => {
 
+// Creates every table and base index needed by current and legacy features.
 db.exec(`
 
 CREATE TABLE IF NOT EXISTS players (
@@ -273,6 +275,7 @@ CREATE TABLE IF NOT EXISTS rotation_match_players (
 
 `);
 
+// Adds court assignment to tournament matches on older databases.
 const tournamentMatchColumns = db.prepare(`
     PRAGMA table_info(tournament_matches)
 `).all();
@@ -288,6 +291,7 @@ if (!hasTournamentCourtId) {
     `);
 }
 
+// Adds rank preference support to player profiles created by older versions.
 const playerColumns = db.prepare(`PRAGMA table_info(players)`).all();
 if (!playerColumns.some((column) => column.name === "rank_match_preference")) {
     db.exec(`
@@ -296,6 +300,7 @@ if (!playerColumns.some((column) => column.name === "rank_match_preference")) {
     `);
 }
 
+// Adds fair-wait timing to older daily registration tables.
 const registrationColumns = db.prepare(`
     PRAGMA table_info(registered_players_today)
 `).all();
@@ -306,6 +311,7 @@ if (!registrationColumns.some((column) => column.name === "available_since")) {
     `);
 }
 
+// Normalizes legacy daily statuses and fills missing availability timestamps.
 db.exec(`
     UPDATE registered_players_today
     SET available_since = COALESCE(available_since, created_at, CURRENT_TIMESTAMP);
@@ -318,6 +324,7 @@ db.exec(`
     END;
 `);
 
+// Adds lookup indexes, active-court protections, and teammate-lock safeguards.
 db.exec(`
     CREATE INDEX IF NOT EXISTS idx_tournament_matches_court_id
         ON tournament_matches(court_id);
@@ -374,6 +381,7 @@ db.exec(`
 });
 
 
+// Run initialization once when the backend database module is loaded.
 initDatabase();
 
 console.log("Database initialized");

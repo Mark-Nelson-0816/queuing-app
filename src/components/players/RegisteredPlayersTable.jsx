@@ -5,11 +5,13 @@ import { getPagination } from "../../utils/pagination";
 import { PlayerLevelBadge, PlayerStatusBadge } from "./PlayerBadges";
 import { genderLabel } from "./playerDisplay";
 
+// Compares numeric or text values for table sorting.
 function compareValues(first, second) {
   if (typeof first === "number" && typeof second === "number") return first - second;
   return String(first || "").localeCompare(String(second || ""));
 }
 
+// Displays a sortable heading for today's player table.
 function SortHeader({ label, field, sort, onSort, align = "left" }) {
   const active = sort.field === field;
   const alignmentClass = align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
@@ -26,6 +28,7 @@ function SortHeader({ label, field, sort, onSort, align = "left" }) {
   );
 }
 
+// Displays searchable, sortable, and paginated players registered today.
 export default function RegisteredPlayersTable({
   players,
   isLoading,
@@ -43,6 +46,7 @@ export default function RegisteredPlayersTable({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  // Filter and sort today's players without changing the source list.
   const filteredPlayers = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     const filtered = players.filter((player) => (
@@ -51,6 +55,7 @@ export default function RegisteredPlayersTable({
       && (genderFilter === "all" || player.gender === genderFilter)
       && (statusFilter === "all" || player.status === statusFilter)
     ));
+    // Read the active sort value from a daily player.
     const getValue = (player) => ({
       name: player.name,
       level: player.level,
@@ -65,13 +70,16 @@ export default function RegisteredPlayersTable({
     ));
   }, [genderFilter, levelFilter, players, search, sort, statusFilter]);
 
+  // Limit filtered players to the current page.
   const pagination = getPagination(filteredPlayers.length, page, pageSize);
   const pagedPlayers = filteredPlayers.slice(pagination.startIndex, pagination.endIndex);
 
+  // Apply a filter and return to the first page.
   const updateFilter = (setter) => (event) => {
     setter(event.target.value);
     setPage(1);
   };
+  // Toggle sorting for the selected column.
   const changeSort = (field) => {
     setSort((current) => ({
       field,
@@ -79,6 +87,7 @@ export default function RegisteredPlayersTable({
     }));
     setPage(1);
   };
+  // Restore the default daily-player filters.
   const clearFilters = () => {
     setSearch("");
     setLevelFilter("all");
@@ -89,6 +98,7 @@ export default function RegisteredPlayersTable({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--primary)]/30 bg-[var(--surface)] shadow-[var(--shadow)]">
+      {/* Daily-player heading and filters */}
       <div className="border-b border-[var(--border)] bg-[var(--primary-light)]/20 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -121,6 +131,7 @@ export default function RegisteredPlayersTable({
         </div>
       </div>
 
+      {/* Daily-player loading, empty, or table content */}
       {isLoading ? (
         <div className="px-5 py-10 text-center text-sm text-[var(--text)]">Loading today&apos;s players...</div>
       ) : players.length === 0 ? (
@@ -140,6 +151,7 @@ export default function RegisteredPlayersTable({
         </div>
       ) : (
         <>
+          {/* Registered players table */}
           <div className="overflow-x-auto">
             <table className="min-w-[800px] w-full border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
@@ -179,6 +191,7 @@ export default function RegisteredPlayersTable({
               </tbody>
             </table>
           </div>
+          {/* Registered-player pagination */}
           <PaginationControls page={pagination.currentPage} pageSize={pageSize} totalRecords={filteredPlayers.length} itemLabel="players" onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
         </>
       )}

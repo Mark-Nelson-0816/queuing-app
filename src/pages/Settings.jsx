@@ -45,6 +45,7 @@ const EMPTY_STATS = {
   activeTournament: null,
 };
 
+// Applies the selected light, dark, or system theme immediately.
 function applyTheme(theme) {
   const root = document.documentElement;
   root.classList.remove("dark", "light");
@@ -59,6 +60,7 @@ function applyTheme(theme) {
   root.classList.add(theme === "dark" ? "dark" : "light");
 }
 
+// Displays one grouped Settings section.
 function Card({ title, description, icon: Icon, children, footer, className = "" }) {
   return (
     <section className={`flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] ${className}`}>
@@ -77,6 +79,7 @@ function Card({ title, description, icon: Icon, children, footer, className = ""
   );
 }
 
+// Displays one live application statistic.
 function Stat({ label, value, icon: Icon, tone = "primary" }) {
   const tones = {
     primary: "bg-[var(--primary-light)] text-[var(--primary)]",
@@ -95,6 +98,7 @@ function Stat({ label, value, icon: Icon, tone = "primary" }) {
   );
 }
 
+// Displays one selectable theme option.
 function ThemeOption({ label, icon: Icon, active, onClick }) {
   return (
     <button
@@ -109,6 +113,7 @@ function ThemeOption({ label, icon: Icon, active, onClick }) {
   );
 }
 
+// Displays a compact group of mutually exclusive settings.
 function SegmentedControl({ label, hint, value, options, onChange }) {
   return (
     <div className="py-3">
@@ -131,6 +136,7 @@ function SegmentedControl({ label, hint, value, options, onChange }) {
   );
 }
 
+// Displays an accessible on-or-off setting.
 function Toggle({ checked, onChange, label, hint }) {
   return (
     <div className="flex items-center justify-between gap-4 py-3">
@@ -151,6 +157,7 @@ function Toggle({ checked, onChange, label, hint }) {
   );
 }
 
+// Displays a disabled future setting without implying it is active.
 function ComingSoonRow({ label, hint, icon: Icon = Shield }) {
   return (
     <div className="flex items-center justify-between gap-3 py-3 opacity-60">
@@ -166,6 +173,7 @@ function ComingSoonRow({ label, hint, icon: Icon = Shield }) {
   );
 }
 
+// Displays one application information value.
 function InfoItem({ label, value, wide = false }) {
   return (
     <div className={`rounded-xl bg-[var(--surface-hover)] px-3 py-2.5 ${wide ? "sm:col-span-2" : ""}`}>
@@ -175,6 +183,7 @@ function InfoItem({ label, value, wide = false }) {
   );
 }
 
+// Manages application preferences, metadata, and data reset controls.
 export default function Settings() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [stats, setStats] = useState(EMPTY_STATS);
@@ -185,6 +194,7 @@ export default function Settings() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
+  // Load settings, live statistics, and application metadata together.
   const loadDashboard = useCallback(async () => {
     const applicationInfoRequest = typeof window.api.getApplicationInfo === "function"
       ? window.api.getApplicationInfo()
@@ -244,20 +254,24 @@ export default function Settings() {
     setError(requiredFailed ? "Some Settings information could not be loaded." : "");
   }, []);
 
+  // Load the Settings dashboard after the page mounts.
   useEffect(() => {
     const initialLoad = window.setTimeout(loadDashboard, 0);
     return () => window.clearTimeout(initialLoad);
   }, [loadDashboard]);
 
+  // Apply theme changes and follow system-theme updates when selected.
   useEffect(() => {
     applyTheme(settings.theme);
     if (settings.theme !== "system") return undefined;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
+    // Reapply the system theme when the operating-system preference changes.
     const handleSystemThemeChange = () => applyTheme("system");
     media.addEventListener("change", handleSystemThemeChange);
     return () => media.removeEventListener("change", handleSystemThemeChange);
   }, [settings.theme]);
 
+  // Save one setting and update its control immediately.
   async function handleSettingChange(key, value) {
     setSettings((current) => ({ ...current, [key]: value }));
     setError("");
@@ -272,6 +286,7 @@ export default function Settings() {
     }
   }
 
+  // Keep Tournament default category valid when Singles is selected.
   function handleTournamentMatchType(value) {
     handleSettingChange("defaultTournamentMatchType", value);
     if (value === "singles" && settings.defaultTournamentCategory === "mixed") {
@@ -279,6 +294,7 @@ export default function Settings() {
     }
   }
 
+  // Reset application data after confirmation and reload live statistics.
   async function handleReset() {
     if (isResetting) return;
     setIsResetting(true);
@@ -301,6 +317,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-5">
+      {/* Settings heading */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-h)]">Application Settings</h1>
@@ -309,9 +326,11 @@ export default function Settings() {
         <span className="flex items-center gap-2 rounded-xl bg-[var(--primary-light)] px-3 py-2 text-sm font-semibold text-[var(--primary)]"><SlidersHorizontal size={16} /> Desktop Configuration</span>
       </div>
 
+      {/* Settings feedback */}
       {error && <div role="alert" className="rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-light)] px-4 py-3 text-sm text-[var(--danger)]">{error}</div>}
       {message && <div className="flex items-center gap-2 rounded-xl border border-[var(--success)]/30 bg-[var(--success-light)] px-4 py-3 text-sm text-[var(--success)]"><Check size={16} />{message}</div>}
 
+      {/* Live application overview */}
       <section aria-label="Application overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Stat label="Registered Players Today" value={stats.registeredToday} icon={UserCheck} />
         <Stat label="Total Player Profiles" value={stats.totalProfiles} icon={Users} tone="success" />
@@ -321,6 +340,7 @@ export default function Settings() {
         <Stat label="Active Tournament" value={stats.activeTournament} icon={Trophy} />
       </section>
 
+      {/* Settings sections */}
       <div className="grid items-stretch gap-5 xl:grid-cols-2">
         <Card title="Application" description="Choose how the desktop application looks." icon={Palette} footer={savedKey === "theme" ? "Theme saved ✓" : savedMessage}>
           <div className="flex gap-2">
@@ -386,6 +406,7 @@ export default function Settings() {
         </Card>
       </div>
 
+      {/* Destructive reset confirmation */}
       <ConfirmDialog open={showResetConfirm} title="Reset Application Data" message="Delete all application data and restore the default courts? This action cannot be undone." confirmLabel={isResetting ? "Resetting..." : "Delete Everything"} variant="danger" confirmDisabled={isResetting} onConfirm={handleReset} onCancel={() => !isResetting && setShowResetConfirm(false)} />
     </div>
   );

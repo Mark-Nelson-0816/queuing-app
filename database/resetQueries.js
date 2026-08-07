@@ -1,7 +1,9 @@
 import db from "./database.js";
 
+// Clears application data atomically and restores the three default courts.
 export function resetAllData() {
 
+    // Keeps the database usable if any delete or default insert fails.
     const reset = db.transaction(() => {
 
         db.prepare("DELETE FROM rotation_match_players").run();
@@ -19,6 +21,7 @@ export function resetAllData() {
         db.prepare("DELETE FROM players").run();
         db.prepare("DELETE FROM courts").run();
 
+        // Restore the default court setup expected by a fresh installation.
         db.prepare(`
             INSERT INTO courts(name, status)
             VALUES
@@ -27,6 +30,7 @@ export function resetAllData() {
             ('Court 3', 'available')
         `).run();
 
+        // Restart auto-increment counters after the full reset.
         db.prepare("DELETE FROM sqlite_sequence").run();
     });
 

@@ -1,12 +1,10 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 
+// Exposes a limited Promise-based IPC API to the React renderer.
 contextBridge.exposeInMainWorld("api", {
 
-  // Players
-
-  searchPlayers: (name) =>
-    ipcRenderer.invoke("search-players", name),
+  // Player profile and daily-registration operations.
 
   addPlayer: (name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) =>
     ipcRenderer.invoke("add-player", name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference),
@@ -20,14 +18,8 @@ contextBridge.exposeInMainWorld("api", {
   getRegisteredPlayersToday: () =>
     ipcRenderer.invoke("get-registered-players-today"),
 
-  getRegisteredPlayersTodayLevelCount: () =>
-    ipcRenderer.invoke("get-registered-players-today-level-count"),
-
   removeRegisteredPlayer: (id) =>
     ipcRenderer.invoke("remove-registered-player", id),
-
-  getPlayersProfile: (name) =>
-    ipcRenderer.invoke("get-players-profile", name),
 
   updatePlayerInfo: (id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) =>
     ipcRenderer.invoke('update-player-info', id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference),
@@ -35,38 +27,12 @@ contextBridge.exposeInMainWorld("api", {
   deletePlayerProfile: (id) =>
     ipcRenderer.invoke("delete-players-profile", id),
 
-  getPlayerCards: () =>
-    ipcRenderer.invoke("get-player-cards"),
-
-
-
-
-  //old player function - not used in player management page (not sure if used in other pages)
-  getPlayers: () =>
-    ipcRenderer.invoke("get-players"),
-
-  deletePlayer: (id) =>
-    ipcRenderer.invoke("delete-player", id),
-
-  updatePlayer: (id, name, level) =>
-    ipcRenderer.invoke("update-player", id, name, level),
-
-
-  //tournament
+  // Tournament creation, loading, and match lifecycle operations.
   createRoundRobinTournament: (players, matchType, category) =>
     ipcRenderer.invoke('create-round-robin-tournament', players, matchType, category),
 
-  getTournament: (tournamentId) =>
-    ipcRenderer.invoke('get-tournament', tournamentId),
-
   getLatestTournament: () =>
     ipcRenderer.invoke('get-latest-tournament'),
-
-  getTournamentMatches: (tournamentId) =>
-    ipcRenderer.invoke('get-tournament-matches', tournamentId),
-
-  getTournamentStandings: (tournamentId) =>
-    ipcRenderer.invoke('get-tournament-standings', tournamentId),
 
   startTournamentMatch: (matchId, courtId) =>
     ipcRenderer.invoke('start-tournament-match', matchId, courtId),
@@ -74,12 +40,7 @@ contextBridge.exposeInMainWorld("api", {
   finishTournamentMatch: (matchId, winnerTeamId) =>
     ipcRenderer.invoke('finish-tournament-match', matchId, winnerTeamId),
 
-  finishTournament: (tournamentId) =>
-    ipcRenderer.invoke('finish-tournament', tournamentId),
-
-
-
-  // Courts
+  // Court state and management operations.
   getCourts: () =>
       ipcRenderer.invoke("get-courts"),
 
@@ -94,15 +55,9 @@ contextBridge.exposeInMainWorld("api", {
 
 
 
-  // Rotation Queue
+  // Rotation Queue state, generation, and match lifecycle operations.
   getRotationState: () =>
     ipcRenderer.invoke("get-rotation-state"),
-
-  getEligibleRotationPlayers: () =>
-    ipcRenderer.invoke("get-eligible-rotation-players"),
-
-  getActiveTeamLocks: () =>
-    ipcRenderer.invoke("get-active-team-locks"),
 
   createTeamLock: (firstPlayerId, secondPlayerId, matchType, category) =>
     ipcRenderer.invoke(
@@ -165,15 +120,13 @@ contextBridge.exposeInMainWorld("api", {
       donePlayerIds,
     ),
 
-  //datas
+  // Application data reset operation.
   resetAllData: () => 
     ipcRenderer.invoke("reset-all-data"),
 
-  // Settings
+  // Persisted settings and application information operations.
   getSettings: () =>
     ipcRenderer.invoke("get-settings"),
-  getSetting: (key) =>
-    ipcRenderer.invoke("get-setting", key),
   updateSetting: (key, value) =>
     ipcRenderer.invoke("update-setting", key, value),
   getApplicationInfo: () =>

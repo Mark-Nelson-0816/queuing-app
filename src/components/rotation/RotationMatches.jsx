@@ -16,6 +16,7 @@ import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
 import { getLevelClasses, getLevelLabel } from "../../utils/playerLevel";
 
+// Converts stored Rotation values into readable labels.
 function formatLabel(value) {
   if (value === "no_gender") return "No Gender";
   if (value === "mens") return "Men's";
@@ -24,6 +25,7 @@ function formatLabel(value) {
   return value ? value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " ") : "Unknown";
 }
 
+// Formats saved match timestamps for the operator.
 function formatTime(value) {
   if (!value) return "Time unavailable";
   const date = new Date(`${value}Z`);
@@ -32,6 +34,7 @@ function formatTime(value) {
     : date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+// Joins match player names for searching.
 function playerNames(match) {
   return match.players.map((player) => player.name).join(" · ");
 }
@@ -43,6 +46,7 @@ const statusClasses = {
   finished: "bg-[var(--success-light)] text-[var(--success)]",
 };
 
+// Displays the players assigned to one Rotation team.
 function TeamPlayers({ players }) {
   if (players.length === 0) return <p className="mt-1 text-xs text-[var(--danger)]">Empty player slot</p>;
   return (
@@ -56,6 +60,7 @@ function TeamPlayers({ players }) {
   );
 }
 
+// Displays one Rotation match and its available lifecycle actions.
 function RotationMatchCard({
   match,
   queueSortActive,
@@ -77,6 +82,7 @@ function RotationMatchCard({
 
   return (
     <article className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+      {/* Queue position and match status */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {editable && <p className="text-xs font-semibold text-[var(--text)]">Queue #{match.queuePosition ?? "—"}</p>}
@@ -84,6 +90,7 @@ function RotationMatchCard({
         <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[match.status]}`}>{formatLabel(match.status)}</span>
       </div>
 
+      {/* Match teams */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3">
         <div className={`${match.winnerTeam === 1 ? "border border-[var(--success)]/30 bg-[var(--success-light)]" : "bg-[var(--primary-light)]/50"} rounded-xl p-3`}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--primary)]">{singles ? "Player A" : "Team A"}</p>
@@ -113,6 +120,7 @@ function RotationMatchCard({
       {match.status === "finished" && <div className="rounded-xl bg-[var(--success-light)] px-3 py-2 text-center text-sm font-semibold text-[var(--success)]">Winner: {singles ? (match.winnerTeam === 1 ? match.teamA[0]?.name : match.teamB[0]?.name) : `Team ${match.winnerTeam === 1 ? "A" : "B"}`}</div>}
       {match.status === "finished" && <button type="button" onClick={onToggleDetails} className="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button>}
 
+      {/* Optional match details and management actions */}
       {detailsOpen && <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-hover)]/40 p-3">
         <div className="flex flex-wrap justify-between gap-2 text-xs text-[var(--text)]"><span>{formatLabel(match.category)} · {formatLabel(match.matchType)}</span><span>{formatTime(match.status === "playing" ? match.startTime : match.createdAt)}</span><span>Balance: <strong className="text-[var(--text-h)]">{match.teamAStrength}–{match.teamBStrength} ({match.balanceDifference})</strong></span>{lockIds.length > 0 && <span className="font-semibold text-purple-700">Locked team</span>}</div>
         {match.validationMessage && match.status !== "incomplete" && <p className="rounded-lg bg-[var(--danger-light)] px-3 py-2 text-xs text-[var(--danger)]">{match.validationMessage}</p>}
@@ -130,6 +138,7 @@ function RotationMatchCard({
   );
 }
 
+// Groups Rotation matches into waiting, playing, and finished sections.
 export default function RotationMatches({ matches, isLoading, busyAction, onEdit, onRebalance, onReorder, onCancel, onStart, onFinish, onUnlock }) {
   const [waitingSearch, setWaitingSearch] = useState("");
   const [waitingSort, setWaitingSort] = useState("queue");
@@ -140,6 +149,7 @@ export default function RotationMatches({ matches, isLoading, busyAction, onEdit
   const [finishedPageSize, setFinishedPageSize] = useState(10);
   const [detailMatchIds, setDetailMatchIds] = useState([]);
 
+  // Filter and order waiting matches using the operator's controls.
   const waitingMatches = useMemo(() => {
     const query = waitingSearch.trim().toLowerCase();
     const filtered = matches.filter((match) => ["waiting", "incomplete"].includes(match.status) && (!query || playerNames(match).toLowerCase().includes(query)));
@@ -148,16 +158,19 @@ export default function RotationMatches({ matches, isLoading, busyAction, onEdit
   }, [matches, waitingSearch, waitingSort]);
   const playingMatches = matches.filter((match) => match.status === "playing");
   const finishedMatches = matches.filter((match) => match.status === "finished");
+  // Build independent pagination for waiting and finished matches.
   const waitingPagination = getPagination(waitingMatches.length, waitingPage, waitingPageSize);
   const finishedPagination = getPagination(finishedMatches.length, finishedPage, finishedPageSize);
   const pagedWaiting = waitingMatches.slice(waitingPagination.startIndex, waitingPagination.endIndex);
   const pagedFinished = finishedMatches.slice(finishedPagination.startIndex, finishedPagination.endIndex);
   const queueSortActive = waitingSort === "queue";
   const cardProps = { busyAction, onEdit, onRebalance, onReorder, onCancel, onStart, onFinish, onUnlock };
+  // Render a match card with shared actions and detail state.
   const renderMatchCard = (match, sortActive = true) => <RotationMatchCard key={match.id} match={match} queueSortActive={sortActive} detailsOpen={detailMatchIds.includes(match.id)} onToggleDetails={() => setDetailMatchIds((current) => current.includes(match.id) ? current.filter((id) => id !== match.id) : [...current, match.id])} {...cardProps} />;
 
   return (
     <div className="space-y-6">
+      {/* Waiting matches */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex flex-col justify-between gap-4 border-b border-[var(--border)] p-5 lg:flex-row lg:items-center">
           <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-[var(--text-h)]">Generated Waiting Matches</h2><span className="rounded-full bg-[var(--warning-light)] px-2.5 py-1 text-xs font-semibold text-[var(--warning)]">{waitingMatches.length} Waiting</span></div><p className="mt-1 text-sm text-[var(--text)]">Review teams, adjust queue order, then assign an available court.</p></div>
@@ -169,11 +182,13 @@ export default function RotationMatches({ matches, isLoading, busyAction, onEdit
         {!isLoading && waitingMatches.length > 0 && <PaginationControls page={waitingPagination.currentPage} pageSize={waitingPageSize} totalRecords={waitingMatches.length} itemLabel="matches" onPageChange={setWaitingPage} onPageSizeChange={(size) => { setWaitingPageSize(size); setWaitingPage(1); }} />}
       </section>
 
+      {/* Playing matches */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-5"><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-[var(--text-h)]">Playing Matches</h2><span className="rounded-full bg-[var(--primary-light)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">{playingMatches.length} Playing</span></div><p className="mt-1 text-sm text-[var(--text)]">Select the winning team when play is complete.</p></div></div>
         <div className="p-5">{isLoading ? <p className="py-8 text-center text-[var(--text)]">Loading playing matches...</p> : playingMatches.length === 0 ? <div className="py-8 text-center text-[var(--text)]"><p className="font-semibold text-[var(--text-h)]">No matches currently playing</p><p className="mt-1 text-sm">Start a waiting match after selecting a court.</p></div> : <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{playingMatches.map((match) => renderMatchCard(match))}</div>}</div>
       </section>
 
+      {/* Finished match history */}
       <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <button type="button" onClick={() => setFinishedOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 p-5 text-left hover:bg-[var(--surface-hover)]/50"><div className="flex items-center gap-3"><span className="rounded-xl bg-[var(--success-light)] p-2 text-[var(--success)]"><History size={18} /></span><div><h2 className="font-semibold text-[var(--text-h)]">Finished Matches</h2><p className="mt-1 text-sm text-[var(--text)]">Open saved match history when needed.</p></div></div><div className="flex items-center gap-2"><span className="rounded-full bg-[var(--success-light)] px-2.5 py-1 text-xs font-semibold text-[var(--success)]">{finishedMatches.length} Finished</span>{finishedOpen ? <ChevronDown className="text-[var(--text)]" /> : <ChevronRight className="text-[var(--text)]" />}</div></button>
         {finishedOpen && <><div className="border-t border-[var(--border)] p-5">{finishedMatches.length === 0 ? <p className="py-8 text-center text-[var(--text)]">Finished match history will appear here.</p> : <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{pagedFinished.map((match) => renderMatchCard(match))}</div>}</div>{finishedMatches.length > 0 && <PaginationControls page={finishedPagination.currentPage} pageSize={finishedPageSize} totalRecords={finishedMatches.length} itemLabel="matches" onPageChange={setFinishedPage} onPageSizeChange={(size) => { setFinishedPageSize(size); setFinishedPage(1); }} />}</>}

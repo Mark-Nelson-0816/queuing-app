@@ -1,11 +1,13 @@
 import db from "./database.js";
 
+// Loads the base court records in display order.
 const getCourtRowsStatement = db.prepare(`
   SELECT id, name, status, created_at
   FROM courts
   ORDER BY id ASC
 `);
 
+// Finds legacy normal matches that currently occupy courts.
 const getActiveNormalMatchesStatement = db.prepare(`
   SELECT id, court_id, player_one, player_two, status
   FROM matches
@@ -13,6 +15,7 @@ const getActiveNormalMatchesStatement = db.prepare(`
   ORDER BY id ASC
 `);
 
+// Finds active Rotation Queue matches assigned to courts.
 const getActiveRotationMatchesStatement = db.prepare(`
   SELECT
     rotation_matches.id,
@@ -26,6 +29,7 @@ const getActiveRotationMatchesStatement = db.prepare(`
   ORDER BY rotation_matches.id ASC
 `);
 
+// Loads Rotation Queue participants in team and slot order.
 const getRotationMatchPlayersStatement = db.prepare(`
   SELECT
     players.id,
@@ -39,6 +43,7 @@ const getRotationMatchPlayersStatement = db.prepare(`
   ORDER BY rotation_match_players.team ASC, rotation_match_players.slot ASC
 `);
 
+// Loads explicit participant rows for a legacy normal match.
 const getNormalMatchPlayersStatement = db.prepare(`
   SELECT
     players.id,
@@ -55,6 +60,7 @@ const getNormalMatchPlayersStatement = db.prepare(`
   ORDER BY COALESCE(match_players.team, 0) ASC, match_players.id ASC
 `);
 
+// Falls back to the two player IDs stored directly on old normal matches.
 const getFallbackNormalPlayersStatement = db.prepare(`
   SELECT id, name, level
   FROM players
@@ -62,6 +68,7 @@ const getFallbackNormalPlayersStatement = db.prepare(`
   ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END
 `);
 
+// Loads active tournament matches with complete team and player details.
 const getActiveTournamentMatchesStatement = db.prepare(`
   SELECT
     tournament_matches.id AS match_id,
@@ -109,6 +116,7 @@ const getActiveTournamentMatchesStatement = db.prepare(`
   ORDER BY tournament_matches.id ASC
 `);
 
+// Converts a joined player row into the public court-data shape.
 function mapPlayer(id, name, level) {
   if (id === null || id === undefined) return null;
 
@@ -119,6 +127,7 @@ function mapPlayer(id, name, level) {
   };
 }
 
+// Builds one tournament team from prefixed joined columns.
 function mapTournamentTeam(row, side) {
   const prefix = `team_${side}`;
   const players = [
@@ -141,6 +150,7 @@ function mapTournamentTeam(row, side) {
   };
 }
 
+// Maps a tournament match into the shared active-match structure.
 function mapTournamentMatch(row) {
   const teamA = mapTournamentTeam(row, "a");
   const teamB = mapTournamentTeam(row, "b");
@@ -160,6 +170,7 @@ function mapTournamentMatch(row) {
   };
 }
 
+// Maps legacy normal match data and supports old two-player records.
 function mapNormalMatch(row) {
   let players = getNormalMatchPlayersStatement.all(row.id).map((player) => ({
     id: Number(player.id),
@@ -199,6 +210,7 @@ function mapNormalMatch(row) {
     teamBPlayers = players.slice(1, 2);
   }
 
+  // Keeps only public court-display fields for a legacy match player.
   const cleanPlayer = (player) => ({
     id: player.id,
     name: player.name,
@@ -230,6 +242,7 @@ function mapNormalMatch(row) {
   };
 }
 
+// Maps a Rotation Queue match into the shared active-match structure.
 function mapRotationMatch(row) {
   const players = getRotationMatchPlayersStatement.all(row.id).map((player) => ({
     id: Number(player.id),
@@ -262,6 +275,7 @@ function mapRotationMatch(row) {
   };
 }
 
+// Returns every court with its source-safe active match, if any.
 export function getCourts() {
   const courts = getCourtRowsStatement.all();
   const normalMatchesByCourt = new Map(
@@ -285,6 +299,7 @@ export function getCourts() {
 
   return courts.map((court) => {
     const courtId = Number(court.id);
+    // Match sources stay explicit even when their numeric IDs are equal.
     const activeMatch = tournamentMatchesByCourt.get(courtId)
       || rotationMatchesByCourt.get(courtId)
       || normalMatchesByCourt.get(courtId)
@@ -309,6 +324,7 @@ export function getCourts() {
   });
 }
 
+// Returns courts that are available and have no active match in any source.
 export function getAvailableCourts() {
   return getCourts()
     .filter((court) => court.status === "available" && !court.activeMatch)
@@ -319,18 +335,7 @@ export function getAvailableCourts() {
     }));
 }
 
-export function getAvailableCourt() {
-  return getAvailableCourts()[0];
-}
-
-export function updateCourtStatus(id, status) {
-  return db.prepare(`
-    UPDATE courts
-    SET status = ?
-    WHERE id = ?
-  `).run(status, id);
-}
-
+// Adds a new court with the default available status.
 export function addCourt(name) {
   return db.prepare(`
     INSERT INTO courts(name)
@@ -338,7 +343,9 @@ export function addCourt(name) {
   `).run(name);
 }
 
+// Removes a court only when no active tournament or rotation match uses it.
 export function removeCourt(id) {
+  // Protect courts that still host an active tournament match.
   const activeTournamentMatch = db.prepare(`
     SELECT id
     FROM tournament_matches
@@ -353,6 +360,7 @@ export function removeCourt(id) {
     };
   }
 
+  // Protect courts that still host an active Rotation Queue match.
   const activeRotationMatch = db.prepare(`
     SELECT id
     FROM rotation_matches
@@ -367,17 +375,20 @@ export function removeCourt(id) {
     };
   }
 
+  // Remove legacy normal matches tied directly to this court.
   db.prepare(`
     DELETE FROM matches
     WHERE court_id = ?
   `).run(id);
 
+  // Keep legacy round-robin records but detach them from the removed court.
   db.prepare(`
     UPDATE round_robin_matches
     SET court_id = NULL, status = 'pending'
     WHERE court_id = ?
   `).run(id);
 
+  // Delete the court after protected active-match checks pass.
   db.prepare(`
     DELETE FROM courts
     WHERE id = ?

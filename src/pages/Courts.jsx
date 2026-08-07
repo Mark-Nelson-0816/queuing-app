@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import CourtCard from "../components/CourtCard";
 
+// Manages courts and displays their current match assignments.
 export default function Courts() {
   const [courts, setCourts] = useState([]);
   const [courtName, setCourtName] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Reload all courts from the main process.
   const loadCourts = async () => {
     try {
       const data = await window.api.getCourts();
@@ -18,6 +20,7 @@ export default function Courts() {
     }
   };
 
+  // Load the initial court list while guarding against unmounted updates.
   useEffect(() => {
     let isCancelled = false;
 
@@ -37,11 +40,13 @@ export default function Courts() {
     };
   }, []);
 
+  // Shows a temporary court-management message.
   const showMessage = (text, duration = 3000) => {
     setMessage(text);
     setTimeout(() => setMessage(""), duration);
   };
 
+  // Adds a named court and refreshes the list.
   const handleAddCourt = async () => {
     const name = courtName.trim();
     if (!name) return;
@@ -51,6 +56,7 @@ export default function Courts() {
     loadCourts();
   };
 
+  // Removes an idle court after checking its current status.
   const handleRemoveCourt = async (id) => {
     const court = courts.find((c) => c.id === id);
     if (court?.status === "playing") {
@@ -71,12 +77,14 @@ export default function Courts() {
 
   return (
     <div className="space-y-6">
+      {/* Court action feedback */}
       {message && (
         <div className="bg-red-500 text-white px-4 py-3 rounded-xl">
           {message}
         </div>
       )}
 
+      {/* Add court controls */}
       <div className="flex gap-3">
         <input
           value={courtName}
@@ -93,12 +101,14 @@ export default function Courts() {
         </button>
       </div>
 
+      {/* Court status summary */}
       <div className="flex items-center gap-4 flex-wrap">
         <div>Playing: {playingCount}</div>
         <div>Available: {availableCount}</div>
         <div>Total Courts: {courts.length}</div>
       </div>
 
+      {/* Court cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading && (
           <p className="text-sm text-[var(--text)]">Loading courts...</p>

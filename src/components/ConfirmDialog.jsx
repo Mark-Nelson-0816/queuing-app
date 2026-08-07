@@ -1,5 +1,6 @@
 import Modal from "./Modal";
 
+// Displays a reusable confirmation prompt for operator actions.
 export default function ConfirmDialog({
   open,
   title = "Confirm",
@@ -18,6 +19,7 @@ export default function ConfirmDialog({
 
   return (
     <Modal open={open} onClose={onCancel} title={title}>
+      {/* Confirmation message and actions */}
       <p className="text-sm text-[var(--text)] mb-5">{message}</p>
       <div className="flex items-center justify-end gap-3">
         <button

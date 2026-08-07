@@ -49,6 +49,7 @@ legacyDatabase.close();
 app.setPath("userData", testUserData);
 let db;
 
+// Confirms an operation failed with the expected message.
 function expectFailure(result, expression) {
   assert.equal(result.success, false);
   assert.match(result.message, expression);
@@ -102,10 +103,10 @@ try {
     rankPreference: options.rankPreference || "same_rank",
     matchCount: options.matchCount || 0,
     availableSince: options.availableSince || `2026-08-06 0${id}:00:00`,
-    preferMens: true,
-    preferWomens: true,
-    preferMixed: true,
-    preferNoGender: true,
+    preferMens: options.preferMens ?? true,
+    preferWomens: options.preferWomens ?? true,
+    preferMixed: options.preferMixed ?? true,
+    preferNoGender: options.preferNoGender ?? true,
     teammateCounts: options.teammateCounts || {},
     opponentCounts: options.opponentCounts || {},
   });
@@ -179,6 +180,108 @@ try {
   });
   assert.equal(invalidMixed.matches.length, 0);
   assert.match(invalidMixed.unmatchedPlayers[0].reason, /two male and two female/);
+
+  const noGenderOnly = {
+    preferMens: false,
+    preferWomens: false,
+    preferMixed: false,
+    preferNoGender: true,
+  };
+  assert.equal(logic.getCategoryPreferencePriority(
+    basePlayer(1, "intermediate", noGenderOnly),
+    "mens",
+  ), 1);
+  assert.equal(logic.getCategoryPreferencePriority(
+    basePlayer(1, "intermediate", { ...noGenderOnly, preferMens: true }),
+    "mens",
+  ), 0);
+  assert.equal(logic.playerAllowsCategory(
+    basePlayer(1, "intermediate", { ...noGenderOnly, gender: "female" }),
+    "mens",
+  ), false);
+  assert.equal(logic.getCategoryPreferencePriority(
+    basePlayer(1, "intermediate", {
+      preferMens: false,
+      preferWomens: false,
+      preferMixed: false,
+      preferNoGender: false,
+    }),
+    "mens",
+  ), null);
+
+  const mensExactPriority = logic.generateRotationMatches({
+    players: [
+      basePlayer(1, "intermediate", { preferNoGender: false }),
+      basePlayer(2, "intermediate", { preferNoGender: false }),
+      basePlayer(3, "intermediate", noGenderOnly),
+    ],
+    matchType: "singles",
+    category: "mens",
+    random: () => 0.5,
+  });
+  assert.deepEqual(
+    [...mensExactPriority.matches[0].teamA, ...mensExactPriority.matches[0].teamB]
+      .map((player) => player.id)
+      .sort(),
+    [1, 2],
+  );
+
+  const mensWithFiller = logic.generateRotationMatches({
+    players: [
+      basePlayer(1, "intermediate", { preferNoGender: false }),
+      basePlayer(2, "intermediate", { preferNoGender: false }),
+      basePlayer(3, "intermediate", { preferNoGender: false }),
+      basePlayer(4, "beginner", {
+        ...noGenderOnly,
+        rankPreference: "adjacent_rank",
+      }),
+      basePlayer(5, "intermediate", noGenderOnly),
+    ],
+    matchType: "doubles",
+    category: "mens",
+    random: () => 0.5,
+  });
+  assert.deepEqual(
+    [...mensWithFiller.matches[0].teamA, ...mensWithFiller.matches[0].teamB]
+      .map((player) => player.id)
+      .sort(),
+    [1, 2, 3, 5],
+  );
+
+  const womensWithFiller = logic.generateRotationMatches({
+    players: [
+      basePlayer(1, "intermediate", { gender: "female", preferWomens: true, preferNoGender: false }),
+      basePlayer(2, "intermediate", { gender: "female", preferWomens: true, preferNoGender: false }),
+      basePlayer(3, "intermediate", { gender: "female", preferWomens: true, preferNoGender: false }),
+      basePlayer(4, "intermediate", { ...noGenderOnly, gender: "female" }),
+    ],
+    matchType: "doubles",
+    category: "womens",
+    random: () => 0.5,
+  });
+  assert.equal(womensWithFiller.matches.length, 1);
+
+  for (const fillerGender of ["male", "female"]) {
+    const mixedPlayers = [
+      basePlayer(1, "intermediate", { gender: "male", preferMixed: true, preferNoGender: false }),
+      basePlayer(2, "intermediate", { gender: "female", preferMixed: true, preferNoGender: false }),
+      basePlayer(3, "intermediate", {
+        gender: fillerGender === "male" ? "female" : "male",
+        preferMixed: true,
+        preferNoGender: false,
+      }),
+      basePlayer(4, "intermediate", { ...noGenderOnly, gender: fillerGender }),
+    ];
+    const mixedWithFiller = logic.generateRotationMatches({
+      players: mixedPlayers,
+      matchType: "doubles",
+      category: "mixed",
+      random: () => 0.5,
+    });
+    assert.equal(mixedWithFiller.matches.length, 1);
+    assert.equal(mixedWithFiller.matches[0].teamA.length, 2);
+    assert.equal(mixedWithFiller.matches[0].teamB.length, 2);
+  }
 
   const sameRankTwo = logic.generateRotationMatches({
     players: [basePlayer(1, "Beginner"), basePlayer(2, "beginner")],
@@ -416,6 +519,7 @@ try {
     ) VALUES (?, 'available', 0, ?)
   `);
 
+  // Creates a profile and active registration for integration scenarios.
   function addDailyPlayer(name, level, gender, rankPreference, minute) {
     const playerId = Number(
       insertPlayer.run(name, level, gender, rankPreference).lastInsertRowid,
@@ -446,9 +550,9 @@ try {
   const ids = daily.map((entry) => entry.playerId);
   db.prepare("INSERT INTO courts (name) VALUES ('Court A'), ('Court B'), ('Court C')").run();
 
-  const eligibleResult = rotation.getEligibleRotationPlayers();
+  const eligibleResult = rotation.getRotationState();
   assert.equal(eligibleResult.success, true);
-  assert.equal(eligibleResult.data.find((player) => player.id === 1).eligible, true);
+  assert.equal(eligibleResult.data.players.find((player) => player.id === 1).eligible, true);
 
   const initialRotationCount = db.prepare("SELECT COUNT(*) AS count FROM rotation_matches").get().count;
   expectFailure(
@@ -463,6 +567,75 @@ try {
     db.prepare("SELECT COUNT(*) AS count FROM rotation_matches").get().count,
     initialRotationCount,
   );
+
+  const exactMensIds = [ids[4], ids[5], ids[8]];
+  db.prepare(`
+    UPDATE players
+    SET
+      prefer_mens = 1,
+      prefer_womens = 0,
+      prefer_mixed = 0,
+      prefer_no_gender = 0
+    WHERE id IN (?, ?, ?)
+  `).run(...exactMensIds);
+  db.prepare(`
+    UPDATE players
+    SET
+      prefer_mens = 0,
+      prefer_womens = 0,
+      prefer_mixed = 0,
+      prefer_no_gender = 1
+    WHERE id = ?
+  `).run(ids[9]);
+
+  const persistedFallback = rotation.generateAndSaveRotationMatches(
+    [...exactMensIds, ids[9]],
+    "doubles",
+    "mens",
+  );
+  assert.equal(persistedFallback.success, true, persistedFallback.message);
+  assert.equal(persistedFallback.data.generatedCount, 1);
+  const persistedFallbackMatch = rotation.getRotationState().data.matches.find(
+    (match) => match.status === "waiting",
+  );
+  assert.deepEqual(
+    persistedFallbackMatch.players.map((player) => player.id).sort((a, b) => a - b),
+    [...exactMensIds, ids[9]].sort((a, b) => a - b),
+  );
+  assert.equal(rotation.cancelWaitingMatch(persistedFallbackMatch.id).success, true);
+
+  db.prepare(`
+    UPDATE registered_players_today
+    SET status = 'playing'
+    WHERE player_id = ? AND registered_date = CURRENT_DATE
+  `).run(ids[9]);
+  expectFailure(
+    rotation.generateAndSaveRotationMatches([...exactMensIds, ids[9]], "doubles", "mens"),
+    /not available \(playing\)/,
+  );
+  db.prepare(`
+    UPDATE registered_players_today
+    SET status = 'done', is_done_today = 1
+    WHERE player_id = ? AND registered_date = CURRENT_DATE
+  `).run(ids[9]);
+  expectFailure(
+    rotation.generateAndSaveRotationMatches([...exactMensIds, ids[9]], "doubles", "mens"),
+    /done for today/,
+  );
+  db.prepare(`
+    UPDATE registered_players_today
+    SET status = 'available', is_done_today = 0
+    WHERE player_id = ? AND registered_date = CURRENT_DATE
+  `).run(ids[9]);
+  db.prepare(`
+    UPDATE players
+    SET
+      prefer_mens = 1,
+      prefer_womens = 1,
+      prefer_mixed = 1,
+      prefer_no_gender = 1
+    WHERE id IN (?, ?, ?, ?)
+  `).run(...exactMensIds, ids[9]);
 
   expectFailure(
     rotation.createTeamLock(ids[0], ids[0], "doubles", "no_gender"),
@@ -497,7 +670,7 @@ try {
   assert.equal(wideMatch.balanceDifference, 0);
   assert.equal(wideMatch.players.every((player) => player.status === "assigned"), true);
 
-  const activeWideLock = rotation.getActiveTeamLocks().data[0];
+  const activeWideLock = rotation.getRotationState().data.locks[0];
   const unlocked = rotation.removeTeamLock(activeWideLock.id);
   assert.equal(unlocked.success, true);
   state = rotation.getRotationState().data;
@@ -723,7 +896,7 @@ try {
   // Locks remain protected after the match starts, and duplicate start/finish
   // attempts remain harmless because every lifecycle operation is transactional.
   assert.equal(rotation.cancelWaitingMatch(secondWaiting.id).success, true);
-  const lockablePlayers = rotation.getEligibleRotationPlayers().data
+  const lockablePlayers = rotation.getRotationState().data.players
     .filter((player) => player.eligible && logic.normalizeRotationLevel(player.level) === "intermediate")
     .slice(0, 4);
   assert.equal(lockablePlayers.length, 4);
@@ -734,7 +907,7 @@ try {
     "no_gender",
   );
   assert.equal(playingLock.success, true, playingLock.message);
-  const playingLockId = rotation.getActiveTeamLocks().data[0].id;
+  const playingLockId = rotation.getRotationState().data.locks[0].id;
   expectFailure(
     rotation.createTeamLock(
       lockablePlayers[0].id,

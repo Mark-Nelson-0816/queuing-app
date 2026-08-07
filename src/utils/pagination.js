@@ -1,3 +1,4 @@
+// Calculates safe page bounds for client-side pagination.
 export function getPagination(totalRecords, page, pageSize) {
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const currentPage = Math.min(Math.max(1, page), totalPages);

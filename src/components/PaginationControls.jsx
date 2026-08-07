@@ -2,6 +2,7 @@ import { getPagination } from "../utils/pagination";
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
+// Builds compact page-number controls with gaps for long lists.
 function buildPageItems(currentPage, totalPages) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -19,6 +20,7 @@ function buildPageItems(currentPage, totalPages) {
   return items;
 }
 
+// Displays record totals, page size, and page navigation controls.
 export default function PaginationControls({
   page,
   pageSize,
@@ -33,6 +35,7 @@ export default function PaginationControls({
 
   return (
     <div className="flex flex-col gap-3 border-t border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+      {/* Record range and rows-per-page selector */}
       <div className="flex flex-wrap items-center gap-3 text-[var(--text)]">
         <span>
           Showing <strong className="text-[var(--text-h)]">{firstRecord}–{pagination.endIndex}</strong>
@@ -50,6 +53,7 @@ export default function PaginationControls({
         </label>
       </div>
 
+      {/* Previous, numbered, and next page controls */}
       <div className="flex flex-wrap items-center gap-1" aria-label="Pagination">
         <span className="mr-2 text-xs font-semibold text-[var(--text)]">
           Page {pagination.currentPage} of {pagination.totalPages}

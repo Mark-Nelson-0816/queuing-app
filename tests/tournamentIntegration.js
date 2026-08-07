@@ -31,10 +31,12 @@ app.setPath("userData", testUserData);
 
 let db;
 
+// Flattens round matches for lifecycle assertions.
 function flattenMatches(tournamentData) {
   return tournamentData.rounds.flatMap((round) => round.matches);
 }
 
+// Confirms a Tournament operation failed with the expected message.
 function assertFailure(result, expectedMessage) {
   assert.equal(result.success, false);
   assert.match(result.message, expectedMessage);
@@ -46,18 +48,18 @@ try {
 
   const {
     createRoundRobinTournament,
-    finishTournament,
     finishTournamentMatch,
     getLatestTournament,
-    getTournamentById,
-    getTournamentMatches,
-    getTournamentStandings,
     startTournamentMatch,
   } = await import("../database/tournamentQueries.js");
   const { getAvailableCourts, getCourts } = await import(
     "../database/courtQueries.js"
   );
-  const { generateRoundRobinSchedule } = await import(
+  const {
+    buildTournamentTeams,
+    generateRoundRobinSchedule,
+    validateTournamentPlayers,
+  } = await import(
     "../database/tournamentLogic.js"
   );
   const {
@@ -147,8 +149,16 @@ try {
   });
 
   const insertPlayer = db.prepare(`
-    INSERT INTO players (name, level, gender)
-    VALUES (?, ?, ?)
+    INSERT INTO players (
+      name,
+      level,
+      gender,
+      prefer_mens,
+      prefer_womens,
+      prefer_mixed,
+      prefer_no_gender
+    )
+    VALUES (?, ?, ?, ?, ?, 1, 1)
   `);
   const levels = [
     "beginner",
@@ -161,7 +171,13 @@ try {
   const players = [];
 
   for (let index = 1; index <= 6; index += 1) {
-    const result = insertPlayer.run(`Male ${index}`, levels[index - 1], "male");
+    const result = insertPlayer.run(
+      `Male ${index}`,
+      levels[index - 1],
+      "male",
+      1,
+      0,
+    );
     players.push({
       id: Number(result.lastInsertRowid),
       gender: "male",
@@ -169,7 +185,13 @@ try {
     });
   }
   for (let index = 1; index <= 6; index += 1) {
-    const result = insertPlayer.run(`Female ${index}`, levels[index - 1], "female");
+    const result = insertPlayer.run(
+      `Female ${index}`,
+      levels[index - 1],
+      "female",
+      0,
+      1,
+    );
     players.push({
       id: Number(result.lastInsertRowid),
       gender: "female",
@@ -184,12 +206,132 @@ try {
 
   const malePlayers = players.filter((player) => player.gender === "male");
   const femalePlayers = players.filter((player) => player.gender === "female");
+  const exactPreference = (player, category) => ({
+    ...player,
+    preferMens: category === "mens",
+    preferWomens: category === "womens",
+    preferMixed: category === "mixed",
+    preferNoGender: false,
+  });
+  const noGenderPreference = (player) => ({
+    ...player,
+    preferMens: false,
+    preferWomens: false,
+    preferMixed: false,
+    preferNoGender: true,
+  });
   const tournamentTableNames = [
     "tournaments",
     "tournament_teams",
     "tournament_rounds",
     "tournament_matches",
   ];
+
+  const mensWithFallback = [
+    ...malePlayers.slice(0, 3).map((player) => exactPreference(player, "mens")),
+    noGenderPreference(malePlayers[3]),
+  ];
+  assert.equal(validateTournamentPlayers(
+    mensWithFallback,
+    "doubles",
+    "mens",
+  ), true);
+  assert.equal(buildTournamentTeams(
+    mensWithFallback,
+    "doubles",
+    "mens",
+    () => 0.5,
+  ).length, 2);
+
+  const womensWithFallback = [
+    ...femalePlayers.slice(0, 3).map((player) => exactPreference(player, "womens")),
+    noGenderPreference(femalePlayers[3]),
+  ];
+  assert.equal(validateTournamentPlayers(
+    womensWithFallback,
+    "doubles",
+    "womens",
+  ), true);
+
+  for (const fallbackGender of ["male", "female"]) {
+    const exactMixedPlayers = [
+      exactPreference(malePlayers[0], "mixed"),
+      exactPreference(femalePlayers[0], "mixed"),
+      exactPreference(
+        fallbackGender === "male" ? femalePlayers[1] : malePlayers[1],
+        "mixed",
+      ),
+    ];
+    const mixedWithFallback = [
+      ...exactMixedPlayers,
+      noGenderPreference(
+        fallbackGender === "male" ? malePlayers[1] : femalePlayers[1],
+      ),
+    ];
+    const teams = buildTournamentTeams(
+      mixedWithFallback,
+      "doubles",
+      "mixed",
+      () => 0.5,
+    );
+    assert.equal(teams.length, 2);
+    assert.ok(teams.every((team) => team.player1Id && team.player2Id));
+  }
+
+  assert.throws(() => validateTournamentPlayers([
+    ...malePlayers.slice(0, 3).map((player) => exactPreference(player, "mens")),
+    noGenderPreference(femalePlayers[0]),
+  ], "doubles", "mens"), /only include male players/);
+  assert.throws(() => validateTournamentPlayers([
+    ...malePlayers.slice(0, 3).map((player) => exactPreference(player, "mens")),
+    exactPreference(malePlayers[3], "womens"),
+  ], "doubles", "mens"), /do not prefer this tournament category/);
+
+  db.prepare(`
+    UPDATE players
+    SET
+      prefer_mens = 1,
+      prefer_womens = 0,
+      prefer_mixed = 0,
+      prefer_no_gender = 0
+    WHERE id IN (?, ?, ?)
+  `).run(...malePlayers.slice(0, 3).map((player) => player.id));
+  db.prepare(`
+    UPDATE players
+    SET
+      prefer_mens = 0,
+      prefer_womens = 0,
+      prefer_mixed = 0,
+      prefer_no_gender = 1
+    WHERE id = ?
+  `).run(malePlayers[3].id);
+  const persistedTournamentFallback = createRoundRobinTournament(
+    malePlayers.slice(0, 4),
+    "doubles",
+    "mens",
+  );
+  assert.equal(
+    persistedTournamentFallback.success,
+    true,
+    persistedTournamentFallback.message,
+  );
+  assert.equal(persistedTournamentFallback.data.teams.length, 2);
+  const fallbackTournamentId = persistedTournamentFallback.data.tournament.id;
+  db.prepare("DELETE FROM tournament_matches WHERE tournament_id = ?")
+    .run(fallbackTournamentId);
+  db.prepare("DELETE FROM tournament_rounds WHERE tournament_id = ?")
+    .run(fallbackTournamentId);
+  db.prepare("DELETE FROM tournament_teams WHERE tournament_id = ?")
+    .run(fallbackTournamentId);
+  db.prepare("DELETE FROM tournaments WHERE id = ?").run(fallbackTournamentId);
+  db.prepare(`
+    UPDATE players
+    SET
+      prefer_mens = CASE WHEN gender = 'male' THEN 1 ELSE 0 END,
+      prefer_womens = CASE WHEN gender = 'female' THEN 1 ELSE 0 END,
+      prefer_mixed = 1,
+      prefer_no_gender = 1
+  `).run();
 
   assertFailure(
     createRoundRobinTournament([malePlayers[0]], "singles", "no_gender"),
@@ -263,28 +405,17 @@ try {
   assert.equal(singles.summary.totalMatches, 3);
   assert.ok(singles.teams.every((team) => team.player2 === null));
 
-  const reloadedSingles = getTournamentById(singles.tournament.id);
+  const reloadedSingles = getLatestTournament();
   assert.equal(reloadedSingles.success, true);
   assert.deepEqual(reloadedSingles.data.summary, singles.summary);
-  assert.deepEqual(
-    getTournamentMatches(singles.tournament.id).data.rounds,
-    reloadedSingles.data.rounds,
-  );
-  assert.equal(
-    getTournamentStandings(singles.tournament.id).data.standings.length,
-    singles.teams.length,
-  );
+  assert.deepEqual(reloadedSingles.data.rounds, singles.rounds);
+  assert.equal(reloadedSingles.data.standings.length, singles.teams.length);
   assert.equal(getLatestTournament().data.tournament.id, singles.tournament.id);
 
   assertFailure(
     createRoundRobinTournament(malePlayers.slice(0, 2), "singles", "mens"),
     /ongoing tournament already exists/,
   );
-  assertFailure(
-    finishTournament(singles.tournament.id),
-    /All matches must be completed/,
-  );
-
   const singlesMatches = flattenMatches(singles);
   const [firstMatch, secondMatch, thirdMatch] = singlesMatches;
   const outsideTeam = singles.teams.find(
@@ -439,6 +570,7 @@ try {
     && standing.losses === 1
   )));
 
+  // Starts and finishes every remaining Tournament match.
   async function finishEveryPendingMatch(tournamentData) {
     let latestData = tournamentData;
     for (const match of flattenMatches(tournamentData)) {
@@ -532,7 +664,7 @@ try {
   db.prepare("UPDATE courts SET status = 'available' WHERE id = ?").run(courtIds[1]);
 
   const finishedStandardDoubles = await finishEveryPendingMatch(
-    getTournamentById(standardDoublesResult.data.tournament.id).data,
+    getLatestTournament().data,
   );
   assert.equal(finishedStandardDoubles.tournament.status, "finished");
   assert.equal(finishedStandardDoubles.outcome.type, "champion");

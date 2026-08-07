@@ -9,6 +9,7 @@ import {
   validateRotationArrangement,
 } from "./rotationLogic.js";
 
+// Converts database errors into the consistent Rotation Queue API shape.
 function failure(error, fallbackMessage) {
   return {
     success: false,
@@ -18,12 +19,14 @@ function failure(error, fallbackMessage) {
   };
 }
 
+// Validates and converts IDs before they reach database operations.
 function parsePositiveId(value, message) {
   const id = Number(value);
   if (!Number.isInteger(id) || id <= 0) throw new Error(message);
   return id;
 }
 
+// Safely reads warning arrays stored as JSON text.
 function parseWarnings(value) {
   try {
     const parsed = JSON.parse(value || "[]");
@@ -33,6 +36,7 @@ function parseWarnings(value) {
   }
 }
 
+// Loads today's registered players in fair waiting order.
 const getDailyPlayersStatement = db.prepare(`
   SELECT
     players.id,
@@ -62,6 +66,7 @@ const getDailyPlayersStatement = db.prepare(`
     players.name ASC
 `);
 
+// Loads active teammate locks that apply today.
 const getActiveLocksStatement = db.prepare(`
   SELECT
     player_team_locks.id,
@@ -83,6 +88,7 @@ const getActiveLocksStatement = db.prepare(`
   ORDER BY player_team_locks.id ASC
 `);
 
+// Loads all Rotation Queue matches in operator-friendly status order.
 const getRotationMatchRowsStatement = db.prepare(`
   SELECT
     rotation_matches.id,
@@ -117,6 +123,7 @@ const getRotationMatchRowsStatement = db.prepare(`
     rotation_matches.id DESC
 `);
 
+// Loads only complete, valid waiting matches in public queue order.
 const getRotationNextUpRowsStatement = db.prepare(`
   SELECT
     rotation_matches.id,
@@ -165,6 +172,7 @@ const getRotationNextUpRowsStatement = db.prepare(`
     rotation_matches.id ASC
 `);
 
+// Loads one match's players with registration, preference, and lock data.
 const getRotationParticipantsStatement = db.prepare(`
   SELECT
     rotation_match_players.id,
@@ -199,6 +207,7 @@ const getRotationParticipantsStatement = db.prepare(`
   ORDER BY rotation_match_players.team ASC, rotation_match_players.slot ASC
 `);
 
+// Maps a teammate lock into the renderer response shape.
 function mapLock(row) {
   return {
     id: Number(row.id),
@@ -212,10 +221,12 @@ function mapLock(row) {
   };
 }
 
+// Returns all active teammate locks for today.
 function loadActiveLocks() {
   return getActiveLocksStatement.all().map(mapLock);
 }
 
+// Maps a daily registration into the rotation player shape.
 function mapDailyPlayer(row) {
   return {
     id: Number(row.id),
@@ -240,6 +251,7 @@ function mapDailyPlayer(row) {
   };
 }
 
+// Adds today's teammate and opponent repeat counts to each player.
 function loadHistoryCounts(players) {
   const playersById = new Map(players.map((player) => [player.id, player]));
   const rows = db.prepare(`
@@ -270,6 +282,7 @@ function loadHistoryCounts(players) {
   }
 }
 
+// Finds the active match source currently using a player.
 function getPlayingSource(playerId) {
   const rotation = db.prepare(`
     SELECT rotation_matches.id
@@ -317,6 +330,7 @@ function getPlayingSource(playerId) {
   return legacy ? "normal" : null;
 }
 
+// Finds another active Rotation Queue assignment for a player.
 function getAssignedRotationMatch(playerId, excludedMatchId = null) {
   return db.prepare(`
     SELECT rotation_matches.id, rotation_matches.status
@@ -330,6 +344,7 @@ function getAssignedRotationMatch(playerId, excludedMatchId = null) {
   `).get(playerId, excludedMatchId, excludedMatchId);
 }
 
+// Explains whether a player can enter a new Rotation Queue match.
 function getEligibility(player) {
   if (player.isDoneToday || player.status === "done") {
     return { eligible: false, reason: "Player is marked done for today." };
@@ -357,6 +372,7 @@ function getEligibility(player) {
   return { eligible: true, reason: "" };
 }
 
+// Builds today's players with history, lock, and eligibility details.
 function loadDailyPlayers() {
   const players = getDailyPlayersStatement.all().map(mapDailyPlayer);
   loadHistoryCounts(players);
@@ -384,6 +400,7 @@ function loadDailyPlayers() {
   });
 }
 
+// Maps a stored match participant into the shared player shape.
 function mapParticipant(row) {
   return {
     participantId: Number(row.id),
@@ -410,6 +427,7 @@ function mapParticipant(row) {
   };
 }
 
+// Maps one saved Rotation Queue match and its participants.
 function mapRotationMatch(row) {
   const participants = getRotationParticipantsStatement.all(row.id).map(mapParticipant);
   return {
@@ -443,14 +461,17 @@ function mapRotationMatch(row) {
   };
 }
 
+// Returns all saved Rotation Queue matches.
 function loadRotationMatches() {
   return getRotationMatchRowsStatement.all().map(mapRotationMatch);
 }
 
+// Returns only valid waiting matches for the public Next Up display.
 function loadRotationNextUpMatches() {
   return getRotationNextUpRowsStatement.all().map(mapRotationMatch);
 }
 
+// Counts Rotation Queue matches by lifecycle status.
 function createRotationSummary(matches) {
   return {
     waiting: matches.filter((match) => match.status === "waiting").length,
@@ -460,22 +481,7 @@ function createRotationSummary(matches) {
   };
 }
 
-export function getEligibleRotationPlayers() {
-  try {
-    return { success: true, data: loadDailyPlayers() };
-  } catch (error) {
-    return failure(error, "Failed to load rotation players.");
-  }
-}
-
-export function getActiveTeamLocks() {
-  try {
-    return { success: true, data: loadActiveLocks() };
-  } catch (error) {
-    return failure(error, "Failed to load teammate locks.");
-  }
-}
-
+// Returns Rotation Queue matches with summary counts.
 export function getRotationMatches() {
   try {
     const matches = loadRotationMatches();
@@ -488,6 +494,7 @@ export function getRotationMatches() {
   }
 }
 
+// Returns valid waiting matches for the public display.
 export function getRotationNextUpMatches() {
   try {
     return {
@@ -499,6 +506,7 @@ export function getRotationNextUpMatches() {
   }
 }
 
+// Returns players, locks, matches, and summary in one state snapshot.
 export function getRotationState() {
   try {
     const players = loadDailyPlayers();
@@ -518,6 +526,7 @@ export function getRotationState() {
   }
 }
 
+// Validates that a proposed teammate lock fits the match category.
 function assertCategoryPair(players, matchType, category) {
   if (!["singles", "doubles"].includes(matchType)) {
     throw new Error("Invalid rotation match type.");
@@ -551,6 +560,7 @@ function assertCategoryPair(players, matchType, category) {
   }
 }
 
+// Validates and creates a teammate lock atomically.
 const createTeamLockTransaction = db.transaction((firstPlayerId, secondPlayerId, matchType, category) => {
   if (firstPlayerId === secondPlayerId) {
     throw new Error("A player cannot be locked with themselves.");
@@ -589,6 +599,7 @@ const createTeamLockTransaction = db.transaction((firstPlayerId, secondPlayerId,
   return Number(result.lastInsertRowid);
 });
 
+// Creates an active teammate lock for two available players.
 export function createTeamLock(firstPlayerId, secondPlayerId, matchType, category) {
   try {
     const firstId = parsePositiveId(firstPlayerId, "First teammate was not found.");
@@ -600,6 +611,7 @@ export function createTeamLock(firstPlayerId, secondPlayerId, matchType, categor
   }
 }
 
+// Deactivates a lock and revalidates affected waiting matches atomically.
 const removeTeamLockTransaction = db.transaction((lockId) => {
   const lock = db.prepare(`
     SELECT *
@@ -641,6 +653,7 @@ const removeTeamLockTransaction = db.transaction((lockId) => {
   }
 });
 
+// Removes an active teammate lock when neither player is playing.
 export function removeTeamLock(lockId) {
   try {
     removeTeamLockTransaction(parsePositiveId(lockId, "Teammate lock not found."));
@@ -650,6 +663,7 @@ export function removeTeamLock(lockId) {
   }
 }
 
+// Updates rank preference only while the player is unassigned.
 export function updateRotationRankPreference(playerId, preference) {
   try {
     const id = parsePositiveId(playerId, "Player not found.");
@@ -678,6 +692,7 @@ export function updateRotationRankPreference(playerId, preference) {
   }
 }
 
+// Returns the next position after all current waiting matches.
 function getNextQueuePosition() {
   return Number(db.prepare(`
     SELECT COALESCE(MAX(queue_position), 0) + 1 AS next_position
@@ -686,12 +701,14 @@ function getNextQueuePosition() {
   `).get().next_position);
 }
 
+// Finds the active lock associated with a generated participant.
 function findPlayerLock(locks, playerId) {
   return locks.find((lock) => (
     lock.player1Id === Number(playerId) || lock.player2Id === Number(playerId)
   ));
 }
 
+// Generates and stores all compatible waiting matches atomically.
 const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType, category) => {
   if (!Array.isArray(selectedPlayerIds)) throw new Error("Please select rotation players.");
   const dailyPlayers = loadDailyPlayers();
@@ -707,6 +724,7 @@ const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType
   const locks = loadActiveLocks().filter((lock) => (
     selectedIdSet.has(lock.player1Id) || selectedIdSet.has(lock.player2Id)
   ));
+  // Generate the best compatible arrangements before inserting records.
   const generated = generateRotationMatches({
     players: selectedPlayers,
     matchType,
@@ -741,6 +759,7 @@ const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
+  // Persist each match, participant slot, and assigned player status.
   for (const generatedMatch of generated.matches) {
     const matchResult = insertMatch.run(
       queuePosition,
@@ -783,6 +802,7 @@ const generateRotationTransaction = db.transaction((selectedPlayerIds, matchType
   };
 });
 
+// Validates selected IDs and saves generated Rotation Queue matches.
 export function generateAndSaveRotationMatches(selectedPlayerIds, matchType, category) {
   try {
     return {
@@ -794,14 +814,17 @@ export function generateAndSaveRotationMatches(selectedPlayerIds, matchType, cat
   }
 }
 
+// Loads the raw database row for one Rotation Queue match.
 function loadMatchRow(matchId) {
   return db.prepare(`SELECT * FROM rotation_matches WHERE id = ?`).get(matchId);
 }
 
+// Loads mapped participants for one Rotation Queue match.
 function loadMatchParticipants(matchId) {
   return getRotationParticipantsStatement.all(matchId).map(mapParticipant);
 }
 
+// Totals numeric skill values for one team.
 function calculateStrength(players) {
   return players.reduce(
     (total, player) => total + getRotationLevelValue(player.level),
@@ -809,6 +832,7 @@ function calculateStrength(players) {
   );
 }
 
+// Recomputes status, balance, warnings, and validation after a match change.
 function revalidateStoredWaitingMatch(matchId) {
   const match = loadMatchRow(matchId);
   if (!match || !["waiting", "incomplete"].includes(match.status)) return;
@@ -861,6 +885,7 @@ function revalidateStoredWaitingMatch(matchId) {
   );
 }
 
+// Returns active locks involving players in one arrangement.
 function getArrangementLocks(players) {
   const playerIds = new Set(players.map((player) => player.id));
   return loadActiveLocks().filter((lock) => (
@@ -868,6 +893,7 @@ function getArrangementLocks(players) {
   ));
 }
 
+// Validates players selected while editing a waiting match.
 function validateEditedPlayers(playerIds, matchId) {
   const uniqueIds = new Set(playerIds);
   if (uniqueIds.size !== playerIds.length) {
@@ -895,6 +921,7 @@ function validateEditedPlayers(playerIds, matchId) {
   });
 }
 
+// Replaces waiting-match teams and updates affected player assignments.
 function writeWaitingArrangement(match, teamA, teamB) {
   const players = [...teamA, ...teamB];
   const locks = getArrangementLocks(players);
@@ -920,6 +947,7 @@ function writeWaitingArrangement(match, teamA, teamB) {
     }
   }
 
+  // Replace participant slots before updating registration statuses.
   const oldParticipants = loadMatchParticipants(match.id);
   db.prepare(`DELETE FROM rotation_match_players WHERE rotation_match_id = ?`).run(match.id);
   const insertParticipant = db.prepare(`
@@ -987,6 +1015,7 @@ function writeWaitingArrangement(match, teamA, teamB) {
   );
 }
 
+// Applies an operator-edited waiting arrangement atomically.
 const updateWaitingMatchTransaction = db.transaction((matchId, teamAIds, teamBIds) => {
   const match = loadMatchRow(matchId);
   if (!match) throw new Error("Rotation match not found.");
@@ -1014,6 +1043,7 @@ const updateWaitingMatchTransaction = db.transaction((matchId, teamAIds, teamBId
   );
 });
 
+// Updates the teams and players in a waiting or incomplete match.
 export function updateWaitingMatch(matchId, teamAIds, teamBIds) {
   try {
     updateWaitingMatchTransaction(
@@ -1027,6 +1057,7 @@ export function updateWaitingMatch(matchId, teamAIds, teamBIds) {
   }
 }
 
+// Rebuilds the most balanced valid teams for a waiting match.
 const rebalanceWaitingMatchTransaction = db.transaction((matchId) => {
   const match = loadMatchRow(matchId);
   if (!match) throw new Error("Rotation match not found.");
@@ -1059,6 +1090,7 @@ const rebalanceWaitingMatchTransaction = db.transaction((matchId) => {
   );
 });
 
+// Rebalances a complete waiting match without changing its players.
 export function rebalanceWaitingMatch(matchId) {
   try {
     rebalanceWaitingMatchTransaction(
@@ -1070,6 +1102,7 @@ export function rebalanceWaitingMatch(matchId) {
   }
 }
 
+// Compacts waiting queue positions into a stable 1-based sequence.
 function normalizeQueuePositions() {
   const rows = db.prepare(`
     SELECT id
@@ -1077,6 +1110,7 @@ function normalizeQueuePositions() {
     WHERE status IN ('waiting', 'incomplete')
     ORDER BY queue_position ASC, created_at ASC, id ASC
   `).all();
+  // Temporary negative positions avoid collisions with the unique queue index.
   rows.forEach((row, index) => {
     db.prepare(`UPDATE rotation_matches SET queue_position = ? WHERE id = ?`)
       .run(-(index + 1), row.id);
@@ -1087,6 +1121,7 @@ function normalizeQueuePositions() {
   });
 }
 
+// Swaps one waiting match with its nearest queue neighbor atomically.
 const reorderWaitingMatchTransaction = db.transaction((matchId, direction) => {
   const match = loadMatchRow(matchId);
   if (!match || !["waiting", "incomplete"].includes(match.status)) {
@@ -1104,6 +1139,7 @@ const reorderWaitingMatchTransaction = db.transaction((matchId, direction) => {
     LIMIT 1
   `).get(match.queue_position);
   if (!target) return;
+  // Use a temporary position so the two queue rows can swap safely.
   db.prepare(`UPDATE rotation_matches SET queue_position = -999999 WHERE id = ?`).run(match.id);
   db.prepare(`UPDATE rotation_matches SET queue_position = ? WHERE id = ?`)
     .run(match.queue_position, target.id);
@@ -1111,6 +1147,7 @@ const reorderWaitingMatchTransaction = db.transaction((matchId, direction) => {
     .run(target.queue_position, match.id);
 });
 
+// Moves a waiting match one position up or down.
 export function reorderWaitingMatch(matchId, direction) {
   try {
     reorderWaitingMatchTransaction(
@@ -1123,6 +1160,7 @@ export function reorderWaitingMatch(matchId, direction) {
   }
 }
 
+// Cancels a waiting match and returns its players to available status.
 const cancelWaitingMatchTransaction = db.transaction((matchId) => {
   const match = loadMatchRow(matchId);
   if (!match || !["waiting", "incomplete"].includes(match.status)) {
@@ -1144,6 +1182,7 @@ const cancelWaitingMatchTransaction = db.transaction((matchId) => {
   normalizeQueuePositions();
 });
 
+// Cancels a waiting or incomplete Rotation Queue match.
 export function cancelWaitingMatch(matchId) {
   try {
     cancelWaitingMatchTransaction(
@@ -1155,6 +1194,7 @@ export function cancelWaitingMatch(matchId) {
   }
 }
 
+// Revalidates stored teams and participant availability before match start.
 function validateStoredMatch(match) {
   const participants = loadMatchParticipants(match.id);
   const teamA = participants.filter((player) => player.team === 1);
@@ -1189,6 +1229,7 @@ function validateStoredMatch(match) {
   return participants;
 }
 
+// Reserves a court and starts a valid waiting match atomically.
 const startRotationMatchTransaction = db.transaction((matchId, courtId) => {
   const match = loadMatchRow(matchId);
   if (!match) throw new Error("Rotation match not found.");
@@ -1202,6 +1243,7 @@ const startRotationMatchTransaction = db.transaction((matchId, courtId) => {
   const participants = validateStoredMatch(match);
   const court = db.prepare(`SELECT id, status FROM courts WHERE id = ?`).get(courtId);
   if (!court) throw new Error("Selected court was not found.");
+  // Check every match source before reserving the selected court.
   const occupied = db.prepare(`
     SELECT 1 AS occupied
     WHERE EXISTS (SELECT 1 FROM matches WHERE court_id = ? AND status = 'playing')
@@ -1235,6 +1277,7 @@ const startRotationMatchTransaction = db.transaction((matchId, courtId) => {
   normalizeQueuePositions();
 });
 
+// Validates IDs and starts a Rotation Queue match on a court.
 export function startRotationMatch(matchId, courtId) {
   try {
     startRotationMatchTransaction(
@@ -1247,6 +1290,7 @@ export function startRotationMatch(matchId, courtId) {
   }
 }
 
+// Saves the result, updates statistics, and releases the court atomically.
 const finishRotationMatchTransaction = db.transaction((matchId, winnerTeam, donePlayerIds) => {
   const match = loadMatchRow(matchId);
   if (!match) throw new Error("Rotation match not found.");
@@ -1274,6 +1318,7 @@ const finishRotationMatchTransaction = db.transaction((matchId, winnerTeam, done
   `).run(winnerTeam, matchId);
   if (update.changes !== 1) throw new Error("This rotation match could not be completed.");
 
+  // Update today's and lifetime statistics for every participant.
   for (const player of participants) {
     const won = player.team === winnerTeam;
     const isDone = doneIds.has(player.id);
@@ -1305,6 +1350,7 @@ const finishRotationMatchTransaction = db.transaction((matchId, winnerTeam, done
     `).run(won ? 1 : 0, won ? 0 : 1, player.id);
   }
 
+  // Release the court only when no match source still uses it.
   db.prepare(`
     UPDATE courts
     SET status = 'available'
@@ -1326,6 +1372,7 @@ const finishRotationMatchTransaction = db.transaction((matchId, winnerTeam, done
   `).run(match.court_id);
 });
 
+// Completes a playing Rotation Queue match and returns updated queue state.
 export function finishRotationMatch(matchId, winnerTeam, donePlayerIds = []) {
   try {
     finishRotationMatchTransaction(

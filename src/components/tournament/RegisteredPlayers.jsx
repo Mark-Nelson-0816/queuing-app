@@ -8,6 +8,7 @@ import {
   normalizePlayerLevel,
 } from "../../utils/playerLevel";
 import {
+  getTournamentPreferencePriority,
   isTournamentCategoryEligible,
   isTournamentPlayerEligible,
 } from "../../utils/tournamentUi";
@@ -28,21 +29,28 @@ const statusClasses = {
   finished: "bg-[var(--surface-hover)] text-[var(--text)]",
 };
 
+// Converts stored player values into readable labels.
 function formatValue(value, fallback = "Unknown") {
   const normalized = String(value || "").trim();
   if (!normalized) return fallback;
   return normalized.charAt(0).toUpperCase() + normalized.slice(1).replaceAll("_", " ");
 }
 
+// Keeps the player fields required by Tournament creation.
 function toSelectedPlayer(player) {
   return {
     id: player.id,
     name: player.name,
     gender: player.gender,
     level: player.level,
+    preferMens: player.preferMens,
+    preferWomens: player.preferWomens,
+    preferMixed: player.preferMixed,
+    preferNoGender: player.preferNoGender,
   };
 }
 
+// Loads and manages players selected for Tournament generation.
 export default function RegisteredPlayers({
   selectedPlayers,
   setSelectedPlayers,
@@ -57,10 +65,12 @@ export default function RegisteredPlayers({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
+  // Refresh registered players and remove selections that become ineligible.
   useEffect(() => {
     let isCancelled = false;
     let hasLoaded = false;
 
+    // Load today's registered players from the backend.
     const loadPlayers = () => {
       window.api.getRegisteredPlayersToday()
         .then((registeredPlayers) => {
@@ -97,30 +107,40 @@ export default function RegisteredPlayers({
     };
   }, [category, setSelectedPlayers]);
 
+  // Build fast lookup state for selected player rows.
   const selectedIdSet = useMemo(
     () => new Set(selectedPlayers.map((player) => Number(player.id))),
     [selectedPlayers],
   );
 
+  // Keep players whose gender fits the selected category.
   const categoryPlayers = useMemo(
     () => players.filter((player) => isTournamentCategoryEligible(player, category)),
     [category, players],
   );
 
+  // Count players who also meet status and preference rules.
   const eligiblePlayers = useMemo(
     () => categoryPlayers.filter((player) => isTournamentPlayerEligible(player, category)),
     [category, categoryPlayers],
   );
 
+  // Filter players and place exact preferences before fallback players.
   const filteredPlayers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return categoryPlayers.filter((player) => (
-      (!query || String(player.name || "").toLowerCase().includes(query))
-      && (levelFilter === "all" || normalizePlayerLevel(player.level) === levelFilter)
-      && (genderFilter === "all" || String(player.gender || "").toLowerCase() === genderFilter)
-    ));
-  }, [categoryPlayers, genderFilter, levelFilter, search]);
+    return categoryPlayers
+      .filter((player) => (
+        (!query || String(player.name || "").toLowerCase().includes(query))
+        && (levelFilter === "all" || normalizePlayerLevel(player.level) === levelFilter)
+        && (genderFilter === "all" || String(player.gender || "").toLowerCase() === genderFilter)
+      ))
+      .sort((first, second) => (
+        (getTournamentPreferencePriority(first, category) ?? 2)
+        - (getTournamentPreferencePriority(second, category) ?? 2)
+      ));
+  }, [category, categoryPlayers, genderFilter, levelFilter, search]);
 
+  // Limit filtered players to the current page.
   const pagination = getPagination(filteredPlayers.length, page, pageSize);
   const pagedPlayers = filteredPlayers.slice(pagination.startIndex, pagination.endIndex);
   const eligiblePagePlayers = pagedPlayers.filter(
@@ -129,6 +149,7 @@ export default function RegisteredPlayers({
   const allPageSelected = eligiblePagePlayers.length > 0
     && eligiblePagePlayers.every((player) => selectedIdSet.has(Number(player.id)));
 
+  // Add or remove one eligible Tournament player.
   const updatePlayerSelection = (player, shouldSelect) => {
     setSelectedPlayers((current) => {
       if (shouldSelect && !isTournamentPlayerEligible(player, category)) return current;
@@ -140,16 +161,19 @@ export default function RegisteredPlayers({
     });
   };
 
+  // Toggle selection using the shared selection updater.
   const togglePlayer = (player) => {
     updatePlayerSelection(player, !selectedIdSet.has(Number(player.id)));
   };
 
+  // Toggle a row unless an interactive child handled the click.
   const handlePlayerRowClick = (event, player) => {
     if (event.target.closest?.("button, input, select, textarea, a, [role='button']")) return;
     if (!isTournamentPlayerEligible(player, category)) return;
     togglePlayer(player);
   };
 
+  // Select or clear all eligible players on the current page.
   const toggleSelectPage = () => {
     setSelectedPlayers((current) => {
       const pageIdSet = new Set(eligiblePagePlayers.map((player) => Number(player.id)));
@@ -165,6 +189,7 @@ export default function RegisteredPlayers({
     });
   };
 
+  // Apply a player filter and return to the first page.
   const updateFilter = (setter) => (event) => {
     setter(event.target.value);
     setPage(1);
@@ -172,6 +197,7 @@ export default function RegisteredPlayers({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] xl:col-span-2">
+      {/* Selection heading, filters, and selected-player summary */}
       <div className="border-b border-[var(--border)] p-4">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -272,6 +298,7 @@ export default function RegisteredPlayers({
         </label>
       </div>
 
+      {/* Registered player rows */}
       <div className="divide-y divide-[var(--border)]">
         {isLoading ? (
           <p className="p-10 text-center text-sm text-[var(--text)]">Loading today&apos;s players...</p>
@@ -312,7 +339,7 @@ export default function RegisteredPlayers({
                 aria-label={`Select ${player.name}`}
               />
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name}</span>
+                <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name.toUpperCase()}</span>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>
                   {getLevelLabel(player.level)}
                 </span>
@@ -326,6 +353,7 @@ export default function RegisteredPlayers({
         })}
       </div>
 
+      {/* Player pagination */}
       {!isLoading && !loadError && filteredPlayers.length > 0 && (
         <PaginationControls
           page={pagination.currentPage}

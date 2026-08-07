@@ -29,24 +29,29 @@ const DEFAULT_DETAILS = {
   textClasses: "text-slate-600 dark:text-slate-300",
 };
 
+// Normalizes level values for consistent labels and colors.
 export function normalizePlayerLevel(level) {
   return normalizeRotationLevel(level);
 }
 
+// Returns badge colors for a player level.
 export function getLevelClasses(level) {
   return (LEVEL_DETAILS[normalizePlayerLevel(level)] || DEFAULT_DETAILS)
     .badgeClasses;
 }
 
+// Returns text colors for a player level.
 export function getLevelTextClasses(level) {
   return (LEVEL_DETAILS[normalizePlayerLevel(level)] || DEFAULT_DETAILS)
     .textClasses;
 }
 
+// Returns the display label for a player level.
 export function getLevelLabel(level) {
   return (LEVEL_DETAILS[normalizePlayerLevel(level)] || DEFAULT_DETAILS).label;
 }
 
+// Counts selected players in each supported level.
 export function countPlayerLevels(players = []) {
   return players.reduce((counts, player) => {
     const normalizedLevel = normalizePlayerLevel(player?.level);

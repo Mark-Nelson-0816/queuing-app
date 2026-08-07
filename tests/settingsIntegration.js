@@ -16,7 +16,7 @@ try {
 
   assert.equal(settings.setSetting("theme", "dark").success, true);
   assert.equal(settings.setSetting("defaultMatchType", "singles").success, true);
-  assert.equal(settings.getSetting("theme"), "dark");
+  assert.equal(settings.getAllSettings().theme, "dark");
   assert.deepEqual(settings.getAllSettings(), {
     theme: "dark",
     defaultMatchType: "singles",

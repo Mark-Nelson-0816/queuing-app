@@ -23,6 +23,7 @@ const DEFAULT_ROTATION_DRAFT = {
   category: "no_gender",
 };
 
+// Restores valid Rotation selections and configuration for this session.
 function loadRotationDraft() {
   try {
     const savedDraft = JSON.parse(sessionStorage.getItem(ROTATION_DRAFT_KEY) || "null");
@@ -48,10 +49,12 @@ function loadRotationDraft() {
   }
 }
 
+// Returns a useful message from an unknown error value.
 function errorMessage(error, fallback) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+// Displays one selectable player in the waiting-match editor.
 function PlayerOption({ player }) {
   return (
     <option value={player.id}>
@@ -60,6 +63,7 @@ function PlayerOption({ player }) {
   );
 }
 
+// Manages the complete Rotation Queue operator workflow.
 export default function Queue() {
   const [initialDraft] = useState(loadRotationDraft);
   const [hasSavedRotationDraft] = useState(() => (
@@ -102,6 +106,7 @@ export default function Queue() {
   const actionLockRef = useRef(false);
   const configurationRef = useRef({ matchType, category });
 
+  // Preserve the current Rotation draft during page navigation.
   useEffect(() => {
     sessionStorage.setItem(ROTATION_DRAFT_KEY, JSON.stringify({
       selectedPlayerIds,
@@ -110,6 +115,7 @@ export default function Queue() {
     }));
   }, [selectedPlayerIds, matchType, category]);
 
+  // Apply backend state and remove selections that are no longer eligible.
   const applyState = useCallback((data) => {
     if (!data) return;
     setRotationState(data);
@@ -126,6 +132,7 @@ export default function Queue() {
     setSelectedPlayerIds((current) => current.filter((id) => eligibleIds.has(id)));
   }, []);
 
+  // Reload the complete Rotation Queue state.
   const loadState = async ({ showLoading = false } = {}) => {
     if (showLoading) setIsLoading(true);
     try {
@@ -144,6 +151,7 @@ export default function Queue() {
     }
   };
 
+  // Load Rotation state and saved settings when the page opens.
   useEffect(() => {
     let cancelled = false;
     Promise.allSettled([
@@ -187,6 +195,7 @@ export default function Queue() {
     };
   }, [applyState, hasSavedRotationDraft]);
 
+  // Apply a match configuration after resolving incompatible selections.
   const applyConfiguration = (nextMatchType, nextCategory, removedPlayerIds = []) => {
     const removedIds = new Set(removedPlayerIds);
     configurationRef.current = { matchType: nextMatchType, category: nextCategory };
@@ -198,6 +207,7 @@ export default function Queue() {
     }
   };
 
+  // Ask for confirmation before removing incompatible selected players.
   const requestConfigurationChange = (nextMatchType, nextCategory) => {
     const currentIds = new Set(selectedPlayerIds);
     const invalidPlayers = rotationState.players.filter((player) => (
@@ -211,6 +221,7 @@ export default function Queue() {
     applyConfiguration(nextMatchType, nextCategory);
   };
 
+  // Update match type while keeping category combinations valid.
   const handleMatchTypeChange = (nextMatchType) => {
     const nextCategory = nextMatchType === "singles" && category === "mixed"
       ? "no_gender"
@@ -218,10 +229,12 @@ export default function Queue() {
     requestConfigurationChange(nextMatchType, nextCategory);
   };
 
+  // Apply a requested Rotation category change.
   const handleCategoryChange = (nextCategory) => {
     requestConfigurationChange(matchType, nextCategory);
   };
 
+  // Generate and save matches from the selected players once per click.
   const handleGenerate = async () => {
     if (generationLockRef.current) return;
     generationLockRef.current = true;
@@ -256,6 +269,7 @@ export default function Queue() {
     }
   };
 
+  // Run one protected Rotation action and apply its returned state.
   const runStateAction = async (key, request, successMessage) => {
     if (actionLockRef.current) return false;
     actionLockRef.current = true;
@@ -280,6 +294,7 @@ export default function Queue() {
     }
   };
 
+  // Create a teammate lock and refresh Rotation state.
   const handleCreateLock = async (firstPlayerId, secondPlayerId) => {
     setLockActionId("create");
     const saved = await runStateAction(
@@ -296,6 +311,7 @@ export default function Queue() {
     return saved;
   };
 
+  // Remove a teammate lock without changing saved match teams.
   const handleRemoveLock = async (lockId) => {
     setLockActionId(lockId);
     const saved = await runStateAction(
@@ -307,6 +323,7 @@ export default function Queue() {
     return saved;
   };
 
+  // Save a player's rank-match preference.
   const handlePreferenceChange = async (playerId, preference) => {
     setPreferenceActionId(playerId);
     await runStateAction(
@@ -317,17 +334,20 @@ export default function Queue() {
     setPreferenceActionId(null);
   };
 
+  // Move a waiting match within queue order.
   const handleReorder = (matchId, direction) => runStateAction(
     `reorder-${matchId}`,
     () => window.api.reorderWaitingMatch(matchId, direction),
   );
 
+  // Rebuild teams for a complete waiting match.
   const handleRebalance = (matchId) => runStateAction(
     `rebalance-${matchId}`,
     () => window.api.rebalanceWaitingMatch(matchId),
     "Waiting match rebalanced.",
   );
 
+  // Open the waiting-match editor with current player slots.
   const openEdit = (match) => {
     const teamSize = match.matchType === "doubles" ? 2 : 1;
     setEditTarget(match);
@@ -341,6 +361,7 @@ export default function Queue() {
     ));
   };
 
+  // Save and revalidate edited waiting-match teams.
   const saveEdit = async () => {
     if (!editTarget) return;
     const teamAIds = editTeamA.filter(Boolean).map(Number);
@@ -353,6 +374,7 @@ export default function Queue() {
     if (saved) setEditTarget(null);
   };
 
+  // Load courts that can accept a Rotation match.
   const loadAvailableCourts = async () => {
     setIsLoadingCourts(true);
     try {
@@ -368,6 +390,7 @@ export default function Queue() {
     }
   };
 
+  // Open court selection for a waiting match.
   const openStart = async (match) => {
     setStartTarget(match);
     setSelectedCourtId("");
@@ -377,6 +400,7 @@ export default function Queue() {
     else if (courts.length === 0) setCourtError("No courts are currently available.");
   };
 
+  // Start the selected match on the chosen available court.
   const confirmStart = async () => {
     if (!startTarget || !selectedCourtId) return;
     const courtId = Number(selectedCourtId);
@@ -400,12 +424,14 @@ export default function Queue() {
     );
   };
 
+  // Open winner confirmation and prepare player return choices.
   const openFinish = (match, winningTeam) => {
     setFinishTarget(match);
     setWinnerTeam(winningTeam);
     setDonePlayerIds(autoRequeue ? [] : match.players.map((player) => player.id));
   };
 
+  // Save the winner, release the court, and update player returns.
   const confirmFinish = async () => {
     if (!finishTarget || !winnerTeam) return;
     const saved = await runStateAction(
@@ -424,6 +450,7 @@ export default function Queue() {
     }
   };
 
+  // Cancel a waiting match and return its players to rotation.
   const confirmCancel = async () => {
     if (!cancelTarget) return;
     const saved = await runStateAction(
@@ -434,6 +461,7 @@ export default function Queue() {
     if (saved) setCancelTarget(null);
   };
 
+  // Keep current match players available while editing their arrangement.
   const editCurrentPlayerIds = new Set(editTarget?.players.map((player) => player.id) || []);
   const editorPlayers = rotationState.players.filter((player) => (
     player.eligible || editCurrentPlayerIds.has(player.id)
@@ -444,6 +472,7 @@ export default function Queue() {
 
   return (
     <div className="space-y-6">
+      {/* Rotation action feedback */}
       {error && (
         <div className="rounded-xl bg-[var(--danger-light)] border border-[var(--danger)]/30 p-4 text-[var(--danger)] flex justify-between gap-3">
           <p>{error}</p>
@@ -457,6 +486,7 @@ export default function Queue() {
         </div>
       )}
 
+      {/* Rotation status summary */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           [availablePlayerCount, "Available Players", "text-[var(--success)]"],
@@ -471,6 +501,7 @@ export default function Queue() {
         ))}
       </div>
 
+      {/* Match configuration and player selection */}
       <RotationPlayerPool
         players={rotationState.players}
         locks={rotationState.locks}
@@ -490,6 +521,7 @@ export default function Queue() {
         onGenerate={handleGenerate}
       />
 
+      {/* Generation warnings and unmatched players */}
       {(warnings.length > 0 || unmatchedPlayers.length > 0) && (
         <section className="rounded-xl border border-[var(--warning)]/30 bg-[var(--warning-light)] px-4 py-3 space-y-2">
           <h2 className="text-sm font-bold text-[var(--text-h)]">Generation Notes</h2>
@@ -505,6 +537,7 @@ export default function Queue() {
         </section>
       )}
 
+      {/* Waiting, playing, and finished matches */}
       <RotationMatches
         matches={displayMatches}
         isLoading={isLoading}
@@ -518,6 +551,7 @@ export default function Queue() {
         onUnlock={handleRemoveLock}
       />
 
+      {/* Configuration-change confirmation */}
       <Modal
         open={configurationChange !== null}
         onClose={() => setConfigurationChange(null)}
@@ -565,6 +599,7 @@ export default function Queue() {
         </div>
       </Modal>
 
+      {/* Waiting-match editor */}
       <Modal open={editTarget !== null} onClose={() => setEditTarget(null)} title="Edit Waiting Match">
         <div className="space-y-4">
           {[{ label: "Team 1", values: editTeamA, setter: setEditTeamA }, { label: "Team 2", values: editTeamB, setter: setEditTeamB }].map((team) => (
@@ -618,6 +653,7 @@ export default function Queue() {
         </div>
       </Modal>
 
+      {/* Court selection */}
       <Modal open={startTarget !== null} onClose={() => setStartTarget(null)} title="Select Court">
         <div className="space-y-4">
           {isLoadingCourts ? (
@@ -640,6 +676,7 @@ export default function Queue() {
         </div>
       </Modal>
 
+      {/* Winner and player-return confirmation */}
       <Modal open={finishTarget !== null} onClose={() => setFinishTarget(null)} title="Confirm Winner and Player Return">
         <div className="space-y-4">
           <p className="text-sm text-[var(--text-h)]">
@@ -674,6 +711,7 @@ export default function Queue() {
         </div>
       </Modal>
 
+      {/* Waiting-match cancellation */}
       <ConfirmDialog
         open={cancelTarget !== null}
         title="Cancel Waiting Match"

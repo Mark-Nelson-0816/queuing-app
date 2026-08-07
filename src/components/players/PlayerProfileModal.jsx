@@ -14,6 +14,7 @@ const EMPTY_PROFILE = {
   preferNoGender: false,
 };
 
+// Creates or edits a complete player profile.
 export default function PlayerProfileModal({
   open,
   mode = "add",
@@ -41,6 +42,7 @@ export default function PlayerProfileModal({
   const [isSaving, setIsSaving] = useState(false);
   const submissionRef = useRef(false);
 
+  // Validate and save the current profile form.
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (submissionRef.current) return;
@@ -87,6 +89,7 @@ export default function PlayerProfileModal({
     }
   };
 
+  // Prevent the modal from closing during an active save.
   const closeWhenIdle = () => {
     if (!isSaving) onClose?.();
   };
@@ -99,12 +102,14 @@ export default function PlayerProfileModal({
       maxWidthClass="max-w-2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* Profile validation feedback */}
         {error && (
           <p className="rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-light)] p-3 text-sm text-[var(--danger)]">
             {error}
           </p>
         )}
 
+        {/* Basic player information */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-[var(--text-h)] md:col-span-2" htmlFor="player-full-name">
             Full Name
@@ -171,6 +176,7 @@ export default function PlayerProfileModal({
           </label>
         </div>
 
+        {/* Level preview */}
         <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface-hover)] p-3">
           <div>
             <p className="text-sm font-semibold text-[var(--text-h)]">Level preview</p>
@@ -179,6 +185,7 @@ export default function PlayerProfileModal({
           <PlayerLevelBadge level={level} />
         </div>
 
+        {/* Match category preferences */}
         <fieldset>
           <legend className="text-sm font-semibold text-[var(--text-h)]">
             Preferred Match Categories
@@ -203,6 +210,7 @@ export default function PlayerProfileModal({
           </div>
         </fieldset>
 
+        {/* Form actions */}
         <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
           <button
             type="button"

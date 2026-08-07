@@ -7,22 +7,18 @@ import "../database/init.js";
 
 import { ipcMain } from "electron";
 //players
-import { getPlayers, searchPlayers, registerPlayer, getRegisteredPlayersToday, getRegisteredPlayersTodayLevelCount, removeRegisteredPlayer, getPlayersProfile, updatePlayerInfo, deletePlayerProfile, getPlayerCards, getPlayerManagementData, } from "../database/playerQueries.js";
+import { registerPlayer, getRegisteredPlayersToday, removeRegisteredPlayer, updatePlayerInfo, deletePlayerProfile, getPlayerManagementData, } from "../database/playerQueries.js";
 
 //tournament
 import {
   createRoundRobinTournament,
-  finishTournament,
   finishTournamentMatch,
   getLatestTournament,
-  getTournamentById,
-  getTournamentMatches,
-  getTournamentStandings,
   startTournamentMatch,
 } from "../database/tournamentQueries.js";
 
 import { getAvailableCourts, getCourts } from "../database/courtQueries.js";
-import { addPlayer, deletePlayer, updatePlayer } from "../database/playerQueries.js";
+import { addPlayer } from "../database/playerQueries.js";
 import {
   addCourt,
   removeCourt
@@ -32,8 +28,6 @@ import {
   createTeamLock,
   finishRotationMatch,
   generateAndSaveRotationMatches,
-  getActiveTeamLocks,
-  getEligibleRotationPlayers,
   getRotationNextUpMatches,
   getRotationMatches,
   getRotationState,
@@ -46,7 +40,7 @@ import {
 } from "../database/rotationQueries.js";
 
 import { resetAllData } from "../database/resetQueries.js";
-import { getApplicationInfo, getSetting, getAllSettings, setSetting } from "../database/settingsQueries.js";
+import { getApplicationInfo, getAllSettings, setSetting } from "../database/settingsQueries.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,7 +48,7 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow;
 
-console.log("Preload path:", path.join(__dirname, "preload.cjs"));
+// Creates the main desktop window and loads the packaged or development UI.
 function createWindow() {
 
   mainWindow = new BrowserWindow({
@@ -82,116 +76,79 @@ function createWindow() {
   }
 }
 
-//players
+// Player IPC handlers connect renderer requests to player database operations.
 
+// Creates a new player profile.
 ipcMain.handle("add-player", (event, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) => (
   addPlayer(name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference)
 ));
 
+// Returns profiles, today's players, and Player Management summary counts.
 ipcMain.handle("get-player-management-data", () => getPlayerManagementData());
 
-ipcMain.handle('search-players', (event, name) =>{
-  const players = searchPlayers(name);
-
-  return players;
-});
-
+// Registers or reactivates a player for today.
 ipcMain.handle('register-player', (event, id) =>{
 
   return registerPlayer(id);
 
 });
 
-ipcMain.handle('get-players-profile', (event, name) => {
-  return getPlayersProfile(name);
-});
-
+// Returns active player registrations for today.
 ipcMain.handle('get-registered-players-today', () => {
   return getRegisteredPlayersToday();
 });
 
-ipcMain.handle('get-registered-players-today-level-count', () => {
-  return getRegisteredPlayersTodayLevelCount();
-});
-
+// Marks a registered player as done for today.
 ipcMain.handle('remove-registered-player', (event, id) => {
   return removeRegisteredPlayer(id);
 });
 
+// Updates a complete player profile.
 ipcMain.handle("update-player-info", (event, id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) => {
   return updatePlayerInfo(id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference);
 });
 
+// Deletes a profile only when it has no protected history.
 ipcMain.handle("delete-players-profile", (event, id) => {
   return deletePlayerProfile(id);
 
 });
 
-ipcMain.handle("get-player-cards", () => {
-  return getPlayerCards();
-});
-
-//old player function - not used in player management page (not sure if used in other pages)
-ipcMain.handle("get-players", () => {
-  const players = getPlayers();
-
-  return players;
-});
-
-ipcMain.handle("delete-player", (event, id) => {
-  return deletePlayer(id);
-});
-
-ipcMain.handle("update-player", (event, id, name, level) => {
-  return updatePlayer(id, name, level);
-});
-
-//tournament
+// Tournament IPC handlers expose creation, loading, and match lifecycle actions.
+// Creates teams, rounds, and matches in one tournament transaction.
 ipcMain.handle('create-round-robin-tournament', (event, selectedPlayers, matchType, category) => {
   return createRoundRobinTournament(selectedPlayers, matchType, category);
 });
 
-ipcMain.handle('get-tournament', (event, tournamentId) => {
-  return getTournamentById(tournamentId);
-});
-
+// Returns the newest saved tournament.
 ipcMain.handle('get-latest-tournament', () => {
   return getLatestTournament();
 });
 
-ipcMain.handle('get-tournament-matches', (event, tournamentId) => {
-  return getTournamentMatches(tournamentId);
-});
-
-ipcMain.handle('get-tournament-standings', (event, tournamentId) => {
-  return getTournamentStandings(tournamentId);
-});
-
+// Starts a pending tournament match on a selected court.
 ipcMain.handle('start-tournament-match', (event, matchId, courtId) => {
   return startTournamentMatch(matchId, courtId);
 });
 
+// Saves a tournament winner and releases the assigned court.
 ipcMain.handle('finish-tournament-match', (event, matchId, winnerTeamId) => {
   return finishTournamentMatch(matchId, winnerTeamId);
 });
 
-ipcMain.handle('finish-tournament', (event, tournamentId) => {
-  return finishTournament(tournamentId);
-});
-
-
-
-//courts
+// Court IPC handlers expose court state and management actions.
+// Returns every court with any active match attached.
 ipcMain.handle("get-courts", () => {
   const courts = getCourts();
 
   return courts;
 });
 
+// Returns courts that have no active match.
 ipcMain.handle("get-available-courts", () => {
   return getAvailableCourts();
 });
 
+// Adds a court by name.
 ipcMain.handle("add-court", (event, name)=>{
 
     return addCourt(name);
@@ -199,21 +156,18 @@ ipcMain.handle("add-court", (event, name)=>{
 });
 
 
+// Removes a court when no protected active match uses it.
 ipcMain.handle("remove-court", (event, id)=>{
 
     return removeCourt(id);
 
 });
 
-//rotation queue
+// Rotation Queue IPC handlers expose queue state and operator actions.
+// Returns players, locks, matches, and queue summary in one response.
 ipcMain.handle("get-rotation-state", () => getRotationState());
 
-ipcMain.handle("get-eligible-rotation-players", () => (
-  getEligibleRotationPlayers()
-));
-
-ipcMain.handle("get-active-team-locks", () => getActiveTeamLocks());
-
+// Creates a teammate lock for the selected category.
 ipcMain.handle(
   "create-team-lock",
   (event, firstPlayerId, secondPlayerId, matchType, category) => (
@@ -221,8 +175,10 @@ ipcMain.handle(
   ),
 );
 
+// Removes an active teammate lock.
 ipcMain.handle("remove-team-lock", (event, lockId) => removeTeamLock(lockId));
 
+// Updates a player's same-rank or adjacent-rank preference.
 ipcMain.handle(
   "update-rotation-rank-preference",
   (event, playerId, preference) => (
@@ -230,6 +186,7 @@ ipcMain.handle(
   ),
 );
 
+// Generates and stores waiting Rotation Queue matches.
 ipcMain.handle(
   "generate-rotation-matches",
   (event, playerIds, matchType, category) => (
@@ -237,12 +194,15 @@ ipcMain.handle(
   ),
 );
 
+// Returns all saved Rotation Queue matches.
 ipcMain.handle("get-rotation-matches", () => getRotationMatches());
 
+// Returns valid waiting matches in public-display queue order.
 ipcMain.handle("get-rotation-next-up-matches", () => (
   getRotationNextUpMatches()
 ));
 
+// Replaces the players and teams in a waiting match.
 ipcMain.handle(
   "update-waiting-match",
   (event, matchId, teamAIds, teamBIds) => (
@@ -250,22 +210,27 @@ ipcMain.handle(
   ),
 );
 
+// Rebalances the teams in a complete waiting match.
 ipcMain.handle("rebalance-waiting-match", (event, matchId) => (
   rebalanceWaitingMatch(matchId)
 ));
 
+// Moves a waiting match up or down in queue order.
 ipcMain.handle("reorder-waiting-match", (event, matchId, direction) => (
   reorderWaitingMatch(matchId, direction)
 ));
 
+// Cancels a waiting match and releases its players.
 ipcMain.handle("cancel-waiting-match", (event, matchId) => (
   cancelWaitingMatch(matchId)
 ));
 
+// Starts a waiting Rotation Queue match on a court.
 ipcMain.handle("start-rotation-match", (event, matchId, courtId) => (
   startRotationMatch(matchId, courtId)
 ));
 
+// Finishes a Rotation Queue match and updates player statistics.
 ipcMain.handle(
   "finish-rotation-match",
   (event, matchId, winnerTeam, donePlayerIds) => (
@@ -273,8 +238,7 @@ ipcMain.handle(
   ),
 );
 
-// Round Robin
-
+// Starts Electron after initialization and registers the fullscreen shortcut.
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
 
@@ -287,22 +251,21 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-//datas
+// Resets application data and restores default courts.
 ipcMain.handle("reset-all-data", () => {
     return resetAllData();
 });
 
-// Settings
+// Settings IPC handlers read and update persisted application preferences.
+// Returns all saved settings.
 ipcMain.handle("get-settings", () => {
   return getAllSettings();
 });
 
+// Saves one setting value.
 ipcMain.handle("update-setting", (event, key, value) => {
   return setSetting(key, value);
 });
 
-ipcMain.handle("get-setting", (event, key) => {
-  return getSetting(key);
-});
-
+// Returns runtime, platform, and database information.
 ipcMain.handle("get-application-info", () => getApplicationInfo());

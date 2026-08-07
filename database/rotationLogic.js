@@ -9,6 +9,17 @@ const VALID_MATCH_TYPES = new Set(["singles", "doubles"]);
 const VALID_CATEGORIES = new Set(["no_gender", "mens", "womens", "mixed"]);
 const VALID_RANK_PREFERENCES = new Set(["same_rank", "adjacent_rank"]);
 
+// Reads category preferences from either renderer or database field names.
+function getCategoryPreferences(player) {
+  return {
+    mens: Boolean(player.preferMens ?? player.prefer_mens),
+    womens: Boolean(player.preferWomens ?? player.prefer_womens),
+    mixed: Boolean(player.preferMixed ?? player.prefer_mixed),
+    no_gender: Boolean(player.preferNoGender ?? player.prefer_no_gender),
+  };
+}
+
+// Normalizes stored and user-entered skill level formats.
 export function normalizeRotationLevel(level) {
   const normalized = String(level || "")
     .trim()
@@ -19,31 +30,55 @@ export function normalizeRotationLevel(level) {
   return normalized;
 }
 
+// Converts a normalized skill level into its numeric balance value.
 export function getRotationLevelValue(level) {
   return LEVEL_VALUES[normalizeRotationLevel(level)] || 0;
 }
 
+// Normalizes gender values used by category checks.
 export function normalizeRotationGender(gender) {
   return String(gender || "").trim().toLowerCase();
 }
 
+// Returns a supported rank preference with a safe same-rank default.
 export function normalizeRankPreference(preference) {
   return VALID_RANK_PREFERENCES.has(preference)
     ? preference
     : "same_rank";
 }
 
-export function playerAllowsCategory(player, category) {
-  const preferences = {
-    mens: Boolean(player.preferMens ?? player.prefer_mens),
-    womens: Boolean(player.preferWomens ?? player.prefer_womens),
-    mixed: Boolean(player.preferMixed ?? player.prefer_mixed),
-    no_gender: Boolean(player.preferNoGender ?? player.prefer_no_gender),
-  };
+// Returns 0 for exact preference, 1 for No Gender fallback, or null if invalid.
+export function getCategoryPreferencePriority(player, category) {
+  const preferences = getCategoryPreferences(player);
   const hasStoredPreference = Object.values(preferences).some(Boolean);
-  return !hasStoredPreference || preferences[category];
+  const gender = normalizeRotationGender(player.gender);
+
+  if (category === "no_gender") {
+    return !hasStoredPreference || preferences.no_gender ? 0 : null;
+  }
+  if (category === "mens" && gender !== "male") return null;
+  if (category === "womens" && gender !== "female") return null;
+  if (category === "mixed" && !["male", "female"].includes(gender)) return null;
+  if (preferences[category]) return 0;
+
+  // Use compatible No Gender players only when exact candidates are insufficient.
+  return preferences.no_gender ? 1 : null;
 }
 
+// Checks whether exact or fallback preference allows a match category.
+export function playerAllowsCategory(player, category) {
+  return getCategoryPreferencePriority(player, category) !== null;
+}
+
+// Counts No Gender fillers without changing rank or team balance rules.
+function countCategoryFallbacks(players, category) {
+  if (category === "no_gender") return 0;
+  return players.filter(
+    (player) => getCategoryPreferencePriority(player, category) === 1,
+  ).length;
+}
+
+// Validates match type and category combinations before generation.
 function validateConfiguration(matchType, category) {
   if (!VALID_MATCH_TYPES.has(matchType)) {
     throw new Error("Invalid rotation match type.");
@@ -56,6 +91,7 @@ function validateConfiguration(matchType, category) {
   }
 }
 
+// Returns the first gender or preference problem for a player.
 function getCategoryError(player, category) {
   const gender = normalizeRotationGender(player.gender);
   if (category === "mens" && gender !== "male") {
@@ -73,22 +109,26 @@ function getCategoryError(player, category) {
   return null;
 }
 
+// Converts availability time into a sortable fairness value.
 function fairnessTime(player) {
   const parsed = Date.parse(`${player.availableSince || player.createdAt || ""}Z`);
   return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
 }
 
+// Prioritizes longer waits, fewer matches, then stable player order.
 function compareFairness(first, second) {
   return fairnessTime(first) - fairnessTime(second)
     || Number(first.matchCount || 0) - Number(second.matchCount || 0)
     || Number(first.id) - Number(second.id);
 }
 
+// Reads prior teammate or opponent counts for one player pair.
 function countHistory(player, property, otherPlayerId) {
   const history = player[property] || {};
   return Number(history[otherPlayerId] || history[String(otherPlayerId)] || 0);
 }
 
+// Checks whether two singles players satisfy their rank preferences.
 function getPairCompatibility(first, second) {
   const firstLevel = getRotationLevelValue(first.level);
   const secondLevel = getRotationLevelValue(second.level);
@@ -106,9 +146,11 @@ function getPairCompatibility(first, second) {
   return null;
 }
 
+// Ranks candidate match sets by coverage, fairness, balance, and repeats.
 function compareSolutions(first, second) {
   if (!second) return 1;
   return first.matchCount - second.matchCount
+    || second.categoryFallbackCount - first.categoryFallbackCount
     || first.exactCount - second.exactCount
     || first.fairnessScore - second.fairnessScore
     || second.balanceTotal - first.balanceTotal
@@ -117,10 +159,12 @@ function compareSolutions(first, second) {
     || second.randomScore - first.randomScore;
 }
 
+// Creates the base result used by the match-set solver.
 function createEmptySolution() {
   return {
     matches: [],
     matchCount: 0,
+    categoryFallbackCount: 0,
     exactCount: 0,
     fairnessScore: 0,
     balanceTotal: 0,
@@ -130,10 +174,13 @@ function createEmptySolution() {
   };
 }
 
+// Adds one candidate match and its scoring values to a partial solution.
 function addCandidateToSolution(candidate, solution) {
   return {
     matches: [candidate.match, ...solution.matches],
     matchCount: solution.matchCount + 1,
+    categoryFallbackCount:
+      solution.categoryFallbackCount + candidate.categoryFallbackCount,
     exactCount: solution.exactCount + (candidate.exact ? 1 : 0),
     fairnessScore: solution.fairnessScore + candidate.fairnessScore,
     balanceTotal: solution.balanceTotal + candidate.balanceDifference,
@@ -145,6 +192,7 @@ function addCandidateToSolution(candidate, solution) {
   };
 }
 
+// Explains why a singles player could not receive an opponent.
 function singlesUnmatchedReason(player, players) {
   const hasSameLevel = players.some((candidate) => (
     candidate.id !== player.id
@@ -163,7 +211,12 @@ function singlesUnmatchedReason(player, players) {
     : "No compatible same-rank or adjacent-rank opponent was available.";
 }
 
-export function generateSinglesMatches(players, random = Math.random) {
+// Finds the best non-overlapping set of fair, rank-compatible singles matches.
+function generateSinglesMatches(
+  players,
+  random = Math.random,
+  category = "no_gender",
+) {
   const orderedPlayers = [...players].sort(compareFairness);
   const candidatesByPlayer = new Map(
     orderedPlayers.map((player) => [Number(player.id), []]),
@@ -182,6 +235,7 @@ export function generateSinglesMatches(players, random = Math.random) {
 
       const candidate = {
         mask: (1n << BigInt(firstIndex)) | (1n << BigInt(secondIndex)),
+        categoryFallbackCount: countCategoryFallbacks([first, second], category),
         exact: compatibility.exact,
         fairnessScore:
           (orderedPlayers.length - firstIndex)
@@ -215,6 +269,7 @@ export function generateSinglesMatches(players, random = Math.random) {
   const fullMask = (1n << BigInt(orderedPlayers.length)) - 1n;
   const memo = new Map();
 
+  // Uses memoized search to choose the best non-overlapping candidates.
   function solve(mask) {
     if (mask === 0n) return createEmptySolution();
     const memoKey = mask.toString();
@@ -260,6 +315,7 @@ export function generateSinglesMatches(players, random = Math.random) {
   };
 }
 
+// Normalizes teammate locks for arrangement checks.
 function buildLockPairs(locks) {
   return locks.map((lock) => ({
     id: Number(lock.id),
@@ -268,12 +324,14 @@ function buildLockPairs(locks) {
   }));
 }
 
+// Finds the active teammate lock containing a player.
 function getLockForPlayer(lockPairs, playerId) {
   return lockPairs.find((lock) => (
     lock.player1Id === Number(playerId) || lock.player2Id === Number(playerId)
   ));
 }
 
+// Ensures locked teammates remain together in a doubles arrangement.
 function arrangementRespectsLocks(teamA, teamB, lockPairs) {
   const teamAIds = new Set(teamA.map((player) => Number(player.id)));
   const teamBIds = new Set(teamB.map((player) => Number(player.id)));
@@ -289,12 +347,14 @@ function arrangementRespectsLocks(teamA, teamB, lockPairs) {
   });
 }
 
+// Checks that a doubles team contains one male and one female player.
 function isMixedTeam(team) {
   return team.length === 2
     && team.some((player) => normalizeRotationGender(player.gender) === "male")
     && team.some((player) => normalizeRotationGender(player.gender) === "female");
 }
 
+// Validates doubles rank spread while allowing balanced locked teams.
 function getDoublesRankCompatibility(teamA, teamB, lockPairs) {
   const players = [...teamA, ...teamB];
   const levelValues = players.map((player) => getRotationLevelValue(player.level));
@@ -314,6 +374,7 @@ function getDoublesRankCompatibility(teamA, teamB, lockPairs) {
       getRotationLevelValue(first.level) - getRotationLevelValue(second.level),
     ) > 1;
   });
+  // Allows a wide level gap only when those teammates are explicitly locked.
   const teamWideGapIsExplicitlyLocked = (team) => {
     const teamIds = new Set(team.map((player) => Number(player.id)));
     const teamLevels = team.map((player) => getRotationLevelValue(player.level));
@@ -348,12 +409,14 @@ function getDoublesRankCompatibility(teamA, teamB, lockPairs) {
     : null;
 }
 
+// Counts prior matches where two players were teammates.
 function teammateRepeatCount(team) {
   const [first, second] = team;
   return countHistory(first, "teammateCounts", second.id)
     + countHistory(second, "teammateCounts", first.id);
 }
 
+// Counts prior opponent pairings across both teams.
 function opponentRepeatCount(teamA, teamB) {
   let total = 0;
   for (const first of teamA) {
@@ -365,6 +428,7 @@ function opponentRepeatCount(teamA, teamB) {
   return total;
 }
 
+// Returns the three unique ways to split four players into two teams.
 function getArrangements(group) {
   return [
     [[group[0], group[1]], [group[2], group[3]]],
@@ -373,6 +437,7 @@ function getArrangements(group) {
   ];
 }
 
+// Builds every valid four-player doubles arrangement for the solver.
 function buildDoublesCandidates(players, category, lockPairs, random) {
   const candidates = [];
   const indexById = new Map(
@@ -421,6 +486,7 @@ function buildDoublesCandidates(players, category, lockPairs, random) {
 
             candidates.push({
               mask,
+              categoryFallbackCount: countCategoryFallbacks(group, category),
               exact: rankCompatibility.exact,
               fairnessScore: group.reduce(
                 (score, player) => score + (players.length - indexById.get(Number(player.id))),
@@ -449,6 +515,7 @@ function buildDoublesCandidates(players, category, lockPairs, random) {
   return candidates;
 }
 
+// Explains why a doubles player could not be placed in a complete match.
 function doublesUnmatchedReason(player, selectedPlayers, lockPairs, category) {
   const lock = getLockForPlayer(lockPairs, player.id);
   if (lock) {
@@ -466,6 +533,7 @@ function doublesUnmatchedReason(player, selectedPlayers, lockPairs, category) {
   return "Doubles requires four compatible players per match.";
 }
 
+// Finds the best non-overlapping set of balanced doubles matches.
 export function generateDoublesMatches(
   players,
   locks = [],
@@ -492,6 +560,7 @@ export function generateDoublesMatches(
   }
 
   const memo = new Map();
+  // Uses memoized search to choose the best non-overlapping candidates.
   function solve(mask) {
     if (mask === 0n) return createEmptySolution();
     const memoKey = mask.toString();
@@ -537,6 +606,7 @@ export function generateDoublesMatches(
   };
 }
 
+// Validates an operator-edited match against size, category, rank, and lock rules.
 export function validateRotationArrangement({
   matchType,
   category,
@@ -581,6 +651,7 @@ export function validateRotationArrangement({
     : { valid: false, message: "The selected doubles players have incompatible rank preferences or team balance." };
 }
 
+// Validates selected players and delegates to singles or doubles generation.
 export function generateRotationMatches({
   players,
   matchType = "doubles",
@@ -626,7 +697,7 @@ export function generateRotationMatches({
 
   const result = matchType === "doubles"
     ? generateDoublesMatches(uniquePlayers, locks, category, random)
-    : generateSinglesMatches(uniquePlayers, random);
+    : generateSinglesMatches(uniquePlayers, random, category);
 
   if (result.matches.length === 0) {
     warnings.push("No complete compatible match could be generated.");

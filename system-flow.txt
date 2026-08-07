@@ -1,0 +1,766 @@
+BADMINTON QUEUING APP - SYSTEM FLOW
+===================================
+
+This document follows the current application from permanent player creation to
+daily matchmaking, match completion, and end-of-day handling. Rotation Queue and
+Tournament are separate workflows even though they share profiles and courts.
+
+
+1. PLAYER PROFILE CREATION
+==========================
+
+Operator opens Player Management
+  -> chooses Add New Player
+  -> enters profile data
+  -> renderer performs basic required-field checks
+  -> window.api.addPlayer(...)
+  -> IPC calls database/playerQueries.js
+  -> backend normalizes and validates the values
+  -> SQLite inserts one players row
+  -> Player Management reloads
+
+Permanent profile data:
+
+- ID
+- full name
+- gender: male or female
+- skill level: beginner, intermediate, upper_intermediate, or advanced
+- optional contact number; blank becomes N/A
+- preferred categories: Men's, Women's, Mixed, and/or No Gender
+- rank-match preference: same rank only or adjacent rank allowed
+- lifetime Rotation matches, wins, and losses
+- creation time
+
+Rules:
+
+- Name is required.
+- Trimmed names must be unique without case sensitivity.
+- Level and gender must be supported values.
+- At least one category preference is required.
+- Rank preference must be same_rank or adjacent_rank.
+
+Editing uses the same validation. Permanent deletion is blocked while the player
+is active today or when match, Tournament, or teammate-lock history references
+the profile.
+
+
+2. REGISTERING A PLAYER FOR TODAY
+=================================
+
+Operator chooses Register Existing
+  -> searches unregistered or done profiles
+  -> selects one profile
+  -> window.api.registerPlayer(playerId)
+  -> backend checks today's latest registration
+
+First registration today:
+
+Create registered_players_today row
+  -> player_id links to permanent profile
+  -> match_count = 0
+  -> wins = 0
+  -> losses = 0
+  -> status = available
+  -> is_done_today = 0
+  -> registered_date = current date
+  -> available_since = current time
+
+The daily row does not copy name, gender, level, contact, or preferences. Queries
+join those values from the permanent profile.
+
+If the player is already active today, registration is rejected. If the player
+was marked done today, the existing row is reactivated:
+
+is_done_today = 0
+  -> status = available
+  -> available_since = current time
+  -> today's existing counters remain unchanged
+
+
+3. DAILY PLAYER STATUS
+======================
+
+Stored daily statuses:
+
+AVAILABLE
+- The player may be considered for a new Rotation match or Tournament selection.
+
+ASSIGNED
+- The player belongs to a waiting or incomplete Rotation match.
+
+PLAYING
+- The player is currently on court.
+
+DONE
+- The player has finished for today and cannot enter new matchmaking.
+
+Player Management also calculates an effective display status from live match
+records. This prevents a stale daily status from hiding a playing Tournament,
+Rotation, or compatibility match.
+
+Common Rotation transition:
+
+Registered
+  -> available
+  -> assigned to waiting Rotation match
+  -> playing on a court
+  -> available again OR done
+
+Tournament transition is computed rather than written to the daily row:
+
+available daily player
+  -> pending Tournament match does not reserve the player
+  -> playing Tournament match is detected as playing
+  -> finished Tournament match removes that live playing condition
+
+
+4. PLAYER ELIGIBILITY
+=====================
+
+Rotation eligibility checks current backend data every time state loads or an
+operation starts.
+
+Daily registration exists for today
+  -> not done
+  -> not playing in any supported match source
+  -> not assigned to another waiting/incomplete Rotation match
+  -> stored status is available or tolerated legacy waiting
+  -> eligible for the current configuration
+
+A player can still be visible but disabled because of:
+
+- playing status
+- another Rotation assignment
+- done-for-today status
+- category/gender mismatch
+- missing category preference
+
+Done players are completely hidden from Rotation's selectable list, but summary
+counts and Player Management still include them.
+
+Tournament's current UI starts from active registrations returned for today and
+allows only effective available or waiting statuses. Assigned, playing, and done
+players cannot be selected.
+
+
+5. MATCH TYPES
+==============
+
+SINGLES
+- Team A has one player.
+- Team B has one player.
+- At least two eligible selected players are required.
+
+DOUBLES
+- Team A has two players.
+- Team B has two players.
+- At least four eligible selected players are required.
+
+Rotation defaults to Doubles unless a saved setting or current session draft
+chooses Singles. Tournament defaults to Doubles unless its saved default changes.
+
+
+6. MATCH CATEGORIES
+===================
+
+MEN'S
+- Actual gender must be male.
+- The profile must prefer Men's or qualify through No Gender fallback.
+
+WOMEN'S
+- Actual gender must be female.
+- The profile must prefer Women's or qualify through No Gender fallback.
+
+MIXED
+- Available only for Doubles.
+- Each team must contain one male and one female.
+- Each player must prefer Mixed or qualify through No Gender fallback.
+
+NO GENDER
+- No team-gender composition is required.
+- Rotation accepts players who prefer No Gender; old profiles with no saved
+  preferences are also tolerated.
+- Tournament intentionally treats No Gender as open to any otherwise eligible
+  selected daily player.
+
+Actual gender and category preference are different values. Preference never
+changes a player's actual gender.
+
+
+7. NO GENDER FALLBACK RULE
+==========================
+
+For Men's, Women's, or Mixed category matching:
+
+Exact category preference
+  -> preferred first
+  -> if more compatible players are needed, consider No Gender preference
+  -> reject if actual gender cannot fill the required category/team slot
+
+Examples:
+
+- Male + No Gender preference may fill Men's.
+- Male + No Gender preference may fill the male slot in Mixed.
+- Male cannot fill Women's.
+- Female + No Gender preference may fill Women's.
+- Female + No Gender preference may fill the female slot in Mixed.
+- Female cannot fill Men's.
+
+In Rotation, candidate solutions with fewer fallback players outrank otherwise
+lower-priority solutions. Fallback players still pass all status, rank, fairness,
+lock, and team-balance rules.
+
+In Tournament, exact-preference players are sorted before fallback players in
+the selection list. The operator's final selected list is validated, and a
+compatible selected fallback player is accepted.
+
+
+8. ROTATION QUEUE FLOW
+======================
+
+Register player today
+  -> daily status available
+  -> open Rotation Queue
+  -> backend loads players, active locks, saved matches, and status summary
+  -> choose Singles or Doubles
+  -> choose category
+  -> select eligible players
+  -> preview uses the same generator rules as persistence
+  -> generate one or more complete compatible matches
+  -> save matches in queue order
+  -> matched players become assigned
+  -> unmatched players remain available with an explanation
+
+Selections are stored as player IDs and remain global across client-side search,
+filters, pagination, and page-size changes. The current Rotation configuration
+and selections are also stored in sessionStorage while the renderer session is
+open.
+
+Changing match type or category checks existing selections. If players become
+invalid, the UI asks whether to remove them before applying the change.
+
+
+9. LOCKED TEAM FLOW
+===================
+
+The current UI creates today-only teammate locks for Doubles.
+
+Select at least two eligible players
+  -> open Manage Locks
+  -> choose Player A and Player B
+  -> backend verifies both are registered and available today
+  -> verify category preference and gender composition
+  -> ensure neither player belongs to another active lock
+  -> save active player_team_locks row
+
+During generation:
+
+- If either locked player is considered, both must be selected into the same
+  four-player match.
+- They must remain on the same Doubles team.
+- Category rules still apply.
+- Balance rules still apply to the complete match.
+- A wide-level locked pair is allowed only through the explicit locked-team
+  exception and only when the opposing arrangement keeps team-strength
+  difference at most one.
+- If the partner is not selected or no balanced opponents exist, the lock does
+  not force an invalid match; the players remain unmatched with a reason.
+
+Unlocking is blocked while either player is playing. Removing a lock deactivates
+it and revalidates affected waiting matches. The saved teams are kept, but a
+match can become incomplete/invalid if it no longer satisfies normal rules.
+
+
+10. ROTATION MATCH GENERATION
+=============================
+
+Selected IDs
+  -> reload canonical daily players
+  -> reject missing, done, playing, or already-assigned players
+  -> normalize duplicate selections
+  -> validate match type and category
+  -> require at least 2 for Singles or 4 for Doubles
+  -> build compatible candidate matches
+  -> solve for the best non-overlapping set
+  -> insert rotation_matches
+  -> insert rotation_match_players in team/slot order
+  -> set participant daily status to assigned
+  -> commit the transaction
+
+If any SQL or validation step fails, no partial matches or assignments remain.
+
+Queue positions begin after the last waiting/incomplete position. Generated
+matches can be:
+
+- reordered up or down;
+- edited by replacing team slots;
+- saved incomplete when slots are empty;
+- rebalanced without changing the participants; or
+- cancelled, which returns non-done participants to available.
+
+Every edit is revalidated for player count, duplicates, availability, category,
+rank preference, mixed-team composition, locks, and team balance.
+
+
+11. LEVEL AND RANK BALANCING
+============================
+
+Numeric level mapping used by Rotation:
+
+- Beginner = 1
+- Intermediate = 2
+- Upper Intermediate = 3
+- Advanced = 4
+
+Rank preferences:
+
+SAME RANK ONLY
+- Singles opponent must have the same level value.
+- A non-equal Doubles group is invalid if any participant requires same rank.
+
+ADJACENT RANK ALLOWED
+- Singles may differ by exactly one level only when both players allow adjacent
+  rank.
+- Standard Doubles may use a group whose overall level spread is at most one
+  when every non-equal participant allows adjacent rank.
+
+Doubles team strength is the sum of the two player values. For example, a 2+2
+team and another 2+2 team display Balance 4-4 (0). The value in parentheses is
+the absolute team-strength difference. Lower is preferred.
+
+The solver evaluates match sets in this order:
+
+1. Generate the greatest number of complete matches.
+2. Use fewer No Gender fallback players.
+3. Prefer more exact-rank matches.
+4. Prefer players who have waited longer, then fewer matches and stable IDs.
+5. Prefer smaller total team-strength differences.
+6. Avoid repeated teammates from today's finished Rotation matches.
+7. Avoid repeated opponents from today's finished Rotation matches.
+8. Use random score only as the final tie-break.
+
+Tournament does not use this level/rank solver. Tournament teams are shuffled,
+and level is displayed but not used to balance teams.
+
+
+12. NEXT UP FLOW
+================
+
+Rotation match is generated
+  -> status = waiting
+  -> queue_position is assigned
+  -> court_id remains null
+  -> match appears in Rotation waiting list
+  -> valid match becomes eligible for Public Display Next Up
+
+Next Up requires all of the following:
+
+- source is Rotation;
+- status is waiting;
+- queue position exists;
+- court is not assigned;
+- validation message is empty;
+- Singles has exactly 1+1 players or Doubles has exactly 2+2 players.
+
+Ordering:
+
+1. queue_position ascending
+2. created_at ascending
+3. match ID ascending
+
+The public screen shows at most the first six matches. Incomplete, playing,
+finished, cancelled, compatibility, and Tournament matches never appear in Next
+Up.
+
+
+13. COURT ASSIGNMENT
+====================
+
+Operator chooses Start Match
+  -> renderer requests currently available courts
+  -> operator selects one court
+  -> backend reloads the match and court
+  -> backend checks all active match sources for court use
+  -> update court from available to playing
+  -> assign court ID and update match to playing
+  -> commit transaction
+
+If no available court exists:
+
+- the start dialog reports no courts;
+- no court ID is assigned; and
+- the Rotation match remains waiting or Tournament match remains pending.
+
+The database has per-system active-court indexes, while each start transaction
+also performs cross-system checks. This prevents a Rotation match and Tournament
+match from sharing a court even when their numeric match IDs are equal.
+
+
+14. STARTING A ROTATION MATCH
+=============================
+
+Waiting Rotation match
+  -> verify status is exactly waiting
+  -> revalidate teams, category, ranks, balance, and locks
+  -> verify each daily registration is still assigned and not done
+  -> verify no participant is playing elsewhere
+  -> reserve an available court
+  -> match status = playing
+  -> start_time = current time
+  -> participants' daily status = playing
+  -> compact remaining waiting queue positions
+
+Incomplete, finished, cancelled, or already-playing matches cannot start.
+
+
+15. ENDING A ROTATION MATCH
+===========================
+
+Operator selects Team 1 or Team 2 as winner
+  -> finish dialog opens
+  -> operator reviews which participants should be done for today
+  -> backend verifies match is playing and has a court
+  -> verify winner is Team 1 or Team 2
+  -> verify done selections belong to this match
+  -> update match to finished and save winner/end time
+  -> update daily and lifetime statistics
+  -> set each player to available or done
+  -> release the court if no active source still uses it
+  -> return refreshed Rotation state
+
+The match update includes status='playing' in its WHERE condition. A second
+finish request cannot complete the match again.
+
+
+16. WINNER AND PLAYER STAT UPDATE
+=================================
+
+For every Rotation participant:
+
+- daily match_count increases by one;
+- lifetime total_matches_played increases by one;
+- winner-team players receive one daily and lifetime win;
+- other-team players receive one daily and lifetime loss.
+
+Tournament winners are stored as winner_team_id and used for Tournament
+standings. Tournament results do not update players' daily or lifetime Rotation
+statistics.
+
+
+17. PLAYER RETURN TO QUEUE
+==========================
+
+At Rotation completion, each unchecked player receives:
+
+status = available
+  -> is_done_today = 0
+  -> available_since = current time
+  -> becomes eligible after current state reload
+
+The new available-since value places that player behind people who have already
+waited longer.
+
+The Auto Requeue setting controls the finish dialog's initial selection:
+
+- true: no players are initially marked done, so all return to available unless
+  the operator checks someone;
+- false: all players are initially marked done, but the operator may uncheck
+  anyone who should return.
+
+The backend always follows the final explicit donePlayerIds list.
+
+
+18. FINISHED-FOR-THE-DAY FLOW
+==============================
+
+From Player Management:
+
+Available player
+  -> operator confirms Mark Done
+  -> backend verifies no playing or assigned match
+  -> status = done
+  -> is_done_today = 1
+
+From Rotation completion:
+
+Operator checks player in done list
+  -> match finishes
+  -> daily counters update
+  -> status = done
+  -> is_done_today = 1
+
+Effects:
+
+- hidden from Rotation's Available Players list and its search results;
+- not selectable for Tournament;
+- still visible in Players Today, profile history, and summary counts;
+- may be reactivated later on the same day;
+- permanent profile remains available on future dates.
+
+A player cannot be marked done while assigned to a waiting Rotation match or
+while playing. The operator must cancel/edit or finish that match first.
+
+
+19. TOURNAMENT PLAYER SELECTION
+===============================
+
+Open Tournament page
+  -> load saved Tournament defaults
+  -> load the latest persisted Tournament
+  -> load active registered players for today
+  -> refresh the player list every five seconds
+  -> choose match type and category
+  -> filter to eligible status, gender, and preference
+  -> select rows or checkboxes
+
+Eligibility in the selection component:
+
+- status must be available or waiting;
+- Men's requires male;
+- Women's requires female;
+- Mixed accepts male/female candidates and later validates team composition;
+- exact category preference or No Gender fallback is required for Men's,
+  Women's, and Mixed;
+- No Gender Tournament selection is open to any otherwise eligible player.
+
+Selection remains active across search, level/gender filters, pagination, and
+page-size changes. Select All affects eligible players on the current page only.
+Changing category removes players who no longer qualify.
+
+
+20. TOURNAMENT TEAM GENERATION
+==============================
+
+Selected player objects
+  -> backend reloads canonical profiles by ID
+  -> reject duplicate/missing/unavailable players
+  -> validate match type, category, preferences, gender, and count
+  -> reject creation if another Tournament is ongoing
+  -> shuffle and create teams
+
+Singles:
+
+- minimum two players;
+- every shuffled player becomes one team;
+- player_2_id is null.
+
+Standard Doubles:
+
+- minimum four players;
+- selected count must be even;
+- shuffle one list and pair adjacent players.
+
+Mixed Doubles:
+
+- equal male and female counts;
+- shuffle male and female lists separately;
+- each team receives one male and one female.
+
+Tournament team generation does not calculate level values, rank compatibility,
+or team-strength balance.
+
+
+21. TOURNAMENT MATCH GENERATION
+===============================
+
+Insert Tournament
+  -> insert every Tournament team and keep real database team IDs
+  -> run circle-method round-robin scheduling
+  -> insert numbered rounds
+  -> insert each unique team pairing as pending
+  -> return complete grouped Tournament data
+
+The entire sequence is one transaction.
+
+For N teams:
+
+- every team pair appears exactly once;
+- no team plays itself;
+- a team appears at most once per round;
+- even N normally creates N-1 rounds;
+- odd N adds an internal dummy for rotation and creates N rounds;
+- dummy/bye matches are never stored;
+- total stored matches are N*(N-1)/2.
+
+
+22. TOURNAMENT MATCH FLOW
+=========================
+
+PENDING
+  -> scheduled and visible under its round
+  -> no court assigned
+  -> no winner controls
+
+Operator starts match
+  -> select available court
+  -> cross-source court checks
+  -> court status = playing
+  -> Tournament match status = playing
+
+PLAYING
+  -> appears on Courts and Public Display Currently Playing
+  -> operator chooses one participating team as winner
+  -> confirmation dialog locks the result
+
+FINISHED
+  -> winner_team_id saved
+  -> court released
+  -> winner controls disabled
+  -> standings recalculated from finished matches
+
+After the final unfinished match becomes finished:
+
+tournaments.status = finished
+  -> unique first-place team shown as champion
+  -> equal top wins shown as tie
+  -> no head-to-head, points, or score tiebreaker
+  -> operator may create a new Tournament
+
+The latest Tournament remains stored and reloads after navigation or application
+restart. Creating a new finished-successor Tournament makes that newer record the
+one displayed; older Tournament rows remain in SQLite.
+
+
+23. PUBLIC DISPLAY FLOW
+=======================
+
+Open Public Display
+  -> hide the normal sidebar/header layout
+  -> immediately request courts and Rotation Next Up
+  -> refresh both sources every ten seconds
+
+Currently Playing:
+
+Active match assigned to court
+  -> getCourts() builds source-safe active-match data
+  -> court status is reported as playing
+  -> display court, source, category, type, teams, names, and levels
+
+Rotation and Tournament active matches are shown. Finished matches are excluded.
+Compatibility normal matches can be displayed only when old stored data still
+contains a playing record.
+
+Next Up:
+
+Backend returns valid waiting Rotation records only
+  -> renderer verifies source=rotation
+  -> maps both teams to one matchup label
+  -> displays first six in queue order
+
+Pending Tournament matches never appear in Next Up.
+
+Match finishes
+  -> backend releases court
+  -> next refresh removes it from Currently Playing
+
+
+24. COURT MANAGEMENT FLOW
+=========================
+
+Add court:
+
+Enter non-empty court name
+  -> window.api.addCourt(name)
+  -> insert courts row with default available status
+  -> reload court cards
+
+Remove court:
+
+Choose remove
+  -> UI rejects any court currently displayed as playing
+  -> backend explicitly protects active Rotation and Tournament matches
+  -> delete idle court
+  -> reload court cards
+
+Court availability is derived from both the stored court status and active match
+records. getAvailableCourts() returns a court only when it is stored available
+and no active source is attached.
+
+
+25. SETTINGS AND RESET FLOW
+===========================
+
+Settings page opens
+  -> load saved settings
+  -> load player, court, Rotation, and latest Tournament summaries
+  -> load Electron/SQLite/platform/database information
+  -> merge missing keys with renderer defaults
+
+Active setting changes call updateSetting(key, value), which inserts or updates a
+settings row immediately.
+
+Active settings:
+
+- Light, Dark, or Follow System theme
+- Rotation default Singles/Doubles
+- Rotation Auto Requeue finish-dialog behavior
+- Tournament default Singles/Doubles
+- Tournament default category
+
+Coming Soon controls are disabled documentation only and do not call the backend.
+
+Reset flow:
+
+Choose Reset Application Data
+  -> destructive confirmation dialog
+  -> window.api.resetAllData()
+  -> one SQLite transaction deletes active player/session/match/Tournament/court
+     data plus compatibility queue/match storage
+  -> insert Court 1, Court 2, and Court 3 as available
+  -> reset auto-increment sequences
+  -> keep saved settings
+  -> reload Settings statistics
+
+Any failure rolls back the reset transaction.
+
+
+26. COMPLETE PLAYER LIFECYCLE
+=============================
+
+Create permanent player profile
+  -> store identity, level, gender, category preferences, and rank preference
+  -> register profile for today
+  -> daily status available
+  -> choose Rotation Queue or Tournament
+
+Rotation path:
+
+Check status and current assignment
+  -> check match type
+  -> check category and actual gender
+  -> prefer exact category; use compatible No Gender fallback when needed
+  -> check same/adjacent rank rules
+  -> keep locked teammates together where valid
+  -> balance teams and respect queue fairness
+  -> generate waiting match
+  -> daily status assigned
+  -> wait for court
+  -> start match
+  -> daily status playing
+  -> select winner and done players
+  -> update daily and lifetime statistics
+  -> release court
+  -> return unchecked players to available
+  -> repeat or mark done
+
+Tournament path:
+
+Check daily selection status and category
+  -> shuffle players into Singles or Doubles teams
+  -> create every round-robin matchup
+  -> pending match waits for a court
+  -> start match on available court
+  -> effective status becomes playing
+  -> select winner team
+  -> save Tournament result and release court
+  -> repeat until all matches finish
+  -> calculate standings and champion/tie
+  -> daily/lifetime Rotation statistics remain unchanged
+
+End of day:
+
+Mark player done
+  -> player disappears from selectable matchmaking lists
+  -> today's registration and results remain visible
+  -> permanent profile and lifetime history remain stored
+  -> a future date begins with a new daily registration

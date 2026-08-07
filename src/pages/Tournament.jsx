@@ -3,12 +3,14 @@ import RegisteredPlayers from "../components/tournament/RegisteredPlayers";
 import TournamentOptions from "../components/tournament/TournamentOptions";
 import Matches from "../components/tournament/Matches";
 
+// Returns a useful message from an unknown error value.
 function getErrorMessage(error, fallbackMessage) {
   return error instanceof Error && error.message
     ? error.message
     : fallbackMessage;
 }
 
+// Manages Tournament generation, match starts, and winner results.
 export default function Tournament() {
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [matchType, setMatchType] = useState("doubles");
@@ -23,6 +25,7 @@ export default function Tournament() {
   const startingMatchLockRef = useRef(false);
   const savingMatchLockRef = useRef(false);
 
+  // Load saved Tournament defaults when the page opens.
   useEffect(() => {
     let isCancelled = false;
 
@@ -51,6 +54,7 @@ export default function Tournament() {
     };
   }, []);
 
+  // Reload the latest saved Tournament when the page opens.
   useEffect(() => {
     let isCancelled = false;
 
@@ -79,6 +83,7 @@ export default function Tournament() {
     };
   }, []);
 
+  // Generate a complete Tournament from the selected players once per click.
   const handleGenerateTournament = async () => {
     if (isGenerating) return;
 
@@ -108,6 +113,7 @@ export default function Tournament() {
     }
   };
 
+  // Start one pending Tournament match on an available court.
   const handleStartMatch = async (matchId, courtId) => {
     if (startingMatchLockRef.current) {
       return { success: false, message: "A match is already being started." };
@@ -142,6 +148,7 @@ export default function Tournament() {
     }
   };
 
+  // Change category and remove players with an incompatible gender.
   const handleCategoryChange = (nextCategory) => {
     setCategory(nextCategory);
 
@@ -156,6 +163,7 @@ export default function Tournament() {
     }
   };
 
+  // Save one Tournament winner and apply the refreshed Tournament data.
   const handleFinishMatch = async (matchId, winnerTeamId) => {
     if (savingMatchLockRef.current) return false;
 
@@ -187,6 +195,7 @@ export default function Tournament() {
     }
   };
 
+  // Provide zeroed summary values before a Tournament is loaded.
   const summary = tournamentData?.summary || {
     totalMatches: 0,
     pendingMatches: 0,
@@ -202,6 +211,7 @@ export default function Tournament() {
 
   return (
     <div className="space-y-6">
+      {/* Tournament action feedback */}
       {error && (
         <div className="rounded-xl bg-red-500 text-white p-4 flex justify-between gap-4">
           <p>{error}</p>
@@ -230,6 +240,7 @@ export default function Tournament() {
         </div>
       )}
 
+      {/* Tournament status summary */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 text-center">
           <p className="text-2xl font-bold">{summary.totalMatches}</p>
@@ -258,6 +269,7 @@ export default function Tournament() {
         </div>
       </div>
 
+      {/* Tournament configuration and player selection */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <TournamentOptions
           matchType={matchType}
@@ -276,6 +288,7 @@ export default function Tournament() {
         />
       </div>
 
+      {/* Tournament matches and standings */}
       <Matches
         tournamentData={tournamentData}
         isLoading={isLoading}

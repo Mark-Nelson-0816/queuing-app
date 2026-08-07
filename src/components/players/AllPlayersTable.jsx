@@ -5,11 +5,13 @@ import { getPagination } from "../../utils/pagination";
 import { PlayerLevelBadge } from "./PlayerBadges";
 import { formatPlayerPreferences, genderLabel, rankPreferenceLabel } from "./playerDisplay";
 
+// Compares numeric or text values for table sorting.
 function compareValues(first, second) {
   if (typeof first === "number" && typeof second === "number") return first - second;
   return String(first || "").localeCompare(String(second || ""));
 }
 
+// Displays a sortable player-profile table heading.
 function SortHeader({ label, field, sort, onSort, centered = false }) {
   const active = sort.field === field;
   return (
@@ -21,6 +23,7 @@ function SortHeader({ label, field, sort, onSort, centered = false }) {
   );
 }
 
+// Displays searchable, sortable, and paginated player profiles.
 export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onRegister, onEdit, onDelete, onOpenAdd }) {
   const [search, setSearch] = useState("");
   const [levelFilter, setLevelFilter] = useState("all");
@@ -31,6 +34,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
+  // Filter and sort profiles without changing the source list.
   const filteredProfiles = useMemo(() => {
     const searchText = search.trim().toLowerCase();
     const filtered = profiles.filter((player) => (
@@ -44,6 +48,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
         || (categoryFilter === "mixed" && player.preferMixed)
         || (categoryFilter === "no_gender" && player.preferNoGender))
     ));
+    // Read the active sort value from a profile.
     const getValue = (player) => ({
       name: player.name,
       level: player.level,
@@ -54,19 +59,24 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
     return filtered.sort((first, second) => compareValues(getValue(first), getValue(second)) * (sort.direction === "asc" ? 1 : -1));
   }, [categoryFilter, genderFilter, levelFilter, profiles, rankFilter, search, sort]);
 
+  // Limit the filtered profiles to the current page.
   const pagination = getPagination(filteredProfiles.length, page, pageSize);
   const pagedProfiles = filteredProfiles.slice(pagination.startIndex, pagination.endIndex);
+  // Apply a filter and return to the first page.
   const updateFilter = (setter) => (event) => { setter(event.target.value); setPage(1); };
+  // Toggle sorting for the selected column.
   const changeSort = (field) => {
     setSort((current) => ({ field, direction: current.field === field && current.direction === "asc" ? "desc" : "asc" }));
     setPage(1);
   };
+  // Restore the default profile filters.
   const clearFilters = () => {
     setSearch(""); setLevelFilter("all"); setGenderFilter("all"); setRankFilter("all"); setCategoryFilter("all"); setPage(1);
   };
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+      {/* Profile heading and filters */}
       <div className="border-b border-[var(--border)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -87,6 +97,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
         </div>
       </div>
 
+      {/* Profile loading, empty, or table content */}
       {isLoading ? (
         <div className="px-5 py-10 text-center text-sm text-[var(--text)]">Loading player profiles...</div>
       ) : profiles.length === 0 ? (
@@ -100,6 +111,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
         <div className="px-5 py-10 text-center"><p className="font-medium text-[var(--text-h)]">No profiles match these filters.</p><button type="button" onClick={clearFilters} className="mt-2 text-sm font-semibold text-[var(--primary)]">Clear filters</button></div>
       ) : (
         <>
+          {/* Player profile table */}
           <div className="overflow-x-auto">
             <table className="min-w-[900px] w-full border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
@@ -136,6 +148,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
               </tbody>
             </table>
           </div>
+          {/* Profile pagination */}
           <PaginationControls page={pagination.currentPage} pageSize={pageSize} totalRecords={filteredProfiles.length} itemLabel="profiles" onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
         </>
       )}

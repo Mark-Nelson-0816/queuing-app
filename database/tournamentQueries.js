@@ -7,12 +7,22 @@ import {
   validateTournamentPlayers,
 } from "./tournamentLogic.js";
 
+// Loads the canonical database values for one selected player.
 const getPlayerStatement = db.prepare(`
-  SELECT id, name, level, gender
+  SELECT
+    id,
+    name,
+    level,
+    gender,
+    prefer_mens,
+    prefer_womens,
+    prefer_mixed,
+    prefer_no_gender
   FROM players
   WHERE id = ?
 `);
 
+// Detects done, playing, or assigned players across every match source.
 const getTournamentPlayerUnavailableStatusStatement = db.prepare(`
   SELECT CASE
     WHEN EXISTS (
@@ -85,12 +95,14 @@ const getTournamentPlayerUnavailableStatusStatement = db.prepare(`
   END AS unavailable_status
 `);
 
+// Loads the base tournament record.
 const getTournamentStatement = db.prepare(`
   SELECT id, match_type, category, status, created_at
   FROM tournaments
   WHERE id = ?
 `);
 
+// Finds the newest saved tournament.
 const getLatestTournamentStatement = db.prepare(`
   SELECT id
   FROM tournaments
@@ -98,6 +110,7 @@ const getLatestTournamentStatement = db.prepare(`
   LIMIT 1
 `);
 
+// Finds an ongoing tournament that already has generated matches.
 const getActiveTournamentStatement = db.prepare(`
   SELECT tournaments.id
   FROM tournaments
@@ -111,6 +124,7 @@ const getActiveTournamentStatement = db.prepare(`
   LIMIT 1
 `);
 
+// Loads tournament teams with both player profiles attached.
 const getTournamentTeamsStatement = db.prepare(`
   SELECT
     tournament_teams.id,
@@ -134,6 +148,7 @@ const getTournamentTeamsStatement = db.prepare(`
   ORDER BY tournament_teams.team_number ASC
 `);
 
+// Loads tournament rounds in scheduled order.
 const getTournamentRoundsStatement = db.prepare(`
   SELECT id, tournament_id, round_number, created_at
   FROM tournament_rounds
@@ -141,6 +156,7 @@ const getTournamentRoundsStatement = db.prepare(`
   ORDER BY round_number ASC
 `);
 
+// Loads tournament matches with their assigned court details.
 const getTournamentMatchesStatement = db.prepare(`
   SELECT
     tournament_matches.id,
@@ -161,6 +177,7 @@ const getTournamentMatchesStatement = db.prepare(`
   ORDER BY tournament_matches.round_id ASC, tournament_matches.id ASC
 `);
 
+// Prepared inserts used by atomic tournament creation.
 const insertTournamentStatement = db.prepare(`
   INSERT INTO tournaments (match_type, category, status)
   VALUES (?, ?, 'ongoing')
@@ -192,6 +209,7 @@ const insertMatchStatement = db.prepare(`
   VALUES (?, ?, ?, ?, 'pending')
 `);
 
+// Converts database errors into the consistent tournament API shape.
 function createFailure(error, fallbackMessage) {
   return {
     success: false,
@@ -201,6 +219,7 @@ function createFailure(error, fallbackMessage) {
   };
 }
 
+// Maps joined player columns into a renderer-friendly object.
 function mapPlayer(id, name, gender, level) {
   if (id === null || id === undefined) return null;
 
@@ -212,6 +231,7 @@ function mapPlayer(id, name, gender, level) {
   };
 }
 
+// Maps a tournament team and its singles or doubles players.
 function mapTeam(row) {
   return {
     id: Number(row.id),
@@ -233,6 +253,7 @@ function mapTeam(row) {
   };
 }
 
+// Builds the full tournament payload with grouped rounds and standings.
 function loadTournamentDetails(tournamentId) {
   const tournamentRow = getTournamentStatement.get(tournamentId);
   if (!tournamentRow) return null;
@@ -267,6 +288,7 @@ function loadTournamentDetails(tournamentId) {
     createdAt: row.created_at,
   }));
 
+  // Group matches once so React receives ready-to-render rounds.
   const matchesByRound = new Map();
   for (const match of matches) {
     const roundMatches = matchesByRound.get(match.roundId) || [];
@@ -318,6 +340,7 @@ function loadTournamentDetails(tournamentId) {
   };
 }
 
+// Re-loads selected players and rejects stale or unavailable participants.
 function resolveSelectedPlayers(selectedPlayers) {
   if (!Array.isArray(selectedPlayers)) {
     throw new Error("Please select tournament players.");
@@ -358,15 +381,21 @@ function resolveSelectedPlayers(selectedPlayers) {
       name: player.name,
       level: player.level,
       gender: player.gender,
+      preferMens: Boolean(player.prefer_mens),
+      preferWomens: Boolean(player.prefer_womens),
+      preferMixed: Boolean(player.prefer_mixed),
+      preferNoGender: Boolean(player.prefer_no_gender),
     };
   });
 }
 
+// Creates the tournament, teams, rounds, and matches as one atomic operation.
 const createTournamentTransaction = db.transaction((
   selectedPlayers,
   matchType,
   category,
 ) => {
+  // Validate every participant before inserting any tournament data.
   const players = resolveSelectedPlayers(selectedPlayers);
   validateTournamentPlayers(players, matchType, category);
 
@@ -377,6 +406,7 @@ const createTournamentTransaction = db.transaction((
     );
   }
 
+  // Insert the tournament and keep the real database IDs for its teams.
   const teamDefinitions = buildTournamentTeams(players, matchType, category);
   const tournamentResult = insertTournamentStatement.run(matchType, category);
   const tournamentId = Number(tournamentResult.lastInsertRowid);
@@ -396,6 +426,7 @@ const createTournamentTransaction = db.transaction((
     };
   });
 
+  // Generate rounds from inserted team IDs, then persist every matchup.
   const schedule = generateRoundRobinSchedule(insertedTeams);
 
   for (const round of schedule) {
@@ -418,6 +449,7 @@ const createTournamentTransaction = db.transaction((
   return loadTournamentDetails(tournamentId);
 });
 
+// Runs atomic tournament generation and returns the complete saved result.
 export function createRoundRobinTournament(
   selectedPlayers,
   matchType = "doubles",
@@ -433,24 +465,7 @@ export function createRoundRobinTournament(
   }
 }
 
-export function getTournamentById(tournamentId) {
-  try {
-    const numericTournamentId = Number(tournamentId);
-    if (!Number.isInteger(numericTournamentId) || numericTournamentId <= 0) {
-      return { success: false, message: "Tournament not found." };
-    }
-
-    const data = loadTournamentDetails(numericTournamentId);
-    if (!data) {
-      return { success: false, message: "Tournament not found." };
-    }
-
-    return { success: true, data };
-  } catch (error) {
-    return createFailure(error, "Failed to load tournament.");
-  }
-}
-
+// Returns the newest tournament or null when none exists.
 export function getLatestTournament() {
   try {
     const latestTournament = getLatestTournamentStatement.get();
@@ -467,24 +482,7 @@ export function getLatestTournament() {
   }
 }
 
-export function getTournamentMatches(tournamentId) {
-  return getTournamentById(tournamentId);
-}
-
-export function getTournamentStandings(tournamentId) {
-  const result = getTournamentById(tournamentId);
-  if (!result.success) return result;
-
-  return {
-    success: true,
-    data: {
-      tournament: result.data.tournament,
-      standings: result.data.standings,
-      outcome: result.data.outcome,
-    },
-  };
-}
-
+// Assigns a court and starts a pending tournament match atomically.
 const startMatchTransaction = db.transaction((matchId, courtId) => {
   const match = db.prepare(`
     SELECT
@@ -524,6 +522,7 @@ const startMatchTransaction = db.transaction((matchId, courtId) => {
     throw new Error("Selected court was not found.");
   }
 
+  // Check every match source before reserving the selected court.
   const activeNormalMatch = db.prepare(`
     SELECT id
     FROM matches
@@ -554,6 +553,7 @@ const startMatchTransaction = db.transaction((matchId, courtId) => {
     throw new Error("Selected court is no longer available.");
   }
 
+  // Reserve the court only if its stored status is still available.
   const courtUpdate = db.prepare(`
     UPDATE courts
     SET status = 'playing'
@@ -564,6 +564,7 @@ const startMatchTransaction = db.transaction((matchId, courtId) => {
     throw new Error("Selected court is no longer available.");
   }
 
+  // Move only a pending match into the playing state.
   const matchUpdate = db.prepare(`
     UPDATE tournament_matches
     SET court_id = ?, status = 'playing'
@@ -577,6 +578,7 @@ const startMatchTransaction = db.transaction((matchId, courtId) => {
   return loadTournamentDetails(Number(match.tournament_id));
 });
 
+// Validates IDs and starts a tournament match on a court.
 export function startTournamentMatch(matchId, courtId) {
   try {
     const numericMatchId = Number(matchId);
@@ -599,6 +601,7 @@ export function startTournamentMatch(matchId, courtId) {
   }
 }
 
+// Saves a winner, releases the court, and updates tournament completion atomically.
 const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
   const match = db.prepare(`
     SELECT
@@ -652,6 +655,7 @@ const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
     throw new Error("The assigned court was not found.");
   }
 
+  // Lock the winner by updating only a currently playing match.
   const updateResult = db.prepare(`
     UPDATE tournament_matches
     SET winner_team_id = ?, status = 'finished'
@@ -662,6 +666,7 @@ const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
     throw new Error("This match could not be completed.");
   }
 
+  // Release the court only when no match source still uses it.
   db.prepare(`
     UPDATE courts
     SET status = 'available'
@@ -686,6 +691,7 @@ const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
       )
   `).run(match.court_id);
 
+  // Automatically finish the tournament after its final match.
   const pending = db.prepare(`
     SELECT COUNT(*) AS count
     FROM tournament_matches
@@ -703,6 +709,7 @@ const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
   return loadTournamentDetails(Number(match.tournament_id));
 });
 
+// Validates the selected winner and completes a playing tournament match.
 export function finishTournamentMatch(matchId, winnerTeamId) {
   try {
     const numericMatchId = Number(matchId);
@@ -725,52 +732,5 @@ export function finishTournamentMatch(matchId, winnerTeamId) {
     };
   } catch (error) {
     return createFailure(error, "Failed to complete tournament match.");
-  }
-}
-
-const finishTournamentTransaction = db.transaction((tournamentId) => {
-  const tournament = getTournamentStatement.get(tournamentId);
-  if (!tournament) {
-    throw new Error("Tournament not found.");
-  }
-
-  const matchCounts = db.prepare(`
-    SELECT
-      COUNT(*) AS total,
-      SUM(CASE WHEN status <> 'finished' THEN 1 ELSE 0 END) AS pending
-    FROM tournament_matches
-    WHERE tournament_id = ?
-  `).get(tournamentId);
-
-  if (matchCounts.total === 0) {
-    throw new Error("Tournament has no matches.");
-  }
-
-  if (matchCounts.pending > 0) {
-    throw new Error("All matches must be completed before finishing the tournament.");
-  }
-
-  db.prepare(`
-    UPDATE tournaments
-    SET status = 'finished'
-    WHERE id = ?
-  `).run(tournamentId);
-
-  return loadTournamentDetails(tournamentId);
-});
-
-export function finishTournament(tournamentId) {
-  try {
-    const numericTournamentId = Number(tournamentId);
-    if (!Number.isInteger(numericTournamentId) || numericTournamentId <= 0) {
-      return { success: false, message: "Tournament not found." };
-    }
-
-    return {
-      success: true,
-      data: finishTournamentTransaction(numericTournamentId),
-    };
-  } catch (error) {
-    return createFailure(error, "Failed to finish tournament.");
   }
 }

@@ -1,6 +1,9 @@
+import { playerAllowsCategory } from "./rotationLogic.js";
+
 const VALID_MATCH_TYPES = new Set(["singles", "doubles"]);
 const VALID_CATEGORIES = new Set(["no_gender", "mens", "womens", "mixed"]);
 
+// Returns a shuffled copy without changing the original player list.
 function shuffle(items, random = Math.random) {
   const shuffled = [...items];
 
@@ -15,6 +18,7 @@ function shuffle(items, random = Math.random) {
   return shuffled;
 }
 
+// Validates participant count, gender, category, and match-type rules.
 export function validateTournamentPlayers(
   players,
   matchType = "doubles",
@@ -61,6 +65,13 @@ export function validateTournamentPlayers(
     throw new Error("Women's tournaments may only include female players.");
   }
 
+  if (
+    category !== "no_gender"
+    && players.some((player) => !playerAllowsCategory(player, category))
+  ) {
+    throw new Error("One or more players do not prefer this tournament category.");
+  }
+
   if (matchType === "doubles" && players.length % 2 !== 0) {
     throw new Error("Doubles requires an even number of players.");
   }
@@ -81,6 +92,7 @@ export function validateTournamentPlayers(
   return true;
 }
 
+// Shuffles valid players into singles or doubles tournament teams.
 export function buildTournamentTeams(
   players,
   matchType = "doubles",
@@ -128,6 +140,7 @@ export function buildTournamentTeams(
   return teams;
 }
 
+// Uses the circle method so every team plays every other team once.
 export function generateRoundRobinSchedule(teams) {
   if (!Array.isArray(teams) || teams.length < 2) {
     throw new Error("A round-robin tournament requires at least two teams.");
@@ -142,6 +155,7 @@ export function generateRoundRobinSchedule(teams) {
     throw new Error("Tournament team IDs must be unique.");
   }
 
+  // A null participant gives each real team one bye when the count is odd.
   const rotation = [...teamIds];
   if (rotation.length % 2 !== 0) {
     rotation.push(null);
@@ -175,6 +189,7 @@ export function generateRoundRobinSchedule(teams) {
   return rounds;
 }
 
+// Calculates played, wins, and losses directly from finished matches.
 export function calculateTournamentStandings(teams, matches) {
   const standingsByTeam = new Map(
     teams.map((team) => [
@@ -218,6 +233,7 @@ export function calculateTournamentStandings(teams, matches) {
   ));
 }
 
+// Returns a unique champion or an explicit first-place tie.
 export function getTournamentOutcome(standings, tournamentStatus) {
   if (tournamentStatus !== "finished" || standings.length === 0) {
     return null;

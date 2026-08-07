@@ -1,3 +1,4 @@
+// Displays Tournament match settings and the generation action.
 export default function TournamentOptions({
   matchType = "doubles",
   category = "no_gender",
@@ -11,12 +12,14 @@ export default function TournamentOptions({
 
   return (
     <section className="self-start rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 xl:sticky xl:top-0">
+      {/* Tournament configuration heading */}
       <div>
         <h2 className="text-lg font-semibold text-[var(--text-h)]">
           Tournament Configuration
         </h2>
       </div>
 
+      {/* Match type options */}
       <div className="mt-6">
         <label className="block text-sm font-medium mb-2">
           Match Type
@@ -52,6 +55,7 @@ export default function TournamentOptions({
         </div>
       </div>
 
+      {/* Category options */}
       <div className="mt-6">
         <label className="block text-sm font-medium mb-2">
           Category
@@ -110,6 +114,7 @@ export default function TournamentOptions({
         </div>
       </div>
 
+      {/* Current category rule */}
       <div className="mt-5 rounded-xl border border-[var(--primary)]/30 p-3 text-center text-sm text-[var(--text)]">
         {category === "mens" && "Men vs Men."}
         {category === "womens" && "Women vs Women."}
@@ -123,6 +128,7 @@ export default function TournamentOptions({
         </p>
       )}
 
+      {/* Generate Tournament action */}
       <button
         type="button"
         className="mt-4 w-full rounded-xl bg-[var(--primary)] py-3 font-semibold text-white transition hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"

@@ -14,6 +14,7 @@ const statusStyles = {
   },
 };
 
+// Converts stored match values into readable labels.
 function formatLabel(value) {
   if (value === "no_gender") return "No Gender";
   if (value === "mens") return "Men's";
@@ -23,6 +24,7 @@ function formatLabel(value) {
     : "";
 }
 
+// Displays the court's current availability status.
 function StatusBadge({ status }) {
   const style = statusStyles[status] ?? statusStyles.available;
   return (
@@ -33,6 +35,7 @@ function StatusBadge({ status }) {
   );
 }
 
+// Displays one side of the active court match.
 function Team({ team, accent = "primary", matchType }) {
   if (!team) return null;
   const sideLabel = matchType === "singles"
@@ -65,6 +68,7 @@ function Team({ team, accent = "primary", matchType }) {
   );
 }
 
+// Displays one court and its active match, when present.
 export default function CourtCard({
   court,
   onRemoveCourt,
@@ -77,6 +81,7 @@ export default function CourtCard({
 
   return (
     <div className={`group relative bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col gap-4 ring-1 ${style.ring} transition-shadow hover:shadow-md`}>
+      {/* Court name, status, and removal action */}
       <div className="flex items-start justify-between">
         <div className="space-y-1.5">
           <h3 className="text-lg font-bold text-[var(--text-h)] leading-tight">
@@ -95,6 +100,7 @@ export default function CourtCard({
         </button>
       </div>
 
+      {/* Active match or available-court state */}
       <div className="flex-1">
         {activeMatch ? (
           <div className="space-y-3">

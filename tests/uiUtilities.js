@@ -6,6 +6,7 @@ import {
   getPlayerConfigurationReason,
 } from "../src/utils/rotationUi.js";
 import {
+  getTournamentPreferencePriority,
   isTournamentCategoryEligible,
   isTournamentPlayerEligible,
 } from "../src/utils/tournamentUi.js";
@@ -84,15 +85,86 @@ assert.deepEqual(countRankPreferences(players.slice(0, 3)), {
   adjacent_rank: 1,
 });
 
-assert.equal(isTournamentPlayerEligible({ status: "available", gender: "male" }, "mens"), true);
-assert.equal(isTournamentPlayerEligible({ status: "waiting", gender: "female" }, "womens"), true);
-assert.equal(isTournamentPlayerEligible({ status: "playing", gender: "male" }, "mens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "assigned", gender: "male" }, "mens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "finished", gender: "female" }, "womens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "available", gender: "male", preferMens: true }, "mens"), true);
+assert.equal(isTournamentPlayerEligible({ status: "waiting", gender: "female", preferWomens: true }, "womens"), true);
+assert.equal(isTournamentPlayerEligible({ status: "playing", gender: "male", preferMens: true }, "mens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "assigned", gender: "male", preferMens: true }, "mens"), false);
+assert.equal(isTournamentPlayerEligible({ status: "finished", gender: "female", preferWomens: true }, "womens"), false);
 assert.equal(isTournamentPlayerEligible({ status: "done", gender: "female" }, "no_gender"), false);
 assert.equal(isTournamentCategoryEligible({ gender: "female" }, "mens"), false);
 assert.equal(isTournamentCategoryEligible({ gender: "male" }, "womens"), false);
 assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female" }, "mens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female" }, "mixed"), true);
+assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female", preferMixed: true }, "mixed"), true);
+
+const maleNoGenderPlayer = {
+  status: "available",
+  gender: "male",
+  preferMens: false,
+  preferWomens: false,
+  preferMixed: false,
+  preferNoGender: true,
+};
+const femaleNoGenderPlayer = { ...maleNoGenderPlayer, gender: "female" };
+assert.equal(getTournamentPreferencePriority(maleNoGenderPlayer, "mens"), 1);
+assert.equal(isTournamentPlayerEligible(maleNoGenderPlayer, "mens"), true);
+assert.equal(isTournamentPlayerEligible(femaleNoGenderPlayer, "mens"), false);
+assert.equal(isTournamentPlayerEligible(femaleNoGenderPlayer, "womens"), true);
+assert.equal(isTournamentPlayerEligible(maleNoGenderPlayer, "mixed"), true);
+assert.equal(isTournamentPlayerEligible(femaleNoGenderPlayer, "mixed"), true);
+assert.equal(
+  getTournamentPreferencePriority({ ...maleNoGenderPlayer, preferMens: true }, "mens"),
+  0,
+);
+assert.equal(
+  isTournamentPlayerEligible({ ...maleNoGenderPlayer, status: "playing" }, "mens"),
+  false,
+);
+assert.equal(
+  isTournamentPlayerEligible({ ...femaleNoGenderPlayer, status: "done" }, "womens"),
+  false,
+);
+assert.equal(
+  isTournamentPlayerEligible({
+    ...maleNoGenderPlayer,
+    preferNoGender: false,
+    preferWomens: true,
+  }, "mens"),
+  false,
+);
+assert.equal(isTournamentPlayerEligible({
+  ...maleNoGenderPlayer,
+  preferNoGender: false,
+}, "mens"), false);
+assert.equal(isTournamentPlayerEligible({
+  ...maleNoGenderPlayer,
+  preferNoGender: false,
+  preferMens: false,
+}, "no_gender"), true);
+
+const fallbackPreviewPlayers = [
+  ...players.slice(0, 3).map((player) => ({
+    ...player,
+    preferMens: true,
+    preferWomens: false,
+    preferMixed: false,
+    preferNoGender: false,
+  })),
+  {
+    ...players[3],
+    preferMens: false,
+    preferWomens: false,
+    preferMixed: false,
+    preferNoGender: true,
+  },
+];
+const fallbackPreview = buildRotationPreview({
+  players: fallbackPreviewPlayers,
+  selectedPlayerIds: fallbackPreviewPlayers.map((player) => player.id),
+  locks: [],
+  matchType: "doubles",
+  category: "mens",
+});
+assert.equal(fallbackPreview.canGenerate, true);
+assert.equal(fallbackPreview.matches.length, 1);
 
 console.log("UI utility tests passed.");
