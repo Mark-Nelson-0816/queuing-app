@@ -1,0 +1,1495 @@
+BADMINTON QUEUING APP
+TOURNAMENT SYSTEM REVISION SPECIFICATION
+========================================
+
+Document purpose
+----------------
+
+This file is the finalized requirements document for the upcoming Tournament
+system revision. It is the source of truth for that future implementation.
+
+This document describes planned behavior. It does not mean the behavior is
+already implemented. The current application code must not be treated as the
+final Tournament design when it conflicts with this specification.
+
+The revision must stay understandable and consistent with the application's
+existing Electron, React, preload IPC, and SQLite architecture. It must not
+rewrite the whole application.
+
+
+1. SCOPE AND SYSTEM BOUNDARY
+============================
+
+1.1 In scope
+------------
+
+The revision covers the complete Tournament workflow:
+
+- Creating and managing Tournament events.
+- Creating multiple independent configurations inside one Tournament.
+- Registering players from permanent player profiles.
+- Generating singles entries or doubles teams.
+- Dividing teams into balanced-size groups.
+- Generating a round robin inside each group.
+- Starting Tournament matches on shared courts.
+- Recording winners and finishing matches.
+- Calculating group standings and group results.
+- Resetting one configuration when corrections are required.
+- Manually finishing the Tournament event.
+- Keeping finished Tournaments as permanent, read-only history.
+- Showing actively playing Tournament matches on Public Display.
+
+1.2 Out of scope
+----------------
+
+The revision does not include:
+
+- Changes to Rotation Queue matchmaking rules.
+- Adjacent-level Tournament matchmaking.
+- Rotation rank preferences in Tournament selection.
+- Rotation locked-teammate behavior in Tournaments.
+- Tournament matches in the Rotation Queue's Next Up list.
+- Automatic scheduling between Rotation and Tournament workloads.
+- Tournament score or set entry.
+- Point differential, head-to-head, or other tie-breakers.
+- Automatic semifinals, finals, knockout brackets, or playoffs.
+- Manual doubles partner locks or manual team construction.
+- Player payment or Tournament check-in tracking.
+- Birthday fields, age fields, or automatic division eligibility checks.
+- A rename of the Rotation Queue or its existing Round Robin terminology.
+
+Small compatibility changes outside Tournament are allowed only when required
+for shared behavior such as court occupancy, Public Display, permanent player
+statistics, or safe player deletion.
+
+
+2. CURRENT IMPLEMENTATION THAT WILL BE REPLACED
+================================================
+
+The current implementation is useful context but is not the final design.
+
+Currently:
+
+- A Tournament record itself stores one match type and one category.
+- A newly generated Tournament starts with status `ongoing`.
+- Only one generated ongoing Tournament is supported.
+- The Tournament player list is loaded from today's registered players.
+- Tournament eligibility reuses some Rotation Queue preference and
+  availability helpers.
+- One atomic generation creates the Tournament, teams, rounds, and every match.
+- All teams are placed in one overall circle-method round robin.
+- Matches use `pending`, `playing`, and `finished` statuses.
+- Completing the last match automatically finishes the Tournament.
+- Standings are calculated across the entire Tournament.
+- There are no Tournament names, dates, divisions, levels, configurations, or
+  groups in the current schema.
+- Tournament match completion does not implement the revised permanent lifetime
+  statistics requirements described below.
+
+The implementation phase must migrate existing databases safely. It must not
+assume that changing a CREATE TABLE IF NOT EXISTS statement changes tables that
+already exist.
+
+
+3. ARCHITECTURAL RULES
+======================
+
+3.1 Keep the current application architecture
+---------------------------------------------
+
+Use the existing flow:
+
+React Tournament UI
+  -> window.api method in electron/preload.cjs
+  -> ipcMain.handle in electron/main.js
+  -> synchronous better-sqlite3 query/transaction function
+  -> SQLite
+  -> renderer-friendly result returned through IPC
+  -> React refreshes its state
+
+Rules:
+
+- Use JavaScript, not TypeScript.
+- Continue using better-sqlite3.
+- Keep database work synchronous in the Electron main process.
+- Await IPC calls in React because ipcRenderer.invoke returns a Promise.
+- Use prepared statements.
+- Use SQLite transactions for multi-step writes.
+- Convert lastInsertRowid values to normal numbers before returning them through
+  IPC when needed.
+- Keep preload method names, IPC channel names, argument order, and database
+  function contracts consistent end to end.
+- Return predictable success data or meaningful errors according to the
+  project's established IPC style.
+- Avoid a web server, HTTP API, new frontend framework, or major abstraction
+  layer.
+
+3.2 Tournament and Rotation Queue are separate systems
+------------------------------------------------------
+
+Tournament must not reuse Rotation Queue business rules merely because both
+systems select players and create matches.
+
+Tournament must not depend on:
+
+- Daily player registration.
+- Rotation Queue availability status.
+- Rotation Queue category preferences.
+- Same-rank or adjacent-rank Rotation preferences.
+- Locked teammate records.
+- Rotation queue position or fairness calculations.
+- Rotation Queue Next Up ordering.
+
+Shared infrastructure is limited to appropriate common resources, including:
+
+- Permanent player profiles.
+- Physical courts.
+- Permanent lifetime player statistics.
+- Public Display's Currently Playing area.
+- Safe deletion protection for referenced player profiles.
+
+
+4. TOURNAMENT EVENT MODEL
+=========================
+
+4.1 Required Tournament fields
+------------------------------
+
+Every Tournament event must have:
+
+- A unique database ID.
+- A Tournament name.
+- A start date.
+- An end date.
+- A status: `draft`, `ongoing`, or `finished`.
+- Creation metadata already used by the application, such as created time.
+
+Start and end dates describe the event and allow preparation before the event.
+They must not make the Tournament depend on today's daily registration records.
+
+4.2 Multiple Tournament records
+-------------------------------
+
+- The database may contain multiple draft Tournaments.
+- The database may contain historical finished Tournaments.
+- Only one Tournament may be `ongoing` at a time.
+- A draft Tournament may be configured and generated before its start date.
+- The application must offer a way to select or open the intended Tournament,
+  rather than assuming the most recently created row is always the event to use.
+
+4.3 Status lifecycle
+--------------------
+
+The event lifecycle is:
+
+`draft` -> `ongoing` -> `finished`
+
+Rules:
+
+- Creating an event creates it as `draft`.
+- Configuring players, teams, groups, and waiting matches does not by itself make
+  the event ongoing.
+- Starting the first Tournament match changes the event from `draft` to
+  `ongoing` inside the same transaction that starts the match.
+- Starting that first match must fail if another Tournament is already
+  `ongoing`.
+- An `ongoing` Tournament remains ongoing until an administrator explicitly
+  finishes it.
+- Completing the last match must not automatically finish the Tournament.
+- A Tournament may be manually finished only when none of its matches are
+  `waiting` or `playing`.
+- A finished Tournament is read-only history.
+- A finished Tournament cannot start matches, change winners, regenerate a
+  configuration, or reset a configuration.
+
+
+5. TOURNAMENT CONFIGURATIONS
+============================
+
+5.1 Purpose
+-----------
+
+One Tournament contains many independent configurations. A configuration is the
+unit used for player registration, team creation, grouping, scheduling,
+standings, and reset.
+
+5.2 Exact configuration identity
+--------------------------------
+
+A configuration is uniquely identified inside one Tournament by all four of:
+
+1. Division
+2. Match type
+3. Category
+4. Level
+
+The exact same combination may exist only once in one Tournament.
+
+Example:
+
+- Adult / Doubles / Mixed / Beginner is one configuration.
+- Adult / Doubles / Mixed / Intermediate is a different configuration.
+- 17 Under / Doubles / Mixed / Beginner is another configuration.
+
+5.3 Divisions
+-------------
+
+Allowed divisions are exactly:
+
+- Adult
+- 17 Under
+- 15 Under
+- 13 Under
+- 11 Under
+- 9 Under
+
+The system does not collect or validate birthdays or ages for this revision.
+The operator is responsible for choosing the correct division.
+
+5.4 Match types and categories
+------------------------------
+
+Singles supports:
+
+- Men's
+- Women's
+- No Gender
+
+Doubles supports:
+
+- Men's
+- Women's
+- Mixed
+- No Gender
+
+Mixed Singles is not allowed and must not be offered or accepted.
+
+5.5 Levels
+----------
+
+Allowed Tournament levels are exactly:
+
+- Beginner
+- Intermediate
+- Upper Intermediate
+- Advanced
+
+Stored values should follow the project's normalized value convention, such as
+`beginner`, `intermediate`, `upper_intermediate`, and `advanced`, while the UI
+uses friendly labels.
+
+Tournament configurations are same-level only. Adjacent levels must never be
+included automatically.
+
+5.6 Configuration independence
+------------------------------
+
+- Validation failure in one configuration must not modify another.
+- Generating one configuration must not regenerate or duplicate another.
+- Matches from different configurations must remain distinct even when their
+  numeric IDs happen to match IDs in other match tables.
+- Group lettering starts at Group A for each configuration.
+- Standings and group winners are scoped to one configuration and one group.
+
+5.7 Editing a generated configuration
+-------------------------------------
+
+Once a configuration has generated teams, groups, and matches, its defining
+fields and participant list must not be edited in place.
+
+To change players or configuration details:
+
+1. Reset that exact configuration.
+2. Confirm the destructive reset.
+3. Return to participant selection.
+4. Regenerate the configuration.
+
+
+6. PLAYER SOURCE, REGISTRATION, AND MEMBERSHIP
+==============================================
+
+6.1 Source of players
+---------------------
+
+Tournament player selection must load permanent player profiles directly from
+the `players` table.
+
+A player does not need to:
+
+- Be in `registered_players_today`.
+- Have a daily status of waiting or available.
+- Be in the Rotation Queue.
+- Be registered on the Tournament start date.
+
+This allows administrators to prepare Tournaments in advance and supports
+multi-day events.
+
+6.2 Selection display and filtering
+-----------------------------------
+
+The selector must show enough permanent profile information to make a safe
+choice, including:
+
+- Player name.
+- Player gender.
+- Player level.
+- Existing level color.
+
+Level colors remain:
+
+- Beginner: yellow.
+- Intermediate: green.
+- Upper Intermediate: blue.
+- Advanced: red.
+
+The player list must automatically filter eligibility according to the current
+configuration:
+
+- Exact selected level only.
+- Men's: male players only.
+- Women's: female players only.
+- Mixed Doubles: male and female players are eligible, with equal final counts
+  required.
+- No Gender: any gender is eligible.
+
+The backend must repeat all critical validation. UI filtering alone is not a
+security or integrity boundary.
+
+6.3 No Rotation-only preferences
+--------------------------------
+
+Tournament selection must ignore:
+
+- Player match-category preferences used by Rotation.
+- Same-rank or adjacent-rank preference.
+- Locked teammate preference.
+- Current queue position.
+- Daily waiting, assigned, playing, or done status.
+
+6.4 Repeated participation across configurations
+------------------------------------------------
+
+The same permanent player may participate in an unlimited number of different
+configurations within the same Tournament.
+
+Participation in one category, division, match type, or level configuration must
+not automatically block registration in another configuration.
+
+Within one exact configuration:
+
+- A singles player may appear only once.
+- A doubles player may belong to only one generated team.
+- The same player cannot occupy both positions of a doubles team.
+
+6.5 Snapshot requirements
+-------------------------
+
+Tournament participation must preserve the player's relevant classification at
+the time the configuration is generated or registered:
+
+- Level snapshot.
+- Gender snapshot.
+
+The participant's displayed name must continue to come from the current
+permanent player profile, so a later name correction appears in Tournament
+history.
+
+The snapshot is necessary because later edits to a player's level or gender must
+not silently change the historical eligibility, category membership, teams, or
+group structure of an already generated configuration.
+
+6.6 Player deletion protection
+------------------------------
+
+A permanent player profile must not be deletable when that player has any
+Tournament participation or historical Tournament reference.
+
+This protection must cover the revised participation/membership data, not only
+the current `tournament_teams.player_1_id` and `player_2_id` columns.
+
+
+7. PARTICIPANT VALIDATION
+=========================
+
+All validation must happen before partial configuration data is inserted.
+Multi-step generation must be atomic.
+
+7.1 Common validation
+---------------------
+
+- Tournament must exist and must not be finished.
+- Configuration identity must be valid and unique inside that Tournament.
+- Every selected player ID must resolve to a permanent player profile.
+- Duplicate selected player IDs are not allowed.
+- Every selected player must match the exact configuration level.
+- Men's configurations may contain only male players.
+- Women's configurations may contain only female players.
+- Mixed is allowed only for Doubles.
+- No Gender may contain players of any gender.
+- Existing participation in a different configuration is allowed.
+- Existing participation in this exact configuration is not allowed.
+
+7.2 Singles validation
+----------------------
+
+- At least two players are required.
+- Every player becomes one team.
+- No doubles partner is stored for a singles team.
+
+7.3 Standard Doubles validation
+-------------------------------
+
+Standard Doubles means Men's, Women's, or No Gender Doubles.
+
+- At least four players are required.
+- The total selected player count must be even.
+- An odd total must be rejected with a clear message explaining that one more
+  player is needed.
+- Players are shuffled and paired in groups of two.
+- No manual partner lock is used.
+
+7.4 Mixed Doubles validation
+----------------------------
+
+- At least four players are required.
+- Male and female player counts must be equal.
+- Every generated team must contain exactly one male and one female player.
+- Male and female lists are shuffled separately before pairing.
+- If counts are unequal, reject the configuration and clearly say which gender
+  needs another player. When the difference is greater than one, the message
+  should state the number required.
+
+7.5 Minimum team count
+----------------------
+
+Every generated configuration must contain at least two teams:
+
+- Singles: at least two selected players.
+- Doubles: at least four selected players, producing at least two teams.
+
+
+8. TEAM GENERATION
+==================
+
+8.1 Singles teams
+-----------------
+
+- Shuffle the validated selected players.
+- Create one team per player.
+- Store the player as the team's first member.
+- The second member remains null.
+
+8.2 Standard Doubles teams
+--------------------------
+
+- Shuffle all validated selected players once.
+- Pair players sequentially in groups of two.
+- Every player appears in exactly one team in that configuration.
+
+8.3 Mixed Doubles teams
+-----------------------
+
+- Separate validated players by gender.
+- Shuffle the male list.
+- Shuffle the female list.
+- Pair one male with one female until all players have been used.
+- Every player appears in exactly one team in that configuration.
+
+8.4 Database IDs
+----------------
+
+After a team is inserted, all group membership and matches must use the actual
+database team ID. Array indexes and display team numbers are not foreign keys.
+
+
+9. GROUP CREATION
+=================
+
+9.1 Grouping occurs after team creation
+---------------------------------------
+
+Grouping uses generated teams, not individual players.
+
+Required sequence:
+
+1. Validate players.
+2. Generate teams.
+3. Shuffle the list of teams.
+4. Calculate group sizes.
+5. Assign the shuffled teams to Group A, Group B, and so on.
+6. Generate a round robin separately inside each group.
+
+9.2 Required group distributions
+--------------------------------
+
+The following team counts have exact required distributions:
+
+ 1 team  -> reject; at least 2 teams are required
+ 2 teams -> 2
+ 3 teams -> 3
+ 4 teams -> 4
+ 5 teams -> 3 + 2
+ 6 teams -> 3 + 3
+ 7 teams -> 4 + 3
+ 8 teams -> 4 + 4
+ 9 teams -> 5 + 4
+10 teams -> 5 + 5
+11 teams -> 6 + 5
+12 teams -> 4 + 4 + 4
+13 teams -> 5 + 4 + 4
+14 teams -> 5 + 5 + 4
+15 teams -> 5 + 5 + 5
+16 teams -> 4 + 4 + 4 + 4
+
+The 2-to-7-team distributions are intentional exceptions and must not be
+rewritten merely to force every group into a generic size rule.
+
+9.3 Larger team counts
+----------------------
+
+For more than 16 teams:
+
+- Choose a reasonable number of groups.
+- Keep every group between four and six teams.
+- Distribute teams as evenly as possible.
+- The difference between the largest and smallest group should be at most one
+  whenever mathematically possible.
+- Use a deterministic size calculation after the team list has been shuffled.
+- Do not use an unbounded search or combinatorial optimizer.
+
+9.4 Group names
+---------------
+
+- Groups are named alphabetically: Group A, Group B, Group C, and so on.
+- Group lettering resets to Group A inside every configuration.
+- Group order must be stored or reproducible for consistent history display.
+
+
+10. ROUND-ROBIN MATCH GENERATION
+================================
+
+10.1 Scope
+----------
+
+Generate a separate round robin for each group.
+
+- Every team plays every other team in its own group exactly once.
+- Teams do not play teams in other groups.
+- No team plays itself.
+- No duplicate matchup is allowed.
+- A team may appear at most once in the same group round.
+- Odd-size groups use a bye/dummy rotation.
+- Matches involving the dummy team are never stored.
+
+10.2 Algorithm
+--------------
+
+Use the circle method or another bounded algorithm with the same guarantees.
+
+For a group with N teams:
+
+- Total stored matches must equal N * (N - 1) / 2.
+- Even N normally creates N - 1 rounds.
+- Odd N normally creates N rounds with one real team on a bye per round.
+
+Round numbering must be scoped clearly enough that the UI can display rounds
+inside the correct group and configuration. The implementation must not confuse
+round IDs, group IDs, team IDs, or display numbers.
+
+10.3 No automatic finals
+------------------------
+
+The generated workflow ends with group round robins and group results.
+
+- Do not generate semifinals.
+- Do not generate finals.
+- Do not create cross-group matches.
+- Administrators will handle any later championship matches outside this
+  Tournament workflow.
+
+
+11. ATOMIC CONFIGURATION GENERATION
+===================================
+
+Generating one configuration must use one SQLite transaction.
+
+The transaction must:
+
+1. Verify the Tournament and its editable status.
+2. Validate configuration identity and uniqueness.
+3. Resolve permanent player profiles in bulk.
+4. Validate selected players and detect duplicates.
+5. Create the configuration.
+6. Store participant membership and gender/level snapshots.
+7. Create all teams using actual inserted IDs.
+8. Calculate and insert groups.
+9. Assign teams to groups.
+10. Insert group rounds.
+11. Insert all group matches.
+12. Return a renderer-friendly representation of the generated configuration.
+
+If any step fails, the transaction must roll back the entire configuration.
+It must not leave partial membership, teams, groups, rounds, or matches.
+
+Renderer safeguards must also include:
+
+- A generation-in-progress guard.
+- A disabled Generate button while IPC is pending.
+- One bulk generation call rather than one IPC call per player, team, round, or
+  match.
+- Visible validation and database errors.
+
+
+12. TOURNAMENT MATCH LIFECYCLE
+==============================
+
+12.1 Match statuses
+-------------------
+
+Revised Tournament match statuses are:
+
+- `waiting`: generated and available for an administrator to start.
+- `playing`: assigned to a court and currently active.
+- `finished`: winner saved and no longer active.
+
+Newly generated Tournament matches start as `waiting`, not `pending`.
+
+Tournament waiting matches must never be placed in Rotation Queue Next Up.
+
+12.2 Selecting a match to start
+-------------------------------
+
+- The administrator may choose any waiting Tournament match.
+- Tournament match order is not controlled by Rotation queue fairness.
+- The administrator chooses an available court.
+- Starting the match must be one atomic database operation.
+- Duplicate start clicks must not start the match twice.
+
+12.3 Required start checks
+--------------------------
+
+The database must verify all of the following:
+
+- The match exists and belongs to the requested Tournament/configuration.
+- The Tournament is not finished.
+- The match status is `waiting`.
+- The match does not already have an active court assignment.
+- The selected court exists.
+- The selected court is available across every match source that shares courts.
+- Neither team is missing or invalid.
+- No participant in either team is already playing another Tournament match.
+
+Players may have multiple waiting matches across different Tournament
+configurations. They may play only one Tournament match at a time.
+
+Do not add a Tournament-versus-Rotation player availability restriction. During
+events the venue is expected to operate in Tournament mode. Shared court
+protection still applies so one court cannot host two active matches.
+
+12.4 First-match Tournament transition
+--------------------------------------
+
+When the first match of a draft Tournament starts:
+
+- Verify no other Tournament is ongoing.
+- Change the Tournament to `ongoing`.
+- Assign the court to the selected match.
+- Change the match to `playing`.
+
+These writes must happen in the same transaction so the application cannot end
+with an ongoing Tournament but an unstarted match, or vice versa.
+
+12.5 Playing match behavior
+---------------------------
+
+- Only playing matches may choose a winner.
+- Waiting matches must not show or accept winner controls.
+- The UI must lock duplicate start/finish actions while IPC is pending.
+- The backend remains the final protection against duplicate actions.
+
+12.6 Finishing a match
+----------------------
+
+To finish a Tournament match:
+
+1. Verify the match exists.
+2. Verify its current status is `playing`.
+3. Verify the selected winner is Team A or Team B.
+4. Save the winning team ID.
+5. Change the match status to `finished`.
+6. Release its court if no active match from any source still uses that court.
+7. Update permanent lifetime statistics exactly once.
+8. Return refreshed Tournament/configuration data.
+
+Finished matches are locked. A finished match cannot be completed again or have
+its winner changed in this revision.
+
+The final match finishing does not automatically finish the Tournament event.
+
+
+13. COURTS AND SHARED COURT SAFETY
+==================================
+
+Tournament uses the same physical courts as other application match sources.
+
+Rules:
+
+- A Tournament match starts without a court only if it is still waiting.
+- A playing Tournament match must have a court.
+- Two active matches, regardless of source, cannot use the same court.
+- Court checks must distinguish match source explicitly; equal numeric IDs from
+  different tables do not make them the same match.
+- Starting a Tournament match marks the selected court unavailable according to
+  the existing shared court model.
+- Finishing a Tournament match releases the court only after checking that no
+  other active normal, Rotation, legacy, or Tournament match uses it.
+- Resetting a configuration must release courts used by its playing matches,
+  again using source-safe active-match checks.
+- Available-court data must be refreshed after a start, finish, or reset so the
+  UI does not continue using stale availability.
+
+
+14. WINNERS, STATISTICS, AND STANDINGS
+======================================
+
+14.1 Winner rules
+-----------------
+
+- The operator selects Team A or Team B as winner.
+- No score entry is required.
+- A match cannot end in a tie.
+- A winner outside the two participating teams must be rejected.
+
+14.2 Permanent lifetime player statistics
+------------------------------------------
+
+Finishing a Tournament match must update the permanent `players` statistics:
+
+- Every participant: increment `total_matches_played` once.
+- Every participant on the winning team: increment `total_wins` once.
+- Every participant on the losing team: increment `total_losses` once.
+
+For Doubles, both partners on each team receive the appropriate update.
+
+Tournament match completion must not update daily registration statistics in
+`registered_players_today`.
+
+Statistics and match completion must be in the same transaction so duplicate
+clicks, failures, or retries cannot double-count a finished match.
+
+14.3 Group standings
+--------------------
+
+Standings are calculated per group from persisted finished matches. A separate
+manually editable standings table is not required.
+
+For every team show:
+
+- Matches played.
+- Wins.
+- Losses.
+
+Sort standings by:
+
+1. Wins descending.
+2. Losses ascending.
+3. Stable team/display number ascending.
+
+14.4 Group results
+------------------
+
+- If exactly one team has the most wins, show that team as the group winner.
+- If multiple teams share the most wins, show all tied teams.
+- Clearly label the result as a tie in wins.
+- Do not invent a tie-breaker.
+- Do not store a manually selected group winner for this revision.
+
+
+15. RESETTING ONE CONFIGURATION
+===============================
+
+15.1 When reset is allowed
+--------------------------
+
+- A configuration may be reset while its Tournament is `draft` or `ongoing`.
+- A configuration may not be reset after the Tournament is `finished`.
+- The UI must require explicit confirmation.
+- The database must verify the status rule even if the UI is bypassed.
+
+15.2 Reset scope
+----------------
+
+Reset affects only the exact selected configuration. It must remove its:
+
+- Participant membership and snapshots.
+- Generated teams.
+- Group definitions and team assignments.
+- Rounds.
+- Waiting matches.
+- Playing matches.
+- Finished matches and saved match winners.
+
+Other configurations in the same Tournament must remain unchanged.
+
+15.3 Court release
+------------------
+
+If the configuration has playing matches, reset must release their courts using
+the same source-safe court availability checks used during normal completion.
+
+15.4 Lifetime statistics are intentionally not reversed
+--------------------------------------------------------
+
+If reset deletes finished matches, permanent player lifetime statistics already
+awarded by those matches must not be subtracted or reversed.
+
+This is an intentional business rule. The confirmation message should make the
+destructive scope clear so an administrator understands that match records will
+be removed while lifetime totals remain.
+
+15.5 State after reset
+----------------------
+
+After reset, the operator must be able to select players and regenerate the same
+configuration identity. The implementation may retain an empty configuration
+shell or return to a new-configuration form, but it must not leave uniqueness
+data that prevents regeneration.
+
+
+16. MANUALLY FINISHING A TOURNAMENT
+===================================
+
+16.1 Finish action
+------------------
+
+Provide an explicit Finish Tournament action with confirmation.
+
+The database must reject finishing when any match in the Tournament is:
+
+- `waiting`, or
+- `playing`.
+
+The rule applies across every configuration and group in the Tournament.
+
+16.2 Empty or fully completed event
+-----------------------------------
+
+The stated rule is that no waiting or playing matches may remain. Do not add
+another unstated completion rule during implementation. If product policy for an
+empty draft needs clarification later, treat it as an open product decision
+rather than inventing behavior.
+
+16.3 Finished behavior
+----------------------
+
+After the Tournament becomes `finished`:
+
+- All Tournament data is read-only.
+- Matches cannot start or finish again.
+- Winners cannot be changed.
+- Configurations cannot be reset or regenerated.
+- The Tournament remains available in history.
+
+
+17. TOURNAMENT HISTORY
+======================
+
+Tournament data is persistent event history and is not reset each day.
+
+The history view for a finished Tournament must show, where applicable:
+
+- Tournament name.
+- Start and end dates.
+- Tournament status.
+- Configurations.
+- Division, match type, category, and level for each configuration.
+- Participants and their stored classification snapshots.
+- Singles entries or Doubles teams.
+- Groups and group membership.
+- Rounds and matches.
+- Courts used when the retained match data supports it.
+- Match winners.
+- Group standings.
+- Unique group winners or tied group leaders.
+
+Names are read from current permanent profiles, while historical level and
+gender classification comes from Tournament snapshots.
+
+
+18. PUBLIC DISPLAY
+==================
+
+18.1 Currently Playing
+----------------------
+
+An actively playing Tournament match must appear under Public Display's
+Currently Playing section with enough context for players to identify it:
+
+- Court.
+- Tournament name.
+- Division.
+- Match type.
+- Category.
+- Level.
+- Group name.
+- Team A player name or names.
+- Team B player name or names.
+
+Singles shows one player per team. Doubles shows both partners.
+
+18.2 Next Up
+------------
+
+Tournament waiting matches must never appear in the Rotation Queue Next Up
+section.
+
+Next Up remains for generated waiting Rotation Queue matches only. Public Display
+queries must distinguish sources explicitly and must not infer source from a
+numeric match ID.
+
+
+19. USER INTERFACE REQUIREMENTS
+===============================
+
+19.1 General approach
+---------------------
+
+- Preserve the application's current visual language.
+- Keep the page understandable for a non-expert operator.
+- Avoid unnecessary architecture or broad styling changes.
+- Use clear cards, labels, status badges, confirmations, loading states, and
+  empty states consistent with the existing UI.
+- Keep actions scoped visibly to the Tournament or configuration they affect.
+
+19.2 Event management
+---------------------
+
+The operator must be able to:
+
+- Create a named draft Tournament with dates.
+- See multiple drafts and finished history.
+- Open one Tournament.
+- See its status and configuration summary.
+- Add a new unique configuration.
+- Manually finish the Tournament when eligible.
+
+19.3 Configuration workflow
+---------------------------
+
+The configuration UI must clearly show:
+
+- Division.
+- Match type.
+- Valid categories for that match type.
+- Exact level.
+- Eligible permanent player profiles.
+- Selected player count.
+- Gender counts for Mixed Doubles.
+- Validation status and clear reason when not ready.
+- Generation loading state.
+- Generated teams, groups, rounds, matches, and standings.
+- A reset action with confirmation when reset is allowed.
+
+Changing match type, category, division, or level must not silently create an
+invalid generated configuration. Before generation, the UI may clear or confirm
+removal of incompatible selections according to existing selection UX, but the
+backend must always validate the submitted final list.
+
+19.4 Match controls
+-------------------
+
+- Waiting matches show a Start action and available-court selection.
+- Playing matches show winner controls for Team A and Team B.
+- Finished matches show the saved winner and no editable winner controls.
+- Starting or finishing shows an in-progress state and blocks duplicate clicks.
+- Success refreshes event, match, standings, and court state.
+- Errors are visible to the operator, not only logged to the console.
+
+
+20. PERFORMANCE AND DATA-ACCESS REQUIREMENTS
+============================================
+
+20.1 Player selection
+---------------------
+
+- Load permanent player profiles using one bounded query, not one IPC call per
+  player.
+- Use Maps and Sets for repeated ID membership checks in JavaScript.
+- Memoize expensive renderer-derived lists and selected-ID lookup Sets.
+- Select All and Deselect All must use one state update each.
+- Do not generate teams, groups, or matches as an automatic effect of selection
+  changes.
+
+20.2 Generation
+---------------
+
+- Resolve selected profiles in bulk.
+- Use prepared statements reused inside one transaction.
+- Use linear or bounded algorithms for validation, shuffle, team creation, and
+  grouping.
+- Generate each group round robin with the circle method or an equally bounded
+  algorithm.
+- Avoid combinatorial team-balance searches.
+- Avoid per-row IPC calls.
+- Return one renderer-friendly response after commit.
+
+20.3 Retrieval and rendering
+----------------------------
+
+- Retrieve event details with a small, bounded set of bulk queries.
+- Group joined data in the backend so React does not repeatedly rebuild complex
+  relationships during every render.
+- Use pagination or collapsed sections where large events would otherwise render
+  thousands of match rows at once.
+- Polling or refresh logic must not reload large unchanged data more frequently
+  than necessary.
+
+
+21. DATABASE INTEGRITY AND MIGRATION REQUIREMENTS
+=================================================
+
+21.1 Required logical relationships
+-----------------------------------
+
+The revised database must represent these logical entities and relationships:
+
+- Tournament event.
+- Many configurations per Tournament.
+- Many participant memberships per configuration.
+- Gender and level snapshots for each participation.
+- Many teams per configuration.
+- One or two permanent player references per team as appropriate.
+- Many groups per configuration.
+- Team membership in exactly one group for that generated configuration.
+- Many rounds per group.
+- Many Tournament matches per group and round.
+- Optional winning team for a finished match.
+- Optional court for an active or retained Tournament match.
+
+The exact SQL table and column names must be chosen during implementation after a
+fresh schema review. The model must enforce the required scoping and must not
+overload the current top-level Tournament's `match_type` and `category` as though
+one event can contain only one configuration.
+
+21.2 Integrity protections
+--------------------------
+
+Use safe constraints or unique indexes where practical to enforce:
+
+- One exact division/match-type/category/level configuration per Tournament.
+- Unique display team number within its proper configuration scope.
+- Unique group name or group order within one configuration.
+- One team-to-group assignment within a configuration.
+- Unique round number within the proper group scope.
+- No duplicate unordered team matchup within one group.
+- At most one active Tournament match per court.
+- Only valid status values where the existing SQLite migration approach supports
+  that safely.
+
+Application validation remains required even when database constraints exist.
+
+21.3 Existing database safety
+-----------------------------
+
+The application currently initializes with CREATE TABLE IF NOT EXISTS and uses
+targeted compatibility migrations. Existing tables are not altered merely by
+editing their CREATE TABLE statement.
+
+Implementation must:
+
+- Determine the actual runtime database path.
+- Keep PRAGMA foreign_keys enabled.
+- Inspect existing columns and indexes before adding them.
+- Add safe, idempotent migrations for new structures and status changes.
+- Preserve existing user data.
+- Never delete or reset the user's database automatically.
+- Account for existing Tournament rows created under the old one-configuration
+  model.
+- Define and document how legacy Tournament records appear after migration.
+- Keep migration work transactional where SQLite permits it.
+
+The exact backward-compatibility mapping for old Tournament records must be
+decided during implementation from real data. This specification does not invent
+a silent conversion rule that could misclassify historical data.
+
+
+22. ERROR AND VALIDATION MESSAGES
+=================================
+
+Messages must be clear to an operator. Required situations include:
+
+- Tournament not found.
+- Tournament is finished and read-only.
+- Another Tournament is already ongoing.
+- This configuration already exists in the Tournament.
+- Mixed is available only for Doubles.
+- At least two Singles players are required.
+- At least four Doubles players are required.
+- Doubles needs an even number of players; add one more player.
+- Mixed Doubles needs another male player / female player, including the number
+  needed when greater than one.
+- Men's may include only male players.
+- Women's may include only female players.
+- Every selected player must match the selected level.
+- A selected player no longer exists.
+- A player was selected more than once in this configuration.
+- The match is not waiting and cannot be started.
+- The selected court is not available.
+- A participant is already playing another Tournament match.
+- Only a playing match may choose a winner.
+- The selected winner is not part of this match.
+- This match has already been completed.
+- Waiting or playing matches must be completed before finishing the Tournament.
+- Finished Tournaments cannot be reset.
+
+Failures must not leave partial database changes.
+
+
+23. REQUIRED VERIFICATION
+=========================
+
+23.1 Configuration validation tests
+-----------------------------------
+
+Verify at least:
+
+- Valid Men's, Women's, and No Gender Singles.
+- Mixed Singles rejected.
+- Valid Men's, Women's, Mixed, and No Gender Doubles.
+- Exact-level filtering and backend rejection of a wrong-level player.
+- Men's rejection of a female player.
+- Women's rejection of a male player.
+- Standard Doubles odd count rejected.
+- Mixed Doubles unequal gender count rejected with the correct shortage.
+- Duplicate player ID rejected.
+- Same player allowed in different configurations.
+- Same player not duplicated inside one exact configuration.
+- Duplicate exact configuration rejected.
+- Validation failure leaves no partial rows.
+
+23.2 Team and group tests
+-------------------------
+
+Verify:
+
+- Singles creates one-member teams.
+- Standard Doubles uses every player once.
+- Mixed Doubles creates one-male/one-female teams.
+- Required group distributions for every team count from 2 through 16.
+- Larger counts produce balanced groups of 4 to 6.
+- Every team belongs to one group.
+- Group lettering resets per configuration.
+
+23.3 Round-robin tests
+----------------------
+
+For every group size used by the grouping rules, verify:
+
+- Total matches equal N * (N - 1) / 2.
+- Every unordered team pair appears once.
+- No self-match exists.
+- A team appears at most once per round.
+- Odd groups store no dummy-team match.
+- No cross-group match exists.
+- Stored foreign keys use inserted database IDs.
+
+23.4 Lifecycle and court tests
+------------------------------
+
+Verify:
+
+- Generated matches start waiting and without an active court.
+- Starting the first match makes its Tournament ongoing.
+- A second Tournament cannot become ongoing simultaneously.
+- Any waiting Tournament match can be chosen manually.
+- A waiting match cannot choose a winner.
+- A playing match has a court.
+- Two active matches cannot use one court.
+- A participant cannot play two Tournament matches simultaneously.
+- The same participant may have several waiting matches.
+- A valid winner finishes the match.
+- An outside team cannot be selected as winner.
+- A finished match cannot be completed twice.
+- Finishing releases the court and refreshes availability.
+- Equal numeric IDs in different match-source tables do not cause confusion.
+- Completing the last match leaves the Tournament ongoing until manual finish.
+- Manual finish fails while any waiting or playing match remains.
+- Finished Tournament data is read-only.
+
+23.5 Statistics and reset tests
+-------------------------------
+
+Verify:
+
+- Singles winner and loser lifetime totals increment exactly once.
+- All four Doubles players receive the proper lifetime updates.
+- Daily statistics are unchanged.
+- Standings count played, wins, and losses correctly per group.
+- Unique group leader displays as winner.
+- Tied top teams are all displayed with no invented tie-breaker.
+- Reset deletes only the selected configuration's generated data.
+- Reset releases playing courts.
+- Reset is allowed in draft and ongoing states.
+- Reset is rejected for a finished Tournament.
+- Reset does not reverse permanent lifetime statistics.
+- The same configuration can be selected and generated again after reset.
+
+23.6 Persistence, display, and performance tests
+------------------------------------------------
+
+Verify:
+
+- Draft and finished events remain available after app restart.
+- Tournament setup does not require daily player registration.
+- Current profile name edits appear in history.
+- Stored gender/level snapshots do not change after profile classification edits.
+- Referenced player profiles cannot be deleted.
+- Playing Tournament matches show full context in Public Display.
+- Waiting Tournament matches never appear in Rotation Next Up.
+- Large player lists remain responsive during Select All/Deselect All.
+- Large configurations generate in bounded time without freezing or unbounded
+  database/renderer work.
+- `npm run build` passes after implementation.
+- `npm run lint` is run and Tournament-related errors introduced by the revision
+  are fixed.
+
+
+24. IMPLEMENTATION NON-NEGOTIABLES
+==================================
+
+- Do not silently reuse Rotation Queue eligibility for Tournament.
+- Do not require `registered_players_today` for Tournament registration.
+- Do not block a player from one configuration because they joined another.
+- Do not permit adjacent-level Tournament players.
+- Do not create Mixed Singles.
+- Do not put Tournament waiting matches in Rotation Next Up.
+- Do not infer match source from numeric IDs.
+- Do not allow two active matches on one court.
+- Do not let one player play two Tournament matches at once.
+- Do not auto-finish the Tournament when the final match ends.
+- Do not update daily statistics for Tournament results.
+- Do not reverse lifetime totals during configuration reset.
+- Do not invent group tie-breakers or automatic finals.
+- Do not delete existing databases to make the migration easier.
+- Do not implement this revision until implementation work is explicitly
+  requested.
+
+
+25. CURRENT CODE AREAS THAT WILL NEED REVISION
+==============================================
+
+This is an impact assessment only. No changes are made by this specification.
+Exact edits must be confirmed again against the repository at implementation
+time.
+
+25.1 Database schema and migrations
+-----------------------------------
+
+Likely files:
+
+- `database/init.js`
+- `database/database.js`
+
+Current tables requiring review or migration:
+
+- `tournaments`
+  Currently stores one `match_type` and `category` and defaults to `ongoing`.
+  It needs event name, dates, revised statuses, and separation from configuration
+  identity.
+
+- `tournament_teams`
+  Currently belongs directly to a Tournament. Team ownership must be scoped to
+  the correct configuration, with membership compatible with snapshots and
+  groups.
+
+- `tournament_rounds`
+  Currently belongs directly to a Tournament. Rounds must be scoped to the
+  correct group/configuration.
+
+- `tournament_matches`
+  Currently belongs directly to a Tournament and round, starts `pending`, and
+  stores court/winner. It needs the revised waiting lifecycle and correct
+  configuration/group relationships while retaining source-safe court behavior.
+
+- `players`
+  Existing lifetime totals are reused. Schema changes are not automatically
+  required, but result updates and delete protection must cover revised
+  Tournament participation.
+
+- `registered_players_today`
+  Must not be used as the source or eligibility gate for Tournament selection.
+  No Tournament-specific schema change is required here.
+
+New persistent data concepts likely require new normalized tables or equivalent
+safe schema support:
+
+- Tournament configurations.
+- Configuration participant membership with gender/level snapshots.
+- Tournament groups.
+- Team-to-group membership if it is not represented directly on a team.
+
+Exact new table and column names are intentionally left to the implementation
+schema review. They must satisfy Sections 5, 6, 9, 10, and 21.
+
+25.2 Tournament pure logic
+--------------------------
+
+Likely file:
+
+- `database/tournamentLogic.js`
+
+Current functions requiring replacement or extension:
+
+- `validateTournamentPlayers`
+  Remove Rotation preference dependence and validate permanent profiles, exact
+  level, division/configuration rules, and repeated cross-configuration use.
+
+- `buildTournamentTeams`
+  Retain bounded random Singles/Doubles/Mixed construction but scope it to one
+  configuration and snapshot-validated participants.
+
+- `generateRoundRobinSchedule`
+  Retain the correct circle method but run it separately for every group.
+
+- `calculateTournamentStandings`
+  Change from Tournament-wide standings to group-scoped standings.
+
+- `getTournamentOutcome`
+  Change from one global champion to unique or tied group results.
+
+New pure logic will likely be needed for the exact 2-to-16 group distribution
+table and the balanced 4-to-6 group rule above 16 teams.
+
+25.3 Tournament database operations
+-----------------------------------
+
+Likely file:
+
+- `database/tournamentQueries.js`
+
+Current functions/sections requiring revision:
+
+- Selected-profile bulk loading can be retained, but selection must come from
+  permanent profiles and avoid current daily/Rotation unavailable checks.
+- `resolveSelectedPlayers` must enforce revised configuration rules without
+  using Rotation availability or category preferences.
+- `createRoundRobinTournament` and its transaction currently create one whole
+  Tournament. They must be separated into event creation and atomic
+  configuration generation.
+- `getLatestTournament` is insufficient for multiple drafts and history. Event
+  listing and explicit event-detail retrieval will be required.
+- `startTournamentMatch` must use `waiting`, enforce one ongoing Tournament,
+  transition draft on first start, and prevent participant overlap across active
+  Tournament matches.
+- `finishTournamentMatch` must update permanent player lifetime statistics once,
+  release courts safely, and stop auto-finishing the Tournament.
+- A manual Finish Tournament operation is required.
+- A configuration reset transaction is required.
+- Renderer-friendly event/configuration/group/round/match/standings retrieval is
+  required.
+
+25.4 Electron IPC and preload bridge
+------------------------------------
+
+Likely files:
+
+- `electron/main.js`
+- `electron/preload.cjs`
+
+Current Tournament channels/methods requiring review:
+
+- `createRoundRobinTournament`
+- `getLatestTournament`
+- `startTournamentMatch`
+- `finishTournamentMatch`
+
+The revised API will need matching end-to-end operations for event creation,
+event listing/history, event detail, configuration generation/reset, match
+start/finish, and manual Tournament finish. Final names and argument order must
+be defined once and used identically across React, preload, ipcMain, and database
+functions. Obsolete methods must not remain exposed without matching handlers.
+
+25.5 Tournament React page and components
+-----------------------------------------
+
+Likely files:
+
+- `src/pages/Tournament.jsx`
+- `src/components/tournament/TournamentOptions.jsx`
+- `src/components/tournament/RegisteredPlayers.jsx`
+- `src/components/tournament/Matches.jsx`
+- `src/components/tournament/ConfirmModal.jsx`
+- `src/utils/tournamentUi.js`
+
+Required direction:
+
+- Replace the single latest-Tournament workflow with event selection, draft
+  setup, multiple configurations, and history.
+- Load profiles from permanent player data instead of today's registration.
+- Remove imports and behavior that reuse Rotation eligibility/preferences.
+- Add division and exact-level configuration controls.
+- Add team/group/round views and group-scoped standings.
+- Change pending-match UI to waiting/start, playing/winner, and finished/read-only.
+- Add configuration reset and manual Tournament finish confirmations.
+- Preserve current component styling patterns and selection performance
+  optimizations where practical.
+
+25.6 Shared courts and Public Display
+-------------------------------------
+
+Likely files:
+
+- `database/courtQueries.js`
+- `src/components/PublicDisplay.jsx`
+
+Required direction:
+
+- Keep Tournament matches source-tagged and court-safe.
+- Return Tournament name, division, type, category, level, group, and accurate
+  Singles/Doubles team names for active courts.
+- Continue excluding Tournament waiting matches from Rotation Next Up.
+- Refresh court state after Tournament start, finish, and reset.
+
+25.7 Player profile deletion and lifetime statistics
+----------------------------------------------------
+
+Likely file:
+
+- `database/playerQueries.js`
+
+Required direction:
+
+- Extend delete protection to revised Tournament membership/history tables.
+- Do not make daily registration a Tournament eligibility gate.
+- Permanent `players.total_matches_played`, `players.total_wins`, and
+  `players.total_losses` are updated by Tournament match completion; daily totals
+  are not.
+
+25.8 Settings and shared presentation helpers
+---------------------------------------------
+
+Likely files requiring review, not necessarily changes:
+
+- Tournament-related settings reads in `src/pages/Tournament.jsx`.
+- Level label/color helpers used by Tournament components.
+
+Current default Tournament type/category settings may not fully describe a
+division/type/category/level configuration. Reuse them only if their meaning
+remains clear; do not silently add unimplemented settings.
+
+25.9 Tests
+----------
+
+Likely files:
+
+- Existing Tournament integration tests.
+- Existing Tournament performance tests.
+- Any court/Public Display integration tests covering Tournament sources.
+
+Tests must be revised or added to cover all cases in Section 23, especially
+configuration isolation, group distribution, source-safe courts, permanent
+statistics, reset behavior, event status lifecycle, history, and performance.
+
+
+END OF TOURNAMENT SYSTEM REVISION SPECIFICATION
+===============================================
