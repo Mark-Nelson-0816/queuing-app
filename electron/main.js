@@ -11,9 +11,17 @@ import { registerPlayer, getRegisteredPlayersToday, removeRegisteredPlayer, upda
 
 //tournament
 import {
+  createTournamentEvent,
   createRoundRobinTournament,
+  finishTournamentEvent,
   finishTournamentMatch,
+  generateTournamentEventConfiguration,
+  getTournamentConfigurationData,
+  getTournamentEvent,
+  getTournamentEventHistory,
   getLatestTournament,
+  listTournamentEvents,
+  resetTournamentEventConfiguration,
   startTournamentMatch,
 } from "../database/tournamentQueries.js";
 
@@ -116,8 +124,7 @@ ipcMain.handle("delete-players-profile", (event, id) => {
 
 });
 
-// Tournament IPC handlers expose creation, loading, and match lifecycle actions.
-// Creates teams, rounds, and matches in one tournament transaction.
+// Legacy Tournament handlers remain until the current renderer is replaced safely.
 ipcMain.handle('create-round-robin-tournament', (event, selectedPlayers, matchType, category) => {
   return createRoundRobinTournament(selectedPlayers, matchType, category);
 });
@@ -127,15 +134,67 @@ ipcMain.handle('get-latest-tournament', () => {
   return getLatestTournament();
 });
 
-// Starts a pending tournament match on a selected court.
+// Creates a revised draft Tournament event with inclusive event dates.
+ipcMain.handle("create-tournament", (event, name, startDate, endDate) => (
+  createTournamentEvent(name, startDate, endDate)
+));
+
+// Lists revised Tournament events in operator-friendly status/date order.
+ipcMain.handle("list-tournaments", () => listTournamentEvents());
+
+// Loads one revised Tournament with configurations, groups, and match results.
+ipcMain.handle("get-tournament", (event, tournamentId) => (
+  getTournamentEvent(tournamentId)
+));
+
+// Lists finished revised Tournament events for history navigation.
+ipcMain.handle("get-tournament-history", () => getTournamentEventHistory());
+
+// Returns permanent profiles and legal revised configuration options.
+ipcMain.handle("get-tournament-configuration-data", () => (
+  getTournamentConfigurationData()
+));
+
+// Atomically generates one exact revised Tournament configuration.
+ipcMain.handle(
+  "generate-tournament-configuration",
+  (
+    event,
+    tournamentId,
+    playerIds,
+    division,
+    matchType,
+    category,
+    level,
+  ) => generateTournamentEventConfiguration(
+    tournamentId,
+    playerIds,
+    division,
+    matchType,
+    category,
+    level,
+  ),
+);
+
+// Deletes one editable revised configuration without reversing lifetime stats.
+ipcMain.handle("reset-tournament-configuration", (event, configurationId) => (
+  resetTournamentEventConfiguration(configurationId)
+));
+
+// Starts either model by explicitly inspecting the match's configuration link.
 ipcMain.handle('start-tournament-match', (event, matchId, courtId) => {
   return startTournamentMatch(matchId, courtId);
 });
 
-// Saves a tournament winner and releases the assigned court.
+// Finishes either model by explicitly inspecting the match's configuration link.
 ipcMain.handle('finish-tournament-match', (event, matchId, winnerTeamId) => {
   return finishTournamentMatch(matchId, winnerTeamId);
 });
+
+// Manually finishes a revised Tournament after every generated match is finished.
+ipcMain.handle("finish-tournament", (event, tournamentId) => (
+  finishTournamentEvent(tournamentId)
+));
 
 // Court IPC handlers expose court state and management actions.
 // Returns every court with any active match attached.

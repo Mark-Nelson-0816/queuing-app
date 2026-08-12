@@ -27,18 +27,57 @@ contextBridge.exposeInMainWorld("api", {
   deletePlayerProfile: (id) =>
     ipcRenderer.invoke("delete-players-profile", id),
 
-  // Tournament creation, loading, and match lifecycle operations.
+  // Legacy Tournament calls remain until the current Tournament page is replaced.
   createRoundRobinTournament: (players, matchType, category) =>
     ipcRenderer.invoke('create-round-robin-tournament', players, matchType, category),
 
   getLatestTournament: () =>
     ipcRenderer.invoke('get-latest-tournament'),
 
+  // Revised Tournament event, configuration, history, and lifecycle operations.
+  createTournament: (name, startDate, endDate) =>
+    ipcRenderer.invoke("create-tournament", name, startDate, endDate),
+
+  listTournaments: () =>
+    ipcRenderer.invoke("list-tournaments"),
+
+  getTournament: (tournamentId) =>
+    ipcRenderer.invoke("get-tournament", tournamentId),
+
+  getTournamentHistory: () =>
+    ipcRenderer.invoke("get-tournament-history"),
+
+  getTournamentConfigurationData: () =>
+    ipcRenderer.invoke("get-tournament-configuration-data"),
+
+  generateTournamentConfiguration: (
+    tournamentId,
+    playerIds,
+    division,
+    matchType,
+    category,
+    level,
+  ) => ipcRenderer.invoke(
+    "generate-tournament-configuration",
+    tournamentId,
+    playerIds,
+    division,
+    matchType,
+    category,
+    level,
+  ),
+
+  resetTournamentConfiguration: (configurationId) =>
+    ipcRenderer.invoke("reset-tournament-configuration", configurationId),
+
   startTournamentMatch: (matchId, courtId) =>
     ipcRenderer.invoke('start-tournament-match', matchId, courtId),
 
   finishTournamentMatch: (matchId, winnerTeamId) =>
     ipcRenderer.invoke('finish-tournament-match', matchId, winnerTeamId),
+
+  finishTournament: (tournamentId) =>
+    ipcRenderer.invoke("finish-tournament", tournamentId),
 
   // Court state and management operations.
   getCourts: () =>

@@ -1,5 +1,9 @@
 import db from "./database.js";
 import {
+  TOURNAMENT_CATEGORIES,
+  TOURNAMENT_DIVISIONS,
+  TOURNAMENT_LEVELS,
+  TOURNAMENT_MATCH_TYPES,
   generateTournamentConfiguration as generatePureTournamentConfiguration,
 } from "./tournamentGenerationLogic.js";
 
@@ -200,6 +204,12 @@ const getCanonicalPlayersStatement = db.prepare(`
     SELECT CAST(value AS INTEGER)
     FROM json_each(?)
   )
+`);
+
+const getConfigurationProfilesStatement = db.prepare(`
+  SELECT id, name, level, gender
+  FROM players
+  ORDER BY name COLLATE NOCASE, id
 `);
 
 const insertEventStatement = db.prepare(`
@@ -823,6 +833,35 @@ export function getTournamentEventHistory() {
     return { success: true, data: listHistoryRowsStatement.all().map(mapEventSummary) };
   } catch (error) {
     return failure(error, "Failed to load Tournament history.");
+  }
+}
+
+// Returns permanent profiles and the exact options supported by revised generation.
+export function getTournamentConfigurationData() {
+  try {
+    return {
+      success: true,
+      data: {
+        players: getConfigurationProfilesStatement.all().map((player) => ({
+          id: Number(player.id),
+          name: player.name,
+          level: player.level,
+          gender: player.gender,
+        })),
+        options: {
+          divisions: [...TOURNAMENT_DIVISIONS],
+          levels: [...TOURNAMENT_LEVELS],
+          matchTypes: [...TOURNAMENT_MATCH_TYPES],
+          categories: [...TOURNAMENT_CATEGORIES],
+          categoriesByMatchType: {
+            singles: ["mens", "womens", "no_gender"],
+            doubles: ["mens", "womens", "mixed", "no_gender"],
+          },
+        },
+      },
+    };
+  } catch (error) {
+    return failure(error, "Failed to load Tournament configuration data.");
   }
 }
 

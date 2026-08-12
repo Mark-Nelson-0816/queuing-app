@@ -6,6 +6,10 @@ import {
   getTournamentOutcome,
   validateTournamentPlayers,
 } from "./tournamentLogic.js";
+import {
+  finishTournamentEventMatch as finishRevisedTournamentMatch,
+  startTournamentEventMatch as startRevisedTournamentMatch,
+} from "./tournamentRevisionQueries.js";
 
 // Loads all selected player profiles in one database query.
 const getSelectedPlayersStatement = db.prepare(`
@@ -149,6 +153,13 @@ const getLatestTournamentStatement = db.prepare(`
   FROM tournaments
   ORDER BY id DESC
   LIMIT 1
+`);
+
+// Distinguishes revised and legacy Tournament rows without relying on numeric IDs.
+const getTournamentMatchModelStatement = db.prepare(`
+  SELECT configuration_id
+  FROM tournament_matches
+  WHERE id = ?
 `);
 
 // Finds an ongoing tournament that already has generated matches.
@@ -634,6 +645,11 @@ export function startTournamentMatch(matchId, courtId) {
       return { success: false, message: "Selected court was not found." };
     }
 
+    const matchModel = getTournamentMatchModelStatement.get(numericMatchId);
+    if (matchModel?.configuration_id !== null && matchModel?.configuration_id !== undefined) {
+      return startRevisedTournamentMatch(numericMatchId, numericCourtId);
+    }
+
     return {
       success: true,
       data: startMatchTransaction(numericMatchId, numericCourtId),
@@ -768,6 +784,11 @@ export function finishTournamentMatch(matchId, winnerTeamId) {
       };
     }
 
+    const matchModel = getTournamentMatchModelStatement.get(numericMatchId);
+    if (matchModel?.configuration_id !== null && matchModel?.configuration_id !== undefined) {
+      return finishRevisedTournamentMatch(numericMatchId, numericWinnerTeamId);
+    }
+
     return {
       success: true,
       data: finishMatchTransaction(numericMatchId, numericWinnerTeamId),
@@ -783,6 +804,7 @@ export {
   finishTournamentEvent,
   finishTournamentEventMatch,
   generateTournamentEventConfiguration,
+  getTournamentConfigurationData,
   getTournamentEvent,
   getTournamentEventHistory,
   listTournamentEvents,
