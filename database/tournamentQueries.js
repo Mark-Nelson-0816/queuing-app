@@ -776,3 +776,16 @@ export function finishTournamentMatch(matchId, winnerTeamId) {
     return createFailure(error, "Failed to complete tournament match.");
   }
 }
+
+// Revised event-based Tournament APIs remain separate from legacy round-robin calls.
+export {
+  createTournamentEvent,
+  finishTournamentEvent,
+  finishTournamentEventMatch,
+  generateTournamentEventConfiguration,
+  getTournamentEvent,
+  getTournamentEventHistory,
+  listTournamentEvents,
+  resetTournamentEventConfiguration,
+  startTournamentEventMatch,
+} from "./tournamentRevisionQueries.js";
