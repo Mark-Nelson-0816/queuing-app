@@ -1,304 +1,628 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays, Trophy } from "lucide-react";
+import ConfirmDialog from "../components/ConfirmDialog";
+import Modal from "../components/Modal";
 import RegisteredPlayers from "../components/tournament/RegisteredPlayers";
-import TournamentOptions from "../components/tournament/TournamentOptions";
-import Matches from "../components/tournament/Matches";
+import TournamentConfigurationSummary from "../components/tournament/TournamentConfigurationSummary";
+import TournamentEventNavigator from "../components/tournament/TournamentEventNavigator";
+import TournamentOptions, {
+  CATEGORY_LABELS,
+  DIVISION_LABELS,
+  LEVEL_LABELS,
+} from "../components/tournament/TournamentOptions";
+import {
+  formatTournamentDate,
+  getTournamentStatusClasses,
+} from "../utils/tournamentDisplay";
 
-// Returns a useful message from an unknown error value.
-function getErrorMessage(error, fallbackMessage) {
-  return error instanceof Error && error.message
-    ? error.message
-    : fallbackMessage;
+const DEFAULT_OPTIONS = {
+  divisions: ["adult", "u17", "u15", "u13", "u11", "u9"],
+  levels: ["beginner", "intermediate", "upper_intermediate", "advanced"],
+  matchTypes: ["singles", "doubles"],
+  categories: ["mens", "womens", "mixed", "no_gender"],
+  categoriesByMatchType: {
+    singles: ["mens", "womens", "no_gender"],
+    doubles: ["mens", "womens", "mixed", "no_gender"],
+  },
+};
+
+// Returns a readable message from an unknown IPC error value.
+function getErrorMessage(error, fallback) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
-// Manages Tournament generation, match starts, and winner results.
+// Creates a stable key so each exact configuration keeps its own selection.
+function getSelectionKey(tournamentId, division, matchType, category, level) {
+  return [tournamentId, division, matchType, category, level].join(":");
+}
+
+// Builds the lightweight generation message shown before backend validation.
+function validateSelection(selectedIds, profiles, matchType, category) {
+  const count = selectedIds.length;
+  if (matchType === "singles") {
+    if (count < 2) {
+      const missing = 2 - count;
+      return {
+        ready: false,
+        message: `${count} players selected. Singles requires at least 2 players. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
+      };
+    }
+    return { ready: true, message: "Ready to generate." };
+  }
+
+  if (count < 4) {
+    const missing = 4 - count;
+    return {
+      ready: false,
+      message: `${count} players selected. Doubles requires at least 4 players. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
+    };
+  }
+
+  if (category === "mixed") {
+    const profileById = new Map(profiles.map((profile) => [Number(profile.id), profile]));
+    const genderCounts = selectedIds.reduce((counts, playerId) => {
+      const gender = String(profileById.get(Number(playerId))?.gender || "").toLowerCase();
+      if (gender === "male") counts.male += 1;
+      if (gender === "female") counts.female += 1;
+      return counts;
+    }, { male: 0, female: 0 });
+
+    if (genderCounts.male !== genderCounts.female) {
+      const missingGender = genderCounts.male > genderCounts.female ? "female" : "male";
+      const missing = Math.abs(genderCounts.male - genderCounts.female);
+      return {
+        ready: false,
+        message: `Mixed Doubles requires equal male and female players. Add ${missing} ${missingGender} ${missing === 1 ? "player" : "players"}.`,
+      };
+    }
+  } else if (count % 2 !== 0) {
+    return {
+      ready: false,
+      message: `${count} players selected. Doubles requires an even number of players. Add 1 more player.`,
+    };
+  }
+
+  return { ready: true, message: "Ready to generate." };
+}
+
+// Provides today's local date for the create-event form.
+function getTodayValue() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Manages revised Tournament events and exact generated configurations.
 export default function Tournament() {
-  const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [view, setView] = useState("current");
+  const [selectedTournamentId, setSelectedTournamentId] = useState(null);
+  const [tournamentData, setTournamentData] = useState(null);
+  const [profiles, setProfiles] = useState([]);
+  const [options, setOptions] = useState(DEFAULT_OPTIONS);
+  const [division, setDivision] = useState("adult");
   const [matchType, setMatchType] = useState("doubles");
   const [category, setCategory] = useState("no_gender");
-  const [tournamentData, setTournamentData] = useState(null);
+  const [level, setLevel] = useState("beginner");
+  const [selections, setSelections] = useState({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isEventLoading, setIsEventLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [startingMatchId, setStartingMatchId] = useState(null);
-  const [savingMatchId, setSavingMatchId] = useState(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [resetConfiguration, setResetConfiguration] = useState(null);
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    startDate: getTodayValue(),
+    endDate: getTodayValue(),
+  });
+  const [isCreating, setIsCreating] = useState(false);
   const generationLockRef = useRef(false);
-  const startingMatchLockRef = useRef(false);
-  const savingMatchLockRef = useRef(false);
+  const resetLockRef = useRef(false);
+  const createLockRef = useRef(false);
 
-  // Load saved Tournament defaults when the page opens.
-  useEffect(() => {
-    let isCancelled = false;
-
-    window.api.getSettings()
-      .then((settings) => {
-        if (isCancelled) return;
-        const defaultMatchType = ["singles", "doubles"].includes(
-          settings.defaultTournamentMatchType,
-        ) ? settings.defaultTournamentMatchType : "doubles";
-        const defaultCategory = ["no_gender", "mens", "womens", "mixed"].includes(
-          settings.defaultTournamentCategory,
-        ) ? settings.defaultTournamentCategory : "no_gender";
-        setMatchType(defaultMatchType);
-        setCategory(
-          defaultMatchType === "singles" && defaultCategory === "mixed"
-            ? "no_gender"
-            : defaultCategory,
-        );
-      })
-      .catch(() => {
-        // Existing tournament defaults remain in place when settings cannot load.
-      });
-
-    return () => {
-      isCancelled = true;
-    };
+  // Applies a loaded event and opens its first existing configuration when present.
+  const applyTournamentData = useCallback((data) => {
+    setTournamentData(data);
+    const firstConfiguration = data?.configurations?.[0];
+    if (firstConfiguration) {
+      setDivision(firstConfiguration.division);
+      setMatchType(firstConfiguration.matchType);
+      setCategory(firstConfiguration.category);
+      setLevel(firstConfiguration.level);
+    }
   }, []);
 
-  // Reload the latest saved Tournament when the page opens.
-  useEffect(() => {
-    let isCancelled = false;
+  // Loads one explicit event instead of relying on the obsolete latest-event API.
+  const loadTournament = useCallback(async (tournamentId) => {
+    if (!tournamentId) {
+      setSelectedTournamentId(null);
+      setTournamentData(null);
+      return;
+    }
 
-    window.api.getLatestTournament()
-      .then((result) => {
-        if (isCancelled) return;
+    setIsEventLoading(true);
+    setError("");
+    try {
+      const result = await window.api.getTournament(tournamentId);
+      if (!result.success) throw new Error(result.message || "Failed to load Tournament.");
+      setSelectedTournamentId(Number(tournamentId));
+      applyTournamentData(result.data);
+    } catch (loadError) {
+      setError(getErrorMessage(loadError, "Failed to load Tournament."));
+    } finally {
+      setIsEventLoading(false);
+    }
+  }, [applyTournamentData]);
 
-        if (!result.success) {
-          setError(result.message || "Failed to load Tournament.");
-          return;
-        }
-
-        setTournamentData(result.data);
-      })
-      .catch((loadError) => {
-        if (!isCancelled) {
-          setError(getErrorMessage(loadError, "Failed to load Tournament."));
-        }
-      })
-      .finally(() => {
-        if (!isCancelled) setIsLoading(false);
-      });
-
-    return () => {
-      isCancelled = true;
-    };
+  // Refreshes lightweight current and history lists after each mutation.
+  const refreshEventLists = useCallback(async () => {
+    const [listResult, historyResult] = await Promise.all([
+      window.api.listTournaments(),
+      window.api.getTournamentHistory(),
+    ]);
+    if (!listResult.success) throw new Error(listResult.message || "Failed to list Tournaments.");
+    if (!historyResult.success) throw new Error(historyResult.message || "Failed to load Tournament history.");
+    setEvents(listResult.data.filter((event) => event.status !== "finished"));
+    setHistory(historyResult.data);
+    return { events: listResult.data, history: historyResult.data };
   }, []);
 
-  // Generate a complete Tournament from the selected players once per click.
-  const handleGenerateTournament = async () => {
-    if (generationLockRef.current) return;
+  // Loads event lists, permanent profiles, legal options, and current defaults once.
+  useEffect(() => {
+    let cancelled = false;
 
+    async function loadInitialData() {
+      try {
+        const [listResult, historyResult, configurationResult, settings] = await Promise.all([
+          window.api.listTournaments(),
+          window.api.getTournamentHistory(),
+          window.api.getTournamentConfigurationData(),
+          window.api.getSettings().catch(() => ({})),
+        ]);
+        if (cancelled) return;
+        if (!listResult.success) throw new Error(listResult.message || "Failed to list Tournaments.");
+        if (!historyResult.success) throw new Error(historyResult.message || "Failed to load Tournament history.");
+        if (!configurationResult.success) {
+          throw new Error(configurationResult.message || "Failed to load Tournament player profiles.");
+        }
+
+        const currentEvents = listResult.data.filter((event) => event.status !== "finished");
+        setEvents(currentEvents);
+        setHistory(historyResult.data);
+        setProfiles(configurationResult.data.players);
+        setOptions(configurationResult.data.options);
+
+        const defaultType = settings.defaultTournamentMatchType === "singles" ? "singles" : "doubles";
+        const allowedCategories = configurationResult.data.options.categoriesByMatchType[defaultType];
+        const defaultCategory = allowedCategories.includes(settings.defaultTournamentCategory)
+          ? settings.defaultTournamentCategory
+          : "no_gender";
+        setMatchType(defaultType);
+        setCategory(defaultCategory);
+
+        const initialEvent = currentEvents.find((event) => event.status === "ongoing") || currentEvents[0];
+        if (initialEvent) {
+          const eventResult = await window.api.getTournament(initialEvent.id);
+          if (cancelled) return;
+          if (!eventResult.success) throw new Error(eventResult.message || "Failed to load Tournament.");
+          setSelectedTournamentId(Number(initialEvent.id));
+          applyTournamentData(eventResult.data);
+        }
+      } catch (loadError) {
+        if (!cancelled) setError(getErrorMessage(loadError, "Failed to load Tournament page."));
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadInitialData();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyTournamentData]);
+
+  const selectionKey = getSelectionKey(
+    selectedTournamentId,
+    division,
+    matchType,
+    category,
+    level,
+  );
+  const selectedIds = useMemo(
+    () => selections[selectionKey] || [],
+    [selectionKey, selections],
+  );
+
+  // Updates only the selection belonging to the visible exact configuration.
+  const setSelectedIds = useCallback((nextSelection) => {
+    setSelections((current) => {
+      const currentSelection = current[selectionKey] || [];
+      const value = typeof nextSelection === "function"
+        ? nextSelection(currentSelection)
+        : nextSelection;
+      return { ...current, [selectionKey]: value };
+    });
+  }, [selectionKey]);
+
+  const existingConfiguration = useMemo(() => (
+    tournamentData?.configurations.find((configuration) => (
+      configuration.division === division
+      && configuration.matchType === matchType
+      && configuration.category === category
+      && configuration.level === level
+    )) || null
+  ), [category, division, level, matchType, tournamentData]);
+
+  const validation = useMemo(() => validateSelection(
+    selectedIds,
+    profiles,
+    matchType,
+    category,
+  ), [category, matchType, profiles, selectedIds]);
+
+  const isFinished = tournamentData?.tournament.status === "finished";
+
+  // Keeps category valid when changing between Singles and Doubles.
+  const handleMatchTypeChange = (nextMatchType) => {
+    setMatchType(nextMatchType);
+    const allowedCategories = options.categoriesByMatchType[nextMatchType] || [];
+    if (!allowedCategories.includes(category)) setCategory("no_gender");
+  };
+
+  // Opens a generated configuration directly from its compact event index.
+  const openConfiguration = (configuration) => {
+    setDivision(configuration.division);
+    setMatchType(configuration.matchType);
+    setCategory(configuration.category);
+    setLevel(configuration.level);
+  };
+
+  // Switches between editable events and immutable history.
+  const handleViewChange = async (nextView) => {
+    setView(nextView);
+    const nextList = nextView === "history" ? history : events;
+    await loadTournament(nextList[0]?.id || null);
+  };
+
+  // Creates a new draft event without generating any configuration automatically.
+  const handleCreateTournament = async () => {
+    if (createLockRef.current) return;
+    const name = createForm.name.trim();
+    if (!name) {
+      setError("Tournament name is required.");
+      return;
+    }
+    if (!createForm.startDate || !createForm.endDate) {
+      setError("Start date and end date are required.");
+      return;
+    }
+    if (createForm.startDate > createForm.endDate) {
+      setError("Tournament start date must not be after its end date.");
+      return;
+    }
+
+    createLockRef.current = true;
+    setIsCreating(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.api.createTournament(
+        name,
+        createForm.startDate,
+        createForm.endDate,
+      );
+      if (!result.success) throw new Error(result.message || "Failed to create Tournament.");
+      setView("current");
+      setSelectedTournamentId(Number(result.data.tournament.id));
+      setTournamentData(result.data);
+      await refreshEventLists();
+      setShowCreateModal(false);
+      setCreateForm({ name: "", startDate: getTodayValue(), endDate: getTodayValue() });
+      setNotice("Draft Tournament created. Choose a configuration and select players.");
+    } catch (createError) {
+      setError(getErrorMessage(createError, "Failed to create Tournament."));
+    } finally {
+      createLockRef.current = false;
+      setIsCreating(false);
+    }
+  };
+
+  // Generates only the visible exact configuration with one guarded IPC call.
+  const handleGenerateConfiguration = async () => {
+    if (generationLockRef.current || !validation.ready || existingConfiguration) return;
     generationLockRef.current = true;
     setIsGenerating(true);
     setError("");
     setNotice("");
-
     try {
-      const result = await window.api.createRoundRobinTournament(
-        selectedPlayers,
+      const result = await window.api.generateTournamentConfiguration(
+        selectedTournamentId,
+        selectedIds,
+        division,
         matchType,
         category,
+        level,
       );
-
       if (!result.success) {
-        setError(result.message || "Failed to create Tournament.");
-        return;
+        throw new Error(result.message || "Failed to generate Tournament configuration.");
       }
-
-      setTournamentData(result.data);
-      setSelectedPlayers([]);
-      setNotice("Tournament matches generated successfully.");
-    } catch (createError) {
-      setError(getErrorMessage(createError, "Failed to create Tournament."));
+      setTournamentData(result.data.tournament);
+      if (result.data.configuration) {
+        setDivision(result.data.configuration.division);
+        setMatchType(result.data.configuration.matchType);
+        setCategory(result.data.configuration.category);
+        setLevel(result.data.configuration.level);
+      }
+      setSelections((current) => {
+        const next = { ...current };
+        delete next[selectionKey];
+        return next;
+      });
+      await refreshEventLists();
+      setNotice("Tournament teams, groups, and round-robin matches generated successfully.");
+    } catch (generateError) {
+      setError(getErrorMessage(generateError, "Failed to generate Tournament configuration."));
     } finally {
       generationLockRef.current = false;
       setIsGenerating(false);
     }
   };
 
-  // Start one pending Tournament match on an available court.
-  const handleStartMatch = useCallback(async (matchId, courtId) => {
-    if (startingMatchLockRef.current) {
-      return { success: false, message: "A match is already being started." };
-    }
-
-    startingMatchLockRef.current = true;
-    setStartingMatchId(matchId);
+  // Resets exactly one confirmed configuration and keeps all others untouched.
+  const handleResetConfiguration = async () => {
+    if (resetLockRef.current || !resetConfiguration) return;
+    resetLockRef.current = true;
+    setIsResetting(true);
     setError("");
     setNotice("");
-
     try {
-      const result = await window.api.startTournamentMatch(matchId, courtId);
-
-      if (!result.success) {
-        setError(result.message || "Failed to start Tournament match.");
-        return result;
-      }
-
+      const result = await window.api.resetTournamentConfiguration(resetConfiguration.id);
+      if (!result.success) throw new Error(result.message || "Failed to reset Tournament configuration.");
       setTournamentData(result.data);
-      const startedMatch = result.data.rounds
-        .flatMap((round) => round.matches)
-        .find((match) => match.id === matchId);
-      setNotice(`Match started on ${startedMatch?.court?.name || "the selected court"}.`);
-      return result;
-    } catch (startError) {
-      const message = getErrorMessage(startError, "Failed to start Tournament match.");
-      setError(message);
-      return { success: false, message };
+      await refreshEventLists();
+      setResetConfiguration(null);
+      setNotice("Configuration reset. Its courts were released; lifetime statistics were not reversed.");
+    } catch (resetError) {
+      setError(getErrorMessage(resetError, "Failed to reset Tournament configuration."));
     } finally {
-      startingMatchLockRef.current = false;
-      setStartingMatchId(null);
-    }
-  }, []);
-
-  // Change category and remove players with an incompatible gender.
-  const handleCategoryChange = (nextCategory) => {
-    setCategory(nextCategory);
-
-    if (nextCategory === "mens") {
-      setSelectedPlayers((currentPlayers) => (
-        currentPlayers.filter((player) => player.gender === "male")
-      ));
-    } else if (nextCategory === "womens") {
-      setSelectedPlayers((currentPlayers) => (
-        currentPlayers.filter((player) => player.gender === "female")
-      ));
+      resetLockRef.current = false;
+      setIsResetting(false);
     }
   };
 
-  // Save one Tournament winner and apply the refreshed Tournament data.
-  const handleFinishMatch = useCallback(async (matchId, winnerTeamId) => {
-    if (savingMatchLockRef.current) return false;
+  if (isLoading) {
+    return (
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-12 text-center text-sm text-[var(--text)]">
+        Loading Tournament events and player profiles...
+      </div>
+    );
+  }
 
-    savingMatchLockRef.current = true;
-    setSavingMatchId(matchId);
-    setError("");
-    setNotice("");
-
-    try {
-      const result = await window.api.finishTournamentMatch(
-        matchId,
-        winnerTeamId,
-      );
-
-      if (!result.success) {
-        setError(result.message || "Failed to complete Tournament match.");
-        return false;
-      }
-
-      setTournamentData(result.data);
-      setNotice("Match completed and its court is available again.");
-      return true;
-    } catch (saveError) {
-      setError(getErrorMessage(saveError, "Failed to complete Tournament match."));
-      return false;
-    } finally {
-      savingMatchLockRef.current = false;
-      setSavingMatchId(null);
-    }
-  }, []);
-
-  // Provide zeroed summary values before a Tournament is loaded.
-  const summary = tournamentData?.summary || {
-    totalMatches: 0,
-    pendingMatches: 0,
-    completedMatches: 0,
-    playingMatches: 0,
-    totalTeams: 0,
-  };
-
-  const hasActiveTournament = Boolean(
-    tournamentData?.tournament.status === "ongoing"
-    && summary.totalMatches > 0,
-  );
+  const tournament = tournamentData?.tournament;
+  const summary = tournamentData?.summary;
 
   return (
-    <div className="space-y-6">
-      {/* Tournament action feedback */}
+    <div className="space-y-5">
       {error && (
-        <div className="rounded-xl bg-red-500 text-white p-4 flex justify-between gap-4">
+        <div className="flex justify-between gap-4 rounded-xl bg-red-500 p-4 text-white">
           <p>{error}</p>
-          <button
-            type="button"
-            className="text-lg font-bold"
-            onClick={() => setError("")}
-            aria-label="Dismiss error"
-          >
-            X
-          </button>
+          <button type="button" className="font-bold" onClick={() => setError("")} aria-label="Dismiss error">X</button>
         </div>
       )}
-
       {notice && (
-        <div className="rounded-xl bg-[var(--success-light)] text-[var(--success)] border border-[var(--success)]/30 p-4 flex justify-between gap-4">
+        <div className="flex justify-between gap-4 rounded-xl border border-[var(--success)]/30 bg-[var(--success-light)] p-4 text-[var(--success)]">
           <p>{notice}</p>
-          <button
-            type="button"
-            className="font-bold"
-            onClick={() => setNotice("")}
-            aria-label="Dismiss message"
-          >
-            X
-          </button>
+          <button type="button" className="font-bold" onClick={() => setNotice("")} aria-label="Dismiss message">X</button>
         </div>
       )}
 
-      {/* Tournament status summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 text-center">
-          <p className="text-2xl font-bold">{summary.totalMatches}</p>
-          <p className="text-sm text-[var(--text)]">Total Matches</p>
-        </div>
-
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 text-center">
-          <p className="text-2xl font-bold text-[var(--warning)]">
-            {summary.pendingMatches}
-          </p>
-          <p className="text-sm text-[var(--text)]">Pending</p>
-        </div>
-
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 text-center">
-          <p className="text-2xl font-bold text-[var(--primary)]">
-            {summary.playingMatches}
-          </p>
-          <p className="text-sm text-[var(--text)]">Playing</p>
-        </div>
-
-        <div className="bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-4 text-center">
-          <p className="text-2xl font-bold text-[var(--success)]">
-            {summary.completedMatches}
-          </p>
-          <p className="text-sm text-[var(--text)]">Finished</p>
-        </div>
-      </div>
-
-      {/* Tournament configuration and player selection */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <TournamentOptions
-          matchType={matchType}
-          category={category}
-          setCategory={handleCategoryChange}
-          setMatchType={setMatchType}
-          onGenerate={handleGenerateTournament}
-          isGenerating={isGenerating}
-          generationDisabled={hasActiveTournament}
+      <div className="grid gap-5 xl:grid-cols-[19rem_minmax(0,1fr)]">
+        <TournamentEventNavigator
+          view={view}
+          events={events}
+          history={history}
+          selectedTournamentId={selectedTournamentId}
+          onViewChange={handleViewChange}
+          onSelect={loadTournament}
+          onCreate={() => setShowCreateModal(true)}
         />
 
-        <RegisteredPlayers
-          selectedPlayers={selectedPlayers}
-          setSelectedPlayers={setSelectedPlayers}
-          category={category}
-        />
+        <main className="min-w-0 space-y-5">
+          {isEventLoading ? (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-12 text-center text-sm text-[var(--text)]">
+              Loading Tournament...
+            </div>
+          ) : !tournament ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] p-12 text-center">
+              <Trophy className="mx-auto h-9 w-9 text-[var(--text)]" />
+              <h2 className="mt-3 font-semibold text-[var(--text-h)]">Select or create a Tournament</h2>
+              <p className="mt-1 text-sm text-[var(--text)]">
+                Create a draft event, or open an existing event from the left.
+              </p>
+            </div>
+          ) : (
+            <>
+              <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h1 className="text-2xl font-bold text-[var(--text-h)]">{tournament.name}</h1>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${getTournamentStatusClasses(tournament.status)}`}>
+                        {tournament.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 flex items-center gap-2 text-sm text-[var(--text)]">
+                      <CalendarDays className="h-4 w-4" />
+                      {formatTournamentDate(tournament.startDate)} - {formatTournamentDate(tournament.endDate)}
+                    </p>
+                    {isFinished && (
+                      <p className="mt-2 text-xs font-semibold text-[var(--text)]">
+                        Finished Tournaments are read-only.
+                      </p>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
+                      <p className="font-bold text-[var(--text-h)]">{summary.totalConfigurations}</p>
+                      <p className="text-[10px] text-[var(--text)]">Configurations</p>
+                    </div>
+                    <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
+                      <p className="font-bold text-[var(--text-h)]">{summary.totalTeams}</p>
+                      <p className="text-[10px] text-[var(--text)]">Teams</p>
+                    </div>
+                    <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
+                      <p className="font-bold text-[var(--text-h)]">{summary.totalMatches}</p>
+                      <p className="text-[10px] text-[var(--text)]">Matches</p>
+                    </div>
+                  </div>
+                </div>
+
+                {tournamentData.configurations.length > 0 && (
+                  <div className="mt-5 border-t border-[var(--border)] pt-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text)]">
+                      Existing Configurations
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {tournamentData.configurations.map((configuration) => (
+                        <button
+                          key={configuration.id}
+                          type="button"
+                          onClick={() => openConfiguration(configuration)}
+                          className={`rounded-xl border px-3 py-2 text-left text-xs transition ${existingConfiguration?.id === configuration.id ? "border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)]" : "border-[var(--border)] text-[var(--text-h)] hover:bg-[var(--surface-hover)]"}`}
+                        >
+                          <span className="font-semibold">{DIVISION_LABELS[configuration.division]}</span>
+                          <span className="mx-1.5 text-[var(--text)]">·</span>
+                          <span className="capitalize">{configuration.matchType}</span>
+                          <span className="mx-1.5 text-[var(--text)]">·</span>
+                          {CATEGORY_LABELS[configuration.category]}
+                          <span className="mx-1.5 text-[var(--text)]">·</span>
+                          {LEVEL_LABELS[configuration.level]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <TournamentOptions
+                division={division}
+                matchType={matchType}
+                category={category}
+                level={level}
+                options={options}
+                existingConfiguration={existingConfiguration}
+                disabled={isFinished}
+                onDivisionChange={setDivision}
+                onMatchTypeChange={handleMatchTypeChange}
+                onCategoryChange={setCategory}
+                onLevelChange={setLevel}
+              />
+
+              {existingConfiguration ? (
+                <TournamentConfigurationSummary
+                  configuration={existingConfiguration}
+                  readOnly={isFinished}
+                  isResetting={isResetting}
+                  onReset={() => setResetConfiguration(existingConfiguration)}
+                />
+              ) : isFinished ? (
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--text)]">
+                  Choose one of this Tournament&apos;s existing configurations above.
+                </div>
+              ) : (
+                <RegisteredPlayers
+                  players={profiles}
+                  selectedIds={selectedIds}
+                  setSelectedIds={setSelectedIds}
+                  level={level}
+                  category={category}
+                  matchType={matchType}
+                  validation={validation}
+                  isGenerating={isGenerating}
+                  onGenerate={handleGenerateConfiguration}
+                />
+              )}
+            </>
+          )}
+        </main>
       </div>
 
-      {/* Tournament matches and standings */}
-      <Matches
-        tournamentData={tournamentData}
-        isLoading={isLoading}
-        startingMatchId={startingMatchId}
-        savingMatchId={savingMatchId}
-        onStartMatch={handleStartMatch}
-        onFinishMatch={handleFinishMatch}
+      <Modal
+        open={showCreateModal}
+        onClose={() => !isCreating && setShowCreateModal(false)}
+        title="Create Tournament"
+      >
+        <div className="space-y-4">
+          <label className="block space-y-1.5 text-sm font-medium text-[var(--text-h)]">
+            <span>Tournament Name</span>
+            <input
+              value={createForm.name}
+              maxLength={100}
+              autoFocus
+              onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
+              placeholder="Example: August Club Championship"
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm outline-none focus:border-[var(--primary)]"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-1.5 text-sm font-medium text-[var(--text-h)]">
+              <span>Start Date</span>
+              <input
+                type="date"
+                value={createForm.startDate}
+                onChange={(event) => setCreateForm((current) => ({ ...current, startDate: event.target.value }))}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm"
+              />
+            </label>
+            <label className="block space-y-1.5 text-sm font-medium text-[var(--text-h)]">
+              <span>End Date</span>
+              <input
+                type="date"
+                value={createForm.endDate}
+                min={createForm.startDate}
+                onChange={(event) => setCreateForm((current) => ({ ...current, endDate: event.target.value }))}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm"
+              />
+            </label>
+          </div>
+          <div className="rounded-xl bg-[var(--surface-hover)] p-3 text-xs text-[var(--text)]">
+            The event starts as Draft. Teams and matches are created separately for each exact configuration.
+          </div>
+          <div className="flex justify-end gap-3 pt-1">
+            <button
+              type="button"
+              disabled={isCreating}
+              onClick={() => setShowCreateModal(false)}
+              className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isCreating}
+              onClick={handleCreateTournament}
+              className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"
+            >
+              {isCreating ? "Creating..." : "Create Draft"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(resetConfiguration)}
+        title="Reset Tournament Configuration"
+        message="This removes every team, group, match, and saved result in this exact configuration and releases any courts it is using. Existing lifetime player statistics are NOT reversed. Other Tournament configurations remain unchanged. Continue?"
+        confirmLabel={isResetting ? "Resetting..." : "Reset Configuration"}
+        confirmDisabled={isResetting}
+        onConfirm={handleResetConfiguration}
+        onCancel={() => !isResetting && setResetConfiguration(null)}
       />
     </div>
   );
