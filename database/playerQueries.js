@@ -582,6 +582,7 @@ export function removeRegisteredPlayer(playerId) {
 function playerHasHistory(playerId) {
   const checks = [
     [`SELECT 1 FROM rotation_match_players WHERE player_id = ? LIMIT 1`, [playerId]],
+    [`SELECT 1 FROM tournament_participants WHERE player_id = ? LIMIT 1`, [playerId]],
     [`SELECT 1 FROM tournament_teams WHERE player_1_id = ? OR player_2_id = ? LIMIT 1`, [playerId, playerId]],
     [`SELECT 1 FROM player_team_locks WHERE player_1_id = ? OR player_2_id = ? LIMIT 1`, [playerId, playerId]],
     [`SELECT 1 FROM match_players WHERE player_id = ? LIMIT 1`, [playerId]],
