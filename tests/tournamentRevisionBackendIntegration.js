@@ -57,6 +57,7 @@ try {
     resetTournamentEventConfiguration,
     startTournamentEventMatch,
   } = await import("../database/tournamentQueries.js");
+  const { getCourts } = await import("../database/courtQueries.js");
   const { deletePlayerProfile } = await import("../database/playerQueries.js");
 
   assertFailure(
@@ -322,6 +323,18 @@ try {
     db.prepare("SELECT status FROM courts WHERE id = ?").get(courtIds[0]).status,
     "playing",
   );
+  const publicTournamentMatch = getCourts()
+    .find((court) => court.id === courtIds[0])
+    .activeMatch;
+  assert.equal(publicTournamentMatch.source, "tournament");
+  assert.equal(publicTournamentMatch.tournamentName, "City Tournament");
+  assert.equal(publicTournamentMatch.division, "adult");
+  assert.equal(publicTournamentMatch.matchType, "singles");
+  assert.equal(publicTournamentMatch.category, "mens");
+  assert.equal(publicTournamentMatch.level, "beginner");
+  assert.equal(publicTournamentMatch.groupName, "Group A");
+  assert.equal(publicTournamentMatch.teamA.players.length, 1);
+  assert.equal(publicTournamentMatch.teamB.players.length, 1);
 
   const juniorSingles = startedAdultMatch.data.configurations.find(
     (configuration) => configuration.id === juniorSinglesId,
@@ -329,7 +342,7 @@ try {
   const juniorMatch = findMatchWithPlayer(juniorSingles, aaron.id);
   assertFailure(
     startTournamentEventMatch(juniorMatch.id, courtIds[1]),
-    /already playing another Tournament match/i,
+    /already playing another Tournament match on Court 1/i,
   );
   assert.equal(
     db.prepare("SELECT status FROM courts WHERE id = ?").get(courtIds[1]).status,

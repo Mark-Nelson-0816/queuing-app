@@ -17,12 +17,19 @@ function formatLabel(value) {
     : "";
 }
 
+// Converts Tournament division codes into public-facing age labels.
+function formatDivision(value) {
+  if (value === "adult") return "Adult";
+  if (String(value || "").startsWith("u")) return `${String(value).slice(1)} Under`;
+  return formatLabel(value);
+}
+
 // Displays one team on an active public court card.
-function PublicTeam({ team, dense, accent = "primary", matchType }) {
+function PublicTeam({ team, dense, accent = "primary", matchType, side }) {
   const isPrimary = accent === "primary";
   const sideLabel = matchType === "singles"
-    ? `Player ${team?.teamNumber === 1 ? "A" : "B"}`
-    : `Team ${team?.teamNumber}`;
+    ? `Player ${side}`
+    : `Team ${side}`;
 
   return (
     <div className={`rounded-xl ${dense ? "p-2" : "p-3"} ${
@@ -153,24 +160,31 @@ export default function PublicDisplay({
                     <div className="text-center mb-3">
                       <p className={`font-bold text-[var(--text-h)] ${dense ? "text-xs" : "text-sm"}`}>
                         {isTournament
-                          ? `Tournament - Round ${match.roundNumber}`
+                          ? match.tournamentName
                           : isRotation
                             ? "Rotation Match"
                             : "Legacy Normal Match"}
                       </p>
                       <p className={`text-[var(--text)] ${dense ? "text-[10px]" : "text-xs"}`}>
-                        {(isTournament || isRotation)
-                          && `${formatLabel(match.category)} `}
-                        {formatLabel(match.matchType)}
+                        {isTournament
+                          ? [
+                            formatDivision(match.division),
+                            formatLabel(match.matchType),
+                            formatLabel(match.category),
+                            formatLabel(match.level),
+                            match.groupName,
+                            `Round ${match.roundNumber}`,
+                          ].filter(Boolean).join(" · ")
+                          : `${isRotation ? `${formatLabel(match.category)} ` : ""}${formatLabel(match.matchType)}`}
                       </p>
                     </div>
 
                     <div className="flex-1 min-h-0 flex flex-col justify-center gap-2">
-                      <PublicTeam team={match.teamA} dense={dense} accent="primary" matchType={match.matchType} />
+                      <PublicTeam team={match.teamA} dense={dense} accent="primary" matchType={match.matchType} side="A" />
                       <p className={`text-center font-bold text-[var(--text)]/50 ${dense ? "text-xs" : "text-sm"}`}>
                         VS
                       </p>
-                      <PublicTeam team={match.teamB} dense={dense} accent="warning" matchType={match.matchType} />
+                      <PublicTeam team={match.teamB} dense={dense} accent="warning" matchType={match.matchType} side="B" />
                     </div>
                   </div>
                 );

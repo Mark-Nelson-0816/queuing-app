@@ -323,7 +323,7 @@ const getPlayingPlayerConflictStatement = db.prepare(`
       ON tournament_participants.id = tournament_team_players.participant_id
     WHERE tournament_team_players.team_id IN (?, ?)
   )
-  SELECT players.name
+  SELECT players.name, courts.name AS court_name
   FROM tournament_matches
   JOIN tournament_teams AS team_a
     ON team_a.id = tournament_matches.team_a_id
@@ -338,6 +338,8 @@ const getPlayingPlayerConflictStatement = db.prepare(`
     )
   JOIN players
     ON players.id = target_players.player_id
+  LEFT JOIN courts
+    ON courts.id = tournament_matches.court_id
   WHERE tournament_matches.status = 'playing'
     AND tournament_matches.id <> ?
   LIMIT 1
@@ -1024,7 +1026,12 @@ const startEventMatchTransaction = db.transaction((matchId, courtId) => {
     matchId,
   );
   if (playerConflict) {
-    throw new Error(`${playerConflict.name} is already playing another Tournament match.`);
+    const courtContext = playerConflict.court_name
+      ? ` on ${playerConflict.court_name}`
+      : "";
+    throw new Error(
+      `${playerConflict.name} is already playing another Tournament match${courtContext}.`,
+    );
   }
 
   if (match.tournament_status === "draft") {
@@ -1064,7 +1071,14 @@ export function startTournamentEventMatch(matchId, courtId) {
     const tournamentId = startEventMatchTransaction(numericMatchId, numericCourtId);
     return { success: true, data: loadTournamentEvent(tournamentId) };
   } catch (error) {
-    return failure(error, "Failed to start Tournament match.");
+    const ongoingConflict = error instanceof Error
+      && /uq_tournaments_one_ongoing|UNIQUE constraint failed.*tournaments/i.test(error.message);
+    return failure(
+      ongoingConflict
+        ? new Error("Only one Tournament may be ongoing at a time.")
+        : error,
+      "Failed to start Tournament match.",
+    );
   }
 }
 

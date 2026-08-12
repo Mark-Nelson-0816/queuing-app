@@ -74,9 +74,14 @@ const getActiveTournamentMatchesStatement = db.prepare(`
     tournament_matches.id AS match_id,
     tournament_matches.court_id,
     tournament_matches.tournament_id,
+    tournament_matches.configuration_id,
     tournament_matches.status,
-    tournaments.match_type,
-    tournaments.category,
+    tournaments.name AS tournament_name,
+    COALESCE(tournament_configurations.match_type, tournaments.match_type) AS match_type,
+    COALESCE(tournament_configurations.category, tournaments.category) AS category,
+    tournament_configurations.division,
+    tournament_configurations.level,
+    tournament_groups.name AS group_name,
     tournament_rounds.round_number,
     team_a.id AS team_a_id,
     team_a.team_number AS team_a_number,
@@ -99,6 +104,10 @@ const getActiveTournamentMatchesStatement = db.prepare(`
     ON tournaments.id = tournament_matches.tournament_id
   JOIN tournament_rounds
     ON tournament_rounds.id = tournament_matches.round_id
+  LEFT JOIN tournament_configurations
+    ON tournament_configurations.id = tournament_matches.configuration_id
+  LEFT JOIN tournament_groups
+    ON tournament_groups.id = tournament_matches.group_id
   JOIN tournament_teams AS team_a
     ON team_a.id = tournament_matches.team_a_id
   JOIN tournament_teams AS team_b
@@ -160,6 +169,13 @@ function mapTournamentMatch(row) {
     matchId: Number(row.match_id),
     courtId: Number(row.court_id),
     tournamentId: Number(row.tournament_id),
+    configurationId: row.configuration_id === null
+      ? null
+      : Number(row.configuration_id),
+    tournamentName: row.tournament_name || "Tournament",
+    division: row.division,
+    level: row.level,
+    groupName: row.group_name,
     roundNumber: Number(row.round_number),
     matchType: row.match_type,
     category: row.category,

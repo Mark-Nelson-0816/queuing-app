@@ -5,6 +5,7 @@ import Modal from "../components/Modal";
 import RegisteredPlayers from "../components/tournament/RegisteredPlayers";
 import TournamentConfigurationSummary from "../components/tournament/TournamentConfigurationSummary";
 import TournamentEventNavigator from "../components/tournament/TournamentEventNavigator";
+import TournamentMatchManagement from "../components/tournament/TournamentMatchManagement";
 import TournamentOptions, {
   CATEGORY_LABELS,
   DIVISION_LABELS,
@@ -114,6 +115,11 @@ export default function Tournament() {
   const [isEventLoading, setIsEventLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [startingMatchId, setStartingMatchId] = useState(null);
+  const [finishingMatchId, setFinishingMatchId] = useState(null);
+  const [winnerSelection, setWinnerSelection] = useState(null);
+  const [showFinishTournamentConfirm, setShowFinishTournamentConfirm] = useState(false);
+  const [isFinishingTournament, setIsFinishingTournament] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [resetConfiguration, setResetConfiguration] = useState(null);
   const [createForm, setCreateForm] = useState({
@@ -125,6 +131,9 @@ export default function Tournament() {
   const generationLockRef = useRef(false);
   const resetLockRef = useRef(false);
   const createLockRef = useRef(false);
+  const startMatchLockRef = useRef(false);
+  const finishMatchLockRef = useRef(false);
+  const finishTournamentLockRef = useRef(false);
 
   // Applies a loaded event and opens its first existing configuration when present.
   const applyTournamentData = useCallback((data) => {
@@ -396,6 +405,80 @@ export default function Tournament() {
     }
   };
 
+  // Starts any administrator-selected waiting match on a currently available court.
+  const handleStartMatch = async (matchId, courtId) => {
+    if (startMatchLockRef.current) return;
+    startMatchLockRef.current = true;
+    setStartingMatchId(matchId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.api.startTournamentMatch(matchId, courtId);
+      if (!result.success) throw new Error(result.message || "Failed to start Tournament match.");
+      setTournamentData(result.data);
+      await refreshEventLists();
+      const startedMatch = result.data.configurations
+        .flatMap((configuration) => configuration.groups)
+        .flatMap((group) => group.rounds)
+        .flatMap((round) => round.matches)
+        .find((match) => Number(match.id) === Number(matchId));
+      setNotice(`Tournament match started on ${startedMatch?.court?.name || "the selected court"}.`);
+    } catch (startError) {
+      setError(getErrorMessage(startError, "Failed to start Tournament match."));
+    } finally {
+      startMatchLockRef.current = false;
+      setStartingMatchId(null);
+    }
+  };
+
+  // Saves a confirmed Team A or Team B winner and refreshes standings and courts.
+  const handleFinishMatch = async () => {
+    if (finishMatchLockRef.current || !winnerSelection) return;
+    finishMatchLockRef.current = true;
+    setFinishingMatchId(winnerSelection.match.id);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.api.finishTournamentMatch(
+        winnerSelection.match.id,
+        winnerSelection.team.id,
+      );
+      if (!result.success) throw new Error(result.message || "Failed to finish Tournament match.");
+      setTournamentData(result.data);
+      await refreshEventLists();
+      setWinnerSelection(null);
+      setNotice("Tournament winner saved and the court is available again.");
+    } catch (finishError) {
+      setError(getErrorMessage(finishError, "Failed to finish Tournament match."));
+    } finally {
+      finishMatchLockRef.current = false;
+      setFinishingMatchId(null);
+    }
+  };
+
+  // Performs the explicit event finish after every generated match is complete.
+  const handleFinishTournament = async () => {
+    if (finishTournamentLockRef.current || !selectedTournamentId) return;
+    finishTournamentLockRef.current = true;
+    setIsFinishingTournament(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.api.finishTournament(selectedTournamentId);
+      if (!result.success) throw new Error(result.message || "Failed to finish Tournament.");
+      setTournamentData(result.data);
+      await refreshEventLists();
+      setView("history");
+      setShowFinishTournamentConfirm(false);
+      setNotice("Tournament finished and moved to read-only history.");
+    } catch (finishError) {
+      setError(getErrorMessage(finishError, "Failed to finish Tournament."));
+    } finally {
+      finishTournamentLockRef.current = false;
+      setIsFinishingTournament(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-12 text-center text-sm text-[var(--text)]">
@@ -467,19 +550,38 @@ export default function Tournament() {
                       </p>
                     )}
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
-                      <p className="font-bold text-[var(--text-h)]">{summary.totalConfigurations}</p>
-                      <p className="text-[10px] text-[var(--text)]">Configurations</p>
+                  <div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
+                        <p className="font-bold text-[var(--text-h)]">{summary.totalConfigurations}</p>
+                        <p className="text-[10px] text-[var(--text)]">Configurations</p>
+                      </div>
+                      <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
+                        <p className="font-bold text-[var(--text-h)]">{summary.totalTeams}</p>
+                        <p className="text-[10px] text-[var(--text)]">Teams</p>
+                      </div>
+                      <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
+                        <p className="font-bold text-[var(--text-h)]">{summary.totalMatches}</p>
+                        <p className="text-[10px] text-[var(--text)]">Matches</p>
+                      </div>
                     </div>
-                    <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
-                      <p className="font-bold text-[var(--text-h)]">{summary.totalTeams}</p>
-                      <p className="text-[10px] text-[var(--text)]">Teams</p>
-                    </div>
-                    <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
-                      <p className="font-bold text-[var(--text-h)]">{summary.totalMatches}</p>
-                      <p className="text-[10px] text-[var(--text)]">Matches</p>
-                    </div>
+                    {!isFinished && (
+                      <div className="mt-3 text-right">
+                        <button
+                          type="button"
+                          disabled={summary.waitingMatches > 0 || summary.playingMatches > 0}
+                          onClick={() => setShowFinishTournamentConfirm(true)}
+                          className="rounded-xl bg-[var(--success)] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Finish Tournament
+                        </button>
+                        {(summary.waitingMatches > 0 || summary.playingMatches > 0) && (
+                          <p className="mt-1 text-[10px] text-[var(--text)]">
+                            Complete {summary.waitingMatches + summary.playingMatches} remaining matches first.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -525,12 +627,24 @@ export default function Tournament() {
               />
 
               {existingConfiguration ? (
-                <TournamentConfigurationSummary
-                  configuration={existingConfiguration}
-                  readOnly={isFinished}
-                  isResetting={isResetting}
-                  onReset={() => setResetConfiguration(existingConfiguration)}
-                />
+                <>
+                  <TournamentConfigurationSummary
+                    configuration={existingConfiguration}
+                    readOnly={isFinished}
+                    isResetting={isResetting}
+                    onReset={() => setResetConfiguration(existingConfiguration)}
+                  />
+                  <TournamentMatchManagement
+                    key={`${existingConfiguration.id}:${isFinished ? "history" : "active"}`}
+                    tournament={tournament}
+                    configuration={existingConfiguration}
+                    readOnly={isFinished}
+                    startingMatchId={startingMatchId}
+                    finishingMatchId={finishingMatchId}
+                    onStartMatch={handleStartMatch}
+                    onSelectWinner={(match, team) => setWinnerSelection({ match, team })}
+                  />
+                </>
               ) : isFinished ? (
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--text)]">
                   Choose one of this Tournament&apos;s existing configurations above.
@@ -623,6 +737,30 @@ export default function Tournament() {
         confirmDisabled={isResetting}
         onConfirm={handleResetConfiguration}
         onCancel={() => !isResetting && setResetConfiguration(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(winnerSelection)}
+        title="Confirm Tournament Winner"
+        message={winnerSelection
+          ? `Save ${winnerSelection.team.players.map((player) => player.name).join(" / ")} as the winner? Finished match results cannot be changed.`
+          : "Save this Tournament winner?"}
+        confirmLabel={finishingMatchId ? "Saving Winner..." : "Confirm Winner"}
+        variant="primary"
+        confirmDisabled={Boolean(finishingMatchId)}
+        onConfirm={handleFinishMatch}
+        onCancel={() => !finishingMatchId && setWinnerSelection(null)}
+      />
+
+      <ConfirmDialog
+        open={showFinishTournamentConfirm}
+        title="Finish Tournament"
+        message="Mark this Tournament as finished? All configurations, groups, matches, standings, and results will become permanently read-only history."
+        confirmLabel={isFinishingTournament ? "Finishing..." : "Finish Tournament"}
+        variant="primary"
+        confirmDisabled={isFinishingTournament}
+        onConfirm={handleFinishTournament}
+        onCancel={() => !isFinishingTournament && setShowFinishTournamentConfirm(false)}
       />
     </div>
   );
