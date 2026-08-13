@@ -146,25 +146,6 @@ export default function Queue() {
     setSelectedPlayerIds((current) => current.filter((id) => eligibleIds.has(id)));
   }, []);
 
-  // Reload the complete Rotation Queue state.
-  const loadState = async ({ showLoading = false } = {}) => {
-    if (showLoading) setIsLoading(true);
-    try {
-      const result = await window.api.getRotationState();
-      if (!result.success) {
-        setError(result.message || "Failed to load the rotation queue.");
-        return false;
-      }
-      applyState(result.data);
-      return true;
-    } catch (loadError) {
-      setError(errorMessage(loadError, "Failed to load the rotation queue."));
-      return false;
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  };
-
   // Load Rotation state and saved settings when the page opens.
   useEffect(() => {
     let cancelled = false;

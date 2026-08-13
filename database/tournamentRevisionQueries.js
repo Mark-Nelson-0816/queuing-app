@@ -41,7 +41,7 @@ const listEventRowsStatement = db.prepare(`
     ON tournament_configurations.tournament_id = tournaments.id
   LEFT JOIN tournament_matches
     ON tournament_matches.tournament_id = tournaments.id
-   AND tournament_matches.configuration_id IS NOT NULL
+   AND tournament_matches.configuration_id = tournament_configurations.id
   WHERE tournaments.tournament_format_version >= 2
   GROUP BY tournaments.id
   ORDER BY
@@ -73,7 +73,7 @@ const listHistoryRowsStatement = db.prepare(`
     ON tournament_configurations.tournament_id = tournaments.id
   LEFT JOIN tournament_matches
     ON tournament_matches.tournament_id = tournaments.id
-   AND tournament_matches.configuration_id IS NOT NULL
+   AND tournament_matches.configuration_id = tournament_configurations.id
   WHERE tournaments.tournament_format_version >= 2
     AND tournaments.status = 'finished'
   GROUP BY tournaments.id

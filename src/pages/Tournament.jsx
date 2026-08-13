@@ -15,6 +15,7 @@ import {
   formatTournamentDate,
   getTournamentStatusClasses,
 } from "../utils/tournamentDisplay";
+import { validateTournamentSelection } from "../utils/tournamentSelection";
 
 const DEFAULT_OPTIONS = {
   divisions: ["adult", "u17", "u15", "u13", "u11", "u9"],
@@ -35,55 +36,6 @@ function getErrorMessage(error, fallback) {
 // Creates a stable key so each exact configuration keeps its own selection.
 function getSelectionKey(tournamentId, division, matchType, category, level) {
   return [tournamentId, division, matchType, category, level].join(":");
-}
-
-// Builds the lightweight generation message shown before backend validation.
-function validateSelection(selectedIds, profiles, matchType, category) {
-  const count = selectedIds.length;
-  if (matchType === "singles") {
-    if (count < 2) {
-      const missing = 2 - count;
-      return {
-        ready: false,
-        message: `${count} players selected. Singles requires at least 2 players. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
-      };
-    }
-    return { ready: true, message: "Ready to generate." };
-  }
-
-  if (count < 4) {
-    const missing = 4 - count;
-    return {
-      ready: false,
-      message: `${count} players selected. Doubles requires at least 4 players. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
-    };
-  }
-
-  if (category === "mixed") {
-    const profileById = new Map(profiles.map((profile) => [Number(profile.id), profile]));
-    const genderCounts = selectedIds.reduce((counts, playerId) => {
-      const gender = String(profileById.get(Number(playerId))?.gender || "").toLowerCase();
-      if (gender === "male") counts.male += 1;
-      if (gender === "female") counts.female += 1;
-      return counts;
-    }, { male: 0, female: 0 });
-
-    if (genderCounts.male !== genderCounts.female) {
-      const missingGender = genderCounts.male > genderCounts.female ? "female" : "male";
-      const missing = Math.abs(genderCounts.male - genderCounts.female);
-      return {
-        ready: false,
-        message: `Mixed Doubles requires equal male and female players. Add ${missing} ${missingGender} ${missing === 1 ? "player" : "players"}.`,
-      };
-    }
-  } else if (count % 2 !== 0) {
-    return {
-      ready: false,
-      message: `${count} players selected. Doubles requires an even number of players. Add 1 more player.`,
-    };
-  }
-
-  return { ready: true, message: "Ready to generate." };
 }
 
 // Provides today's local date for the create-event form.
@@ -268,12 +220,16 @@ export default function Tournament() {
     )) || null
   ), [category, division, level, matchType, tournamentData]);
 
-  const validation = useMemo(() => validateSelection(
+  const profileById = useMemo(
+    () => new Map(profiles.map((profile) => [Number(profile.id), profile])),
+    [profiles],
+  );
+  const validation = useMemo(() => validateTournamentSelection(
     selectedIds,
-    profiles,
+    profileById,
     matchType,
     category,
-  ), [category, matchType, profiles, selectedIds]);
+  ), [category, matchType, profileById, selectedIds]);
 
   const isFinished = tournamentData?.tournament.status === "finished";
 

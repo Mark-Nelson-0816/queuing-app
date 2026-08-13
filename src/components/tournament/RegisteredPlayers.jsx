@@ -5,8 +5,11 @@ import { getPagination } from "../../utils/pagination";
 import {
   getLevelClasses,
   getLevelLabel,
-  normalizePlayerLevel,
 } from "../../utils/playerLevel";
+import {
+  getEligibleTournamentProfiles,
+  getTournamentSelectionDetails,
+} from "../../utils/tournamentSelection";
 
 // Displays one permanent profile and shares one selection handler across rows.
 const TournamentProfileRow = memo(function TournamentProfileRow({
@@ -69,13 +72,10 @@ export default function RegisteredPlayers({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const eligiblePlayers = useMemo(() => players.filter((player) => {
-    if (normalizePlayerLevel(player.level) !== level) return false;
-    const gender = String(player.gender || "").toLowerCase();
-    if (category === "mens") return gender === "male";
-    if (category === "womens") return gender === "female";
-    return gender === "male" || gender === "female";
-  }), [category, level, players]);
+  const eligiblePlayers = useMemo(
+    () => getEligibleTournamentProfiles(players, level, category),
+    [category, level, players],
+  );
 
   const filteredPlayers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -85,19 +85,10 @@ export default function RegisteredPlayers({
     ));
   }, [eligiblePlayers, search]);
 
-  const selectedIdSet = useMemo(
-    () => new Set(selectedIds.map(Number)),
-    [selectedIds],
+  const { selectedIdSet, selectedPlayers, genderCounts } = useMemo(
+    () => getTournamentSelectionDetails(selectedIds, eligiblePlayers),
+    [eligiblePlayers, selectedIds],
   );
-  const selectedPlayers = useMemo(() => eligiblePlayers.filter((player) => (
-    selectedIdSet.has(Number(player.id))
-  )), [eligiblePlayers, selectedIdSet]);
-  const genderCounts = useMemo(() => selectedPlayers.reduce((counts, player) => {
-    const gender = String(player.gender || "").toLowerCase();
-    if (gender === "male") counts.male += 1;
-    if (gender === "female") counts.female += 1;
-    return counts;
-  }, { male: 0, female: 0 }), [selectedPlayers]);
 
   const pagination = useMemo(
     () => getPagination(filteredPlayers.length, page, pageSize),
