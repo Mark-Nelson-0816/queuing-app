@@ -8,10 +8,10 @@ import {
   getPlayerConfigurationReason,
 } from "../src/utils/rotationUi.js";
 import {
-  getTournamentPreferencePriority,
-  isTournamentCategoryEligible,
-  isTournamentPlayerEligible,
-} from "../src/utils/tournamentUi.js";
+  getEligibleTournamentProfiles,
+  getTournamentSelectionDetails,
+  validateTournamentSelection,
+} from "../src/utils/tournamentSelection.js";
 
 const players = Array.from({ length: 5 }, (_, index) => ({
   id: index + 1,
@@ -119,61 +119,44 @@ assert.deepEqual(countRankPreferences(players.slice(0, 3)), {
   adjacent_rank: 1,
 });
 
-assert.equal(isTournamentPlayerEligible({ status: "available", gender: "male", preferMens: true }, "mens"), true);
-assert.equal(isTournamentPlayerEligible({ status: "waiting", gender: "female", preferWomens: true }, "womens"), true);
-assert.equal(isTournamentPlayerEligible({ status: "playing", gender: "male", preferMens: true }, "mens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "assigned", gender: "male", preferMens: true }, "mens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "finished", gender: "female", preferWomens: true }, "womens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "done", gender: "female" }, "no_gender"), false);
-assert.equal(isTournamentCategoryEligible({ gender: "female" }, "mens"), false);
-assert.equal(isTournamentCategoryEligible({ gender: "male" }, "womens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female" }, "mens"), false);
-assert.equal(isTournamentPlayerEligible({ status: "available", gender: "female", preferMixed: true }, "mixed"), true);
-
-const maleNoGenderPlayer = {
-  status: "available",
-  gender: "male",
-  preferMens: false,
-  preferWomens: false,
-  preferMixed: false,
-  preferNoGender: true,
-};
-const femaleNoGenderPlayer = { ...maleNoGenderPlayer, gender: "female" };
-assert.equal(getTournamentPreferencePriority(maleNoGenderPlayer, "mens"), 1);
-assert.equal(isTournamentPlayerEligible(maleNoGenderPlayer, "mens"), true);
-assert.equal(isTournamentPlayerEligible(femaleNoGenderPlayer, "mens"), false);
-assert.equal(isTournamentPlayerEligible(femaleNoGenderPlayer, "womens"), true);
-assert.equal(isTournamentPlayerEligible(maleNoGenderPlayer, "mixed"), true);
-assert.equal(isTournamentPlayerEligible(femaleNoGenderPlayer, "mixed"), true);
-assert.equal(
-  getTournamentPreferencePriority({ ...maleNoGenderPlayer, preferMens: true }, "mens"),
-  0,
+const tournamentProfiles = [
+  { id: 101, name: "Mens Beginner", level: "beginner", gender: "male" },
+  { id: 102, name: "Womens Beginner", level: "Beginner", gender: "female" },
+  { id: 103, name: "Mens Intermediate", level: "intermediate", gender: "male" },
+];
+assert.deepEqual(
+  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "mens").map((player) => player.id),
+  [101],
 );
-assert.equal(
-  isTournamentPlayerEligible({ ...maleNoGenderPlayer, status: "playing" }, "mens"),
-  false,
+assert.deepEqual(
+  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "womens").map((player) => player.id),
+  [102],
 );
-assert.equal(
-  isTournamentPlayerEligible({ ...femaleNoGenderPlayer, status: "done" }, "womens"),
-  false,
+assert.deepEqual(
+  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "no_gender").map((player) => player.id),
+  [101, 102],
 );
-assert.equal(
-  isTournamentPlayerEligible({
-    ...maleNoGenderPlayer,
-    preferNoGender: false,
-    preferWomens: true,
-  }, "mens"),
-  false,
+assert.deepEqual(
+  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "mixed").map((player) => player.id),
+  [101, 102],
 );
-assert.equal(isTournamentPlayerEligible({
-  ...maleNoGenderPlayer,
-  preferNoGender: false,
-}, "mens"), false);
-assert.equal(isTournamentPlayerEligible({
-  ...maleNoGenderPlayer,
-  preferNoGender: false,
-  preferMens: false,
-}, "no_gender"), true);
+const tournamentSelection = getTournamentSelectionDetails(
+  [101, 102],
+  tournamentProfiles,
+);
+assert.equal(tournamentSelection.selectedIdSet.has(101), true);
+assert.deepEqual(tournamentSelection.genderCounts, { male: 1, female: 1 });
+assert.equal(validateTournamentSelection(
+  [101, 102, 103, 104],
+  new Map([
+    [101, tournamentProfiles[0]],
+    [102, tournamentProfiles[1]],
+    [103, tournamentProfiles[2]],
+    [104, { id: 104, gender: "female" }],
+  ]),
+  "doubles",
+  "mixed",
+).ready, true);
 
 const fallbackPreviewPlayers = [
   ...players.slice(0, 3).map((player) => ({

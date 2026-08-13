@@ -12,14 +12,13 @@ import { registerPlayer, getRegisteredPlayersToday, removeRegisteredPlayer, upda
 //tournament
 import {
   createTournamentEvent,
-  createRoundRobinTournament,
+  deleteTournamentEvent,
   finishTournamentEvent,
   finishTournamentMatch,
   generateTournamentEventConfiguration,
   getTournamentConfigurationData,
   getTournamentEvent,
   getTournamentEventHistory,
-  getLatestTournament,
   listTournamentEvents,
   resetTournamentEventConfiguration,
   startTournamentMatch,
@@ -124,16 +123,6 @@ ipcMain.handle("delete-players-profile", (event, id) => {
 
 });
 
-// Legacy Tournament handlers remain until the current renderer is replaced safely.
-ipcMain.handle('create-round-robin-tournament', (event, selectedPlayers, matchType, category) => {
-  return createRoundRobinTournament(selectedPlayers, matchType, category);
-});
-
-// Returns the newest saved tournament.
-ipcMain.handle('get-latest-tournament', () => {
-  return getLatestTournament();
-});
-
 // Creates a revised draft Tournament event with inclusive event dates.
 ipcMain.handle("create-tournament", (event, name, startDate, endDate) => (
   createTournamentEvent(name, startDate, endDate)
@@ -149,6 +138,11 @@ ipcMain.handle("get-tournament", (event, tournamentId) => (
 
 // Lists finished revised Tournament events for history navigation.
 ipcMain.handle("get-tournament-history", () => getTournamentEventHistory());
+
+// Permanently deletes one revised Tournament event and its owned data.
+ipcMain.handle("delete-tournament", (event, tournamentId) => (
+  deleteTournamentEvent(tournamentId)
+));
 
 // Returns permanent profiles and legal revised configuration options.
 ipcMain.handle("get-tournament-configuration-data", () => (

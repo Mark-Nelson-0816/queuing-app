@@ -11,13 +11,17 @@ import {
 
 const STATUS_OPTIONS = ["all", "waiting", "playing", "finished"];
 
-// Returns a readable list of the permanent profiles on one team.
-function getTeamName(team) {
-  return team?.players?.map((player) => player.name).join(" / ") || "Unknown team";
-}
-
 // Displays one team consistently in waiting, playing, and finished match cards.
-function MatchTeam({ team, side, winner, playing, onSelectWinner, disabled }) {
+function MatchTeam({
+  team,
+  side,
+  winner,
+  playing,
+  showPlayingIndicators,
+  playingPlayerById,
+  onSelectWinner,
+  disabled,
+}) {
   return (
     <div className={`rounded-xl border p-3 ${winner ? "border-[var(--success)] bg-[var(--success-light)]/40" : "border-[var(--border)] bg-[var(--surface-hover)]/60"}`}>
       <div className="flex items-start justify-between gap-2">
@@ -25,7 +29,35 @@ function MatchTeam({ team, side, winner, playing, onSelectWinner, disabled }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
             {side} · Team {team?.teamNumber}
           </p>
-          <p className="mt-1 font-semibold text-[var(--text-h)]">{getTeamName(team)}</p>
+          <div className="mt-1 space-y-1">
+            {team?.players?.length ? team.players.map((player) => {
+              const activeMatch = showPlayingIndicators
+                ? playingPlayerById?.get(Number(player.playerId))
+                : null;
+              const statusDetails = activeMatch
+                ? [
+                  `Tournament match #${activeMatch.matchId}`,
+                  activeMatch.courtName,
+                ].filter(Boolean).join(" on ")
+                : "";
+
+              return (
+                <div key={player.participantId || player.playerId} className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-[var(--text-h)]">{player.name}</span>
+                  {activeMatch && (
+                    <span
+                      title={statusDetails}
+                      className="rounded-full bg-[var(--primary-light)] px-2 py-0.5 text-[10px] font-semibold text-[var(--primary)]"
+                    >
+                      Playing
+                    </span>
+                  )}
+                </div>
+              );
+            }) : (
+              <p className="font-semibold text-[var(--text-h)]">Unknown team</p>
+            )}
+          </div>
         </div>
         {winner && (
           <span className="rounded-full bg-[var(--success)] px-2 py-1 text-[10px] font-semibold text-white">
@@ -55,6 +87,7 @@ function TournamentMatchCard({
   readOnly,
   starting,
   finishing,
+  playingPlayerById,
   onCourtChange,
   onStart,
   onSelectWinner,
@@ -97,6 +130,8 @@ function TournamentMatchCard({
           side="Team A"
           winner={isFinished && match.winnerTeamId === match.teamAId}
           playing={isPlaying && !readOnly}
+          showPlayingIndicators={match.status === "waiting"}
+          playingPlayerById={playingPlayerById}
           disabled={finishing}
           onSelectWinner={(team) => onSelectWinner(match, team)}
         />
@@ -106,6 +141,8 @@ function TournamentMatchCard({
           side="Team B"
           winner={isFinished && match.winnerTeamId === match.teamBId}
           playing={isPlaying && !readOnly}
+          showPlayingIndicators={match.status === "waiting"}
+          playingPlayerById={playingPlayerById}
           disabled={finishing}
           onSelectWinner={(team) => onSelectWinner(match, team)}
         />
@@ -146,6 +183,7 @@ export default function TournamentMatchManagement({
   readOnly,
   startingMatchId,
   finishingMatchId,
+  playingPlayerById,
   onStartMatch,
   onSelectWinner,
 }) {
@@ -294,6 +332,7 @@ export default function TournamentMatchManagement({
             readOnly={readOnly}
             starting={Number(startingMatchId) === Number(item.match.id)}
             finishing={Number(finishingMatchId) === Number(item.match.id)}
+            playingPlayerById={playingPlayerById}
             onCourtChange={(matchId, value) => setCourtByMatchId((current) => ({
               ...current,
               [matchId]: value,

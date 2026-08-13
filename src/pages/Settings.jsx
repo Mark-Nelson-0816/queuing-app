@@ -183,7 +183,7 @@ export default function Settings() {
       window.api.getPlayerManagementData(),
       window.api.getCourts(),
       window.api.getRotationMatches(),
-      window.api.getLatestTournament(),
+      window.api.listTournaments(),
       applicationInfoRequest,
     ]);
     const [settingsResult, playersResult, courtsResult, rotationResult, tournamentResult, infoResult] = results;
@@ -202,10 +202,8 @@ export default function Settings() {
       ? rotationResult.value.data.summary
       : null;
     const tournamentLoaded = tournamentResult.status === "fulfilled"
-      && tournamentResult.value?.success;
-    const tournament = tournamentLoaded
-      ? tournamentResult.value.data?.tournament
-      : null;
+      && tournamentResult.value?.success
+      && Array.isArray(tournamentResult.value.data);
 
     setStats({
       registeredToday: playerSummary?.registeredToday ?? null,
@@ -218,7 +216,7 @@ export default function Settings() {
         ? courts.filter((court) => court.status === "playing" && court.activeMatch).length
         : null,
       activeTournament: tournamentLoaded
-        ? (tournament?.status === "ongoing" ? 1 : 0)
+        ? tournamentResult.value.data.filter((event) => event.status === "ongoing").length
         : null,
     });
 

@@ -1211,6 +1211,42 @@ export function resetTournamentEventConfiguration(configurationId) {
   }
 }
 
+// Permanently deletes one complete revised event and releases its playing courts.
+const deleteEventTransaction = db.transaction((tournamentId) => {
+  const tournament = getEventRowStatement.get(tournamentId);
+  if (!tournament) throw new Error("Tournament not found.");
+
+  const courtIds = db.prepare(`
+    SELECT DISTINCT court_id
+    FROM tournament_matches
+    WHERE tournament_id = ?
+      AND configuration_id IS NOT NULL
+      AND status = 'playing'
+      AND court_id IS NOT NULL
+  `).all(tournamentId).map((row) => Number(row.court_id));
+
+  const deleted = db.prepare(`
+    DELETE FROM tournaments
+    WHERE id = ?
+      AND tournament_format_version >= 2
+  `).run(tournamentId);
+  if (deleted.changes !== 1) throw new Error("Tournament could not be deleted.");
+
+  for (const courtId of courtIds) releaseCourtStatement.run(courtId);
+  return tournamentId;
+});
+
+// Deletes a draft, ongoing, or finished revised Tournament as one atomic action.
+export function deleteTournamentEvent(tournamentId) {
+  try {
+    const id = parseId(tournamentId, "Tournament not found.");
+    deleteEventTransaction(id);
+    return { success: true, data: { tournamentId: id } };
+  } catch (error) {
+    return failure(error, "Failed to delete Tournament.");
+  }
+}
+
 // Manually finishes an event only when no waiting or playing match remains.
 const finishEventTransaction = db.transaction((tournamentId) => {
   const tournament = getEventRowStatement.get(tournamentId);

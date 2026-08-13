@@ -184,7 +184,7 @@ export default function RegisteredPlayers({
         </div>
       </div>
 
-      <div className="max-h-[31rem] divide-y divide-[var(--border)] overflow-y-auto">
+      <div className="divide-y divide-[var(--border)]">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--text)]">
           <span>Player</span>
           <span>Gender</span>

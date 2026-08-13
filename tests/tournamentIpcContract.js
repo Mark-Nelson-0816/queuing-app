@@ -42,6 +42,7 @@ const revisedChannels = [
   "list-tournaments",
   "get-tournament",
   "get-tournament-history",
+  "delete-tournament",
   "get-tournament-configuration-data",
   "generate-tournament-configuration",
   "reset-tournament-configuration",
@@ -60,6 +61,7 @@ for (const snippet of [
   "listTournaments: ()",
   "getTournament: (tournamentId)",
   "getTournamentHistory: ()",
+  "deleteTournament: (tournamentId)",
   "getTournamentConfigurationData: ()",
   "resetTournamentConfiguration: (configurationId)",
   "startTournamentMatch: (matchId, courtId)",
@@ -73,9 +75,11 @@ assert.match(
   /generateTournamentConfiguration:\s*\(\s*tournamentId,\s*playerIds,\s*division,\s*matchType,\s*category,\s*level,/s,
 );
 
-// Legacy calls remain exposed until the existing Tournament page is replaced.
-assert.equal(preloadSource.includes("createRoundRobinTournament:"), true);
-assert.equal(preloadSource.includes("getLatestTournament:"), true);
+// Obsolete single-event creation and latest-event APIs must stay removed.
+assert.equal(preloadSource.includes("createRoundRobinTournament:"), false);
+assert.equal(preloadSource.includes("getLatestTournament:"), false);
+assert.equal(handlerChannels.has("create-round-robin-tournament"), false);
+assert.equal(handlerChannels.has("get-latest-tournament"), false);
 
 const testUserData = mkdtempSync(
   path.join(os.tmpdir(), "badminton-tournament-ipc-contract-"),
@@ -91,6 +95,7 @@ try {
 
   for (const functionName of [
     "createTournamentEvent",
+    "deleteTournamentEvent",
     "listTournamentEvents",
     "getTournamentEvent",
     "getTournamentEventHistory",

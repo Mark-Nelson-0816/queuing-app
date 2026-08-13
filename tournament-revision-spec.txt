@@ -2,6 +2,13 @@ BADMINTON QUEUING APP
 TOURNAMENT SYSTEM REVISION SPECIFICATION
 ========================================
 
+IMPLEMENTATION STATUS
+=====================
+
+This finalized specification was implemented through Phases 1-7.5 and verified
+during Phase 8. It remains as historical design and acceptance-test reference.
+For current whole-application behavior, use `project-summary.txt`.
+
 Document purpose
 ----------------
 

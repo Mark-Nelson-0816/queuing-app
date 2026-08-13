@@ -801,6 +801,7 @@ export function finishTournamentMatch(matchId, winnerTeamId) {
 // Revised event-based Tournament APIs remain separate from legacy round-robin calls.
 export {
   createTournamentEvent,
+  deleteTournamentEvent,
   finishTournamentEvent,
   finishTournamentEventMatch,
   generateTournamentEventConfiguration,

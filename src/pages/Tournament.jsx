@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Trophy } from "lucide-react";
+import { CalendarDays, Trash2, Trophy } from "lucide-react";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Modal from "../components/Modal";
 import RegisteredPlayers from "../components/tournament/RegisteredPlayers";
@@ -16,6 +16,7 @@ import {
   getTournamentStatusClasses,
 } from "../utils/tournamentDisplay";
 import { validateTournamentSelection } from "../utils/tournamentSelection";
+import { buildPlayingTournamentPlayerMap } from "../utils/tournamentMatchStatus";
 
 const DEFAULT_OPTIONS = {
   divisions: ["adult", "u17", "u15", "u13", "u11", "u9"],
@@ -72,6 +73,8 @@ export default function Tournament() {
   const [winnerSelection, setWinnerSelection] = useState(null);
   const [showFinishTournamentConfirm, setShowFinishTournamentConfirm] = useState(false);
   const [isFinishingTournament, setIsFinishingTournament] = useState(false);
+  const [showDeleteTournamentConfirm, setShowDeleteTournamentConfirm] = useState(false);
+  const [isDeletingTournament, setIsDeletingTournament] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [resetConfiguration, setResetConfiguration] = useState(null);
   const [createForm, setCreateForm] = useState({
@@ -86,6 +89,7 @@ export default function Tournament() {
   const startMatchLockRef = useRef(false);
   const finishMatchLockRef = useRef(false);
   const finishTournamentLockRef = useRef(false);
+  const deleteTournamentLockRef = useRef(false);
 
   // Applies a loaded event and opens its first existing configuration when present.
   const applyTournamentData = useCallback((data) => {
@@ -232,6 +236,10 @@ export default function Tournament() {
   ), [category, matchType, profileById, selectedIds]);
 
   const isFinished = tournamentData?.tournament.status === "finished";
+  const playingPlayerById = useMemo(
+    () => buildPlayingTournamentPlayerMap(tournamentData?.configurations || []),
+    [tournamentData],
+  );
 
   // Keeps category valid when changing between Singles and Doubles.
   const handleMatchTypeChange = (nextMatchType) => {
@@ -435,6 +443,43 @@ export default function Tournament() {
     }
   };
 
+  // Permanently deletes one confirmed event and selects the next event in this view.
+  const handleDeleteTournament = async () => {
+    if (deleteTournamentLockRef.current || !selectedTournamentId) return;
+    deleteTournamentLockRef.current = true;
+    setIsDeletingTournament(true);
+    setError("");
+    setNotice("");
+    try {
+      const deletedTournamentId = Number(selectedTournamentId);
+      const result = await window.api.deleteTournament(deletedTournamentId);
+      if (!result.success) throw new Error(result.message || "Failed to delete Tournament.");
+
+      const refreshed = await refreshEventLists();
+      const nextList = view === "history"
+        ? refreshed.history
+        : refreshed.events.filter((event) => event.status !== "finished");
+      setShowDeleteTournamentConfirm(false);
+      setTournamentData(null);
+      setSelectedTournamentId(null);
+      setSelections((current) => {
+        const next = {};
+        const prefix = `${deletedTournamentId}:`;
+        for (const [key, value] of Object.entries(current)) {
+          if (!key.startsWith(prefix)) next[key] = value;
+        }
+        return next;
+      });
+      await loadTournament(nextList[0]?.id || null);
+      setNotice("Tournament permanently deleted. Lifetime player statistics were preserved.");
+    } catch (deleteError) {
+      setError(getErrorMessage(deleteError, "Failed to delete Tournament."));
+    } finally {
+      deleteTournamentLockRef.current = false;
+      setIsDeletingTournament(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-12 text-center text-sm text-[var(--text)]">
@@ -538,6 +583,16 @@ export default function Tournament() {
                         )}
                       </div>
                     )}
+                    <div className="mt-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteTournamentConfirm(true)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--danger)] px-4 py-2 text-xs font-semibold text-[var(--danger)] transition hover:bg-[var(--danger-light)]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Delete Tournament
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -597,6 +652,7 @@ export default function Tournament() {
                     readOnly={isFinished}
                     startingMatchId={startingMatchId}
                     finishingMatchId={finishingMatchId}
+                    playingPlayerById={playingPlayerById}
                     onStartMatch={handleStartMatch}
                     onSelectWinner={(match, team) => setWinnerSelection({ match, team })}
                   />
@@ -706,6 +762,16 @@ export default function Tournament() {
         confirmDisabled={Boolean(finishingMatchId)}
         onConfirm={handleFinishMatch}
         onCancel={() => !finishingMatchId && setWinnerSelection(null)}
+      />
+
+      <ConfirmDialog
+        open={showDeleteTournamentConfirm}
+        title="Permanently Delete Tournament"
+        message="This permanently deletes the entire Tournament event, including every configuration, participant entry, team, group, match, and result. Any courts used by its playing matches will be safely released. Player profiles and lifetime statistics will NOT be deleted or reversed. This cannot be undone."
+        confirmLabel={isDeletingTournament ? "Deleting..." : "Delete Tournament Permanently"}
+        confirmDisabled={isDeletingTournament}
+        onConfirm={handleDeleteTournament}
+        onCancel={() => !isDeletingTournament && setShowDeleteTournamentConfirm(false)}
       />
 
       <ConfirmDialog

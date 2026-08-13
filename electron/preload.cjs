@@ -27,13 +27,6 @@ contextBridge.exposeInMainWorld("api", {
   deletePlayerProfile: (id) =>
     ipcRenderer.invoke("delete-players-profile", id),
 
-  // Legacy Tournament calls remain until the current Tournament page is replaced.
-  createRoundRobinTournament: (players, matchType, category) =>
-    ipcRenderer.invoke('create-round-robin-tournament', players, matchType, category),
-
-  getLatestTournament: () =>
-    ipcRenderer.invoke('get-latest-tournament'),
-
   // Revised Tournament event, configuration, history, and lifecycle operations.
   createTournament: (name, startDate, endDate) =>
     ipcRenderer.invoke("create-tournament", name, startDate, endDate),
@@ -46,6 +39,9 @@ contextBridge.exposeInMainWorld("api", {
 
   getTournamentHistory: () =>
     ipcRenderer.invoke("get-tournament-history"),
+
+  deleteTournament: (tournamentId) =>
+    ipcRenderer.invoke("delete-tournament", tournamentId),
 
   getTournamentConfigurationData: () =>
     ipcRenderer.invoke("get-tournament-configuration-data"),
