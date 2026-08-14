@@ -1,6 +1,7 @@
 import {
   Check,
   Database,
+  Download,
   Info,
   LayoutGrid,
   ListOrdered,
@@ -12,12 +13,14 @@ import {
   SlidersHorizontal,
   Sun,
   Trophy,
+  Trash2,
   UserCheck,
   Users,
 } from "lucide-react";
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   version as reactVersion,
 } from "react";
@@ -172,6 +175,12 @@ export default function Settings() {
   const [error, setError] = useState("");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [showBackupConfirm, setShowBackupConfirm] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
+  const backupActionRef = useRef(false);
+  const clearHistoryActionRef = useRef(false);
 
   // Load settings, live statistics, and application metadata together.
   const loadDashboard = useCallback(async () => {
@@ -289,6 +298,52 @@ export default function Settings() {
     }
   }
 
+  // Opens the native Save dialog and creates a consistent copy of the live database.
+  async function handleBackup() {
+    if (backupActionRef.current || isBackingUp) return;
+    backupActionRef.current = true;
+    setIsBackingUp(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await window.api.backupDatabase();
+      if (!result?.success) throw new Error(result?.message || "The database backup failed.");
+      setShowBackupConfirm(false);
+      if (!result.data?.cancelled) {
+        setMessage(`Database backup created: ${result.data.fileName}.`);
+      }
+    } catch (backupError) {
+      setError(backupError instanceof Error ? backupError.message : "The database backup failed.");
+    } finally {
+      backupActionRef.current = false;
+      setIsBackingUp(false);
+    }
+  }
+
+  // Deletes only completed Rotation history older than the seven-day retention window.
+  async function handleClearOldHistory() {
+    if (clearHistoryActionRef.current || isClearingHistory) return;
+    clearHistoryActionRef.current = true;
+    setIsClearingHistory(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await window.api.clearOldRotationHistory();
+      if (!result?.success) throw new Error(result?.message || "Old Rotation history could not be cleared.");
+      const deleted = Number(result.data?.deletedMatches || 0);
+      setShowClearHistoryConfirm(false);
+      setMessage(deleted > 0
+        ? `Deleted ${deleted} old Rotation match${deleted === 1 ? "" : "es"}. Recent 7-day history was kept.`
+        : "No old Rotation history to clear.");
+      await loadDashboard();
+    } catch (historyError) {
+      setError(historyError instanceof Error ? historyError.message : "Old Rotation history could not be cleared.");
+    } finally {
+      clearHistoryActionRef.current = false;
+      setIsClearingHistory(false);
+    }
+  }
+
   const savedMessage = savedKey ? "Saved automatically ✓" : "Changes are saved automatically.";
   const appInfo = applicationInfo || {};
 
@@ -342,8 +397,16 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card title="Database Management" description="Reset local application data." icon={Database}>
-          <div>
+        <Card title="Database Management" description="Back up or maintain local application data." icon={Database}>
+          <div className="divide-y divide-[var(--border)]">
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div><p className="text-sm font-medium text-[var(--text-h)]">Backup Database</p><p className="mt-0.5 text-xs text-[var(--text)]">Save a consistent copy of player, Rotation, Tournament, court, and settings data.</p></div>
+              <button type="button" onClick={() => setShowBackupConfirm(true)} disabled={isBackingUp} className="shrink-0 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50"><Download className="mr-1 inline h-3.5 w-3.5" /> Backup</button>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-3">
+              <div><p className="text-sm font-medium text-[var(--text-h)]">Clear Old Rotation History</p><p className="mt-0.5 text-xs text-[var(--text)]">Delete completed Rotation records older than the current 7-day retention window.</p></div>
+              <button type="button" onClick={() => setShowClearHistoryConfirm(true)} disabled={isClearingHistory} className="shrink-0 rounded-xl border border-[var(--danger)]/40 px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:opacity-50"><Trash2 className="mr-1 inline h-3.5 w-3.5" /> Clear History</button>
+            </div>
             <div className="flex items-center justify-between gap-4 py-3">
               <div><p className="text-sm font-medium text-[var(--text-h)]">Reset Application Data</p><p className="mt-0.5 text-xs text-[var(--text)]">Deletes players, matches, tournaments, queue data, and courts before restoring the default courts.</p></div>
               <button type="button" onClick={() => setShowResetConfirm(true)} className="shrink-0 rounded-xl bg-[var(--danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Reset Data</button>
@@ -370,6 +433,8 @@ export default function Settings() {
       </div>
 
       {/* Destructive reset confirmation */}
+      <ConfirmDialog open={showBackupConfirm} title="Backup Database" message="Create a backup copy of the current Badminton Queuing App database. The backup includes player profiles, Tournament data, Rotation history, courts, settings, and other stored records." confirmLabel={isBackingUp ? "Creating..." : "Create Backup"} variant="primary" confirmDisabled={isBackingUp} onConfirm={handleBackup} onCancel={() => !isBackingUp && setShowBackupConfirm(false)} />
+      <ConfirmDialog open={showClearHistoryConfirm} title="Clear Old Rotation History?" message="This permanently deletes finished or cancelled Rotation matches older than the last 7 days. Recent history, active matches, player statistics, daily statistics, profiles, and Tournament records will be kept. This action cannot be undone." confirmLabel={isClearingHistory ? "Clearing..." : "Clear Old History"} variant="danger" confirmDisabled={isClearingHistory} onConfirm={handleClearOldHistory} onCancel={() => !isClearingHistory && setShowClearHistoryConfirm(false)} />
       <ConfirmDialog open={showResetConfirm} title="Reset Application Data" message="Delete all application data and restore the default courts? This action cannot be undone." confirmLabel={isResetting ? "Resetting..." : "Delete Everything"} variant="danger" confirmDisabled={isResetting} onConfirm={handleReset} onCancel={() => !isResetting && setShowResetConfirm(false)} />
     </div>
   );

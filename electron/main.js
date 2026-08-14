@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow, dialog, Menu } from "electron";
 import { globalShortcut } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -7,7 +7,7 @@ import "../database/init.js";
 
 import { ipcMain } from "electron";
 //players
-import { registerPlayer, getRegisteredPlayersToday, removeRegisteredPlayer, updatePlayerInfo, deletePlayerProfile, getPlayerManagementData, } from "../database/playerQueries.js";
+import { registerPlayer, getRegisteredPlayersToday, markAllRegisteredPlayersDone, removeRegisteredPlayer, updatePlayerInfo, deletePlayerProfile, getPlayerManagementData, } from "../database/playerQueries.js";
 
 //tournament
 import {
@@ -48,12 +48,15 @@ import {
 
 import { resetAllData } from "../database/resetQueries.js";
 import { getApplicationInfo, getAllSettings, setSetting } from "../database/settingsQueries.js";
+import { backupDatabase, clearOldRotationHistory } from "../database/maintenanceQueries.js";
+import { runDatabaseBackupDialog } from "./databaseBackupDialog.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
+let backupInProgress = false;
 
 // Creates the main desktop window and loads the packaged or development UI.
 function createWindow() {
@@ -111,6 +114,11 @@ ipcMain.handle('get-registered-players-today', () => {
 ipcMain.handle('remove-registered-player', (event, id) => {
   return removeRegisteredPlayer(id);
 });
+
+// Marks every eligible player registered today done in one database transaction.
+ipcMain.handle("mark-all-registered-players-done", () => (
+  markAllRegisteredPlayersDone()
+));
 
 // Updates a complete player profile.
 ipcMain.handle("update-player-info", (event, id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) => {
@@ -324,3 +332,28 @@ ipcMain.handle("update-setting", (event, key, value) => {
 
 // Returns runtime, platform, and database information.
 ipcMain.handle("get-application-info", () => getApplicationInfo());
+
+// Lets the operator choose a destination, then creates a consistent SQLite backup.
+ipcMain.handle("backup-database", async () => {
+  if (backupInProgress) {
+    return { success: false, message: "A database backup is already in progress." };
+  }
+  backupInProgress = true;
+  try {
+    return await runDatabaseBackupDialog({
+      showSaveDialog: (options) => dialog.showSaveDialog(mainWindow, options),
+      documentsPath: app.getPath("documents"),
+      createBackup: backupDatabase,
+    });
+  } catch (error) {
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to back up the database.",
+    };
+  } finally {
+    backupInProgress = false;
+  }
+});
+
+// Deletes only completed Rotation history outside the seven-day retention window.
+ipcMain.handle("clear-old-rotation-history", () => clearOldRotationHistory());

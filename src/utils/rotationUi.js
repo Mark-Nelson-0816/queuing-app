@@ -1,7 +1,8 @@
 import {
-  generateRotationMatches,
+  generateDoublesMatches,
   normalizeRankPreference,
   playerAllowsCategory,
+  validateRotationArrangement,
 } from "../../database/rotationLogic.js";
 
 // Explains why a player cannot join the current Rotation configuration.
@@ -30,15 +31,102 @@ export function playerFitsConfiguration(player, matchType, category) {
   return !getPlayerConfigurationReason(player, matchType, category);
 }
 
-// Checks lightweight selection readiness without running the match generator.
-export function buildRotationSelectionStatus({ selectedPlayers, matchType, category }) {
-  const required = matchType === "doubles" ? 4 : 2;
-  const counts = selectedPlayers.reduce((summary, player) => {
-    if (player.gender === "male") summary.male += 1;
-    if (player.gender === "female") summary.female += 1;
-    return summary;
-  }, { male: 0, female: 0 });
+// Sorts by today's Rotation count while preserving the existing order for ties.
+export function sortPlayersByMatchesToday(players, direction) {
+  if (direction === "all") return players;
+  const multiplier = direction === "highest" ? -1 : 1;
+  return players
+    .map((player, index) => ({ player, index }))
+    .sort((first, second) => (
+      (Number(first.player.matchCount || 0) - Number(second.player.matchCount || 0))
+        * multiplier
+      || first.index - second.index
+    ))
+    .map(({ player }) => player);
+}
 
+// Returns every eligible player ID from the complete filtered result, not one page.
+export function getFilteredEligiblePlayerIds(players, playerReasonById) {
+  return players.reduce((ids, player) => {
+    if (!playerReasonById.get(player.id)) ids.push(player.id);
+    return ids;
+  }, []);
+}
+
+// Builds a conservative bounded Singles preview without using the global solver.
+function buildBoundedSinglesPreview(players, category) {
+  const matchedIds = new Set();
+  const matches = [];
+  for (let firstIndex = 0; firstIndex < players.length; firstIndex += 1) {
+    const first = players[firstIndex];
+    if (matchedIds.has(first.id)) continue;
+    for (let secondIndex = firstIndex + 1; secondIndex < players.length; secondIndex += 1) {
+      const second = players[secondIndex];
+      if (matchedIds.has(second.id)) continue;
+      const validation = validateRotationArrangement({
+        matchType: "singles",
+        category,
+        teamA: [first],
+        teamB: [second],
+      });
+      if (!validation.valid) continue;
+      matchedIds.add(first.id);
+      matchedIds.add(second.id);
+      matches.push({ teamA: [first], teamB: [second] });
+      break;
+    }
+  }
+  return {
+    matches,
+    unmatchedPlayers: players.filter((player) => !matchedIds.has(player.id)),
+    warnings: [],
+  };
+}
+
+// Explains the main compatibility rule blocking a complete preview match.
+function getPreviewCompatibilityMessage(players, locks, matchType, category) {
+  if (category === "mixed") {
+    const maleCount = players.filter((player) => player.gender === "male").length;
+    const femaleCount = players.filter((player) => player.gender === "female").length;
+    if (maleCount < 2 || femaleCount < 2) {
+      return "Mixed Doubles requires two compatible male and two compatible female players.";
+    }
+  }
+
+  const selectedIds = new Set(players.map((player) => Number(player.id)));
+  const incompleteLock = locks.find((lock) => {
+    const firstId = Number(lock.player1Id ?? lock.player_1_id);
+    const secondId = Number(lock.player2Id ?? lock.player_2_id);
+    return selectedIds.has(firstId) !== selectedIds.has(secondId);
+  });
+  if (incompleteLock) {
+    return "Both active locked teammates must be selected before their team can be matched.";
+  }
+  const selectedLock = locks.find((lock) => {
+    const firstId = Number(lock.player1Id ?? lock.player_1_id);
+    const secondId = Number(lock.player2Id ?? lock.player_2_id);
+    return selectedIds.has(firstId) && selectedIds.has(secondId);
+  });
+  if (selectedLock) {
+    return "The selected locked team has no balanced compatible opponent under the current rules.";
+  }
+
+  const hasSameRankPlayer = players.some(
+    (player) => normalizeRankPreference(player.rankPreference) === "same_rank",
+  );
+  if (hasSameRankPlayer) {
+    return matchType === "doubles"
+      ? "Same Rank Only requires four compatible players of the same level for Doubles."
+      : "Same Rank Only requires two compatible players of the same level for Singles.";
+  }
+  return matchType === "doubles"
+    ? "No four-player group satisfies the adjacent-rank, category, lock, and team-balance rules."
+    : "Singles requires same-level players or mutually allowed adjacent-rank opponents.";
+}
+
+// Evaluates whether all selected players can produce at least one legal match.
+function evaluateSelectedPlayers({ selectedPlayers, locks, matchType, category }) {
+  const required = matchType === "doubles" ? 4 : 2;
   if (selectedPlayers.length === 0) {
     return {
       canGenerate: false,
@@ -57,25 +145,70 @@ export function buildRotationSelectionStatus({ selectedPlayers, matchType, categ
     };
   }
 
-  const estimatedMatches = category === "mixed"
-    ? Math.min(Math.floor(counts.male / 2), Math.floor(counts.female / 2))
-    : Math.floor(selectedPlayers.length / required);
-  if (estimatedMatches === 0) {
+  const invalidPlayer = selectedPlayers.find((player) => (
+    getPlayerConfigurationReason(player, matchType, category)
+  ));
+  if (invalidPlayer) {
     return {
       canGenerate: false,
       estimatedMatches: 0,
       tone: "blocked",
-      message: "Mixed doubles requires at least two male and two female players.",
+      matches: [],
+      unmatchedPlayers: selectedPlayers,
+      warnings: [],
+      message: `${invalidPlayer.name}: ${getPlayerConfigurationReason(invalidPlayer, matchType, category)}`,
     };
   }
 
-  const placedPlayerEstimate = estimatedMatches * required;
-  return {
-    canGenerate: true,
-    estimatedMatches,
-    tone: placedPlayerEstimate < selectedPlayers.length ? "attention" : "ready",
-    message: `Ready to generate up to ${estimatedMatches} match${estimatedMatches === 1 ? "" : "es"}. Compatibility is checked when Generate Matches is clicked.`,
-  };
+  try {
+    const result = matchType === "doubles"
+      ? {
+        ...generateDoublesMatches(selectedPlayers, locks, category, () => 0.5),
+        warnings: [],
+      }
+      : buildBoundedSinglesPreview(selectedPlayers, category);
+    const estimatedMatches = result.matches.length;
+    const canGenerate = estimatedMatches > 0;
+    const unmatchedCount = result.unmatchedPlayers.length;
+    if (!canGenerate) {
+      return {
+        ...result,
+        canGenerate: false,
+        estimatedMatches: 0,
+        tone: "blocked",
+        message: `No complete compatible match can be formed. ${getPreviewCompatibilityMessage(selectedPlayers, locks, matchType, category)}`,
+      };
+    }
+    return {
+      ...result,
+      canGenerate: true,
+      estimatedMatches,
+      tone: unmatchedCount > 0 || result.warnings.length > 0 ? "attention" : "ready",
+      message: unmatchedCount > 0
+        ? `${estimatedMatches} complete compatible match${estimatedMatches === 1 ? "" : "es"} can be generated. ${unmatchedCount} selected player${unmatchedCount === 1 ? "" : "s"} may remain unmatched.`
+        : `Selected players can form ${estimatedMatches} complete compatible match${estimatedMatches === 1 ? "" : "es"}. Final compatibility is validated again when Generate Matches is clicked.`,
+    };
+  } catch (error) {
+    return {
+      canGenerate: false,
+      estimatedMatches: 0,
+      tone: "blocked",
+      matches: [],
+      unmatchedPlayers: selectedPlayers,
+      warnings: [],
+      message: error instanceof Error ? error.message : "This selection cannot generate a match.",
+    };
+  }
+}
+
+// Checks compatibility-aware readiness without running the exhaustive Singles solver.
+export function buildRotationSelectionStatus({
+  selectedPlayers,
+  locks = [],
+  matchType,
+  category,
+}) {
+  return evaluateSelectedPlayers({ selectedPlayers, locks, matchType, category });
 }
 
 // Builds the same match preview used by saved Rotation generation.
@@ -88,60 +221,39 @@ export function buildRotationPreview({
 }) {
   const selectedIds = new Set(selectedPlayerIds.map(Number));
   const selectedPlayers = players.filter((player) => selectedIds.has(player.id));
-  const required = matchType === "doubles" ? 4 : 2;
-  const base = {
+  return {
     selectedPlayers,
-    matches: [],
-    unmatchedPlayers: [],
-    warnings: [],
-    canGenerate: false,
-    tone: "blocked",
+    ...evaluateSelectedPlayers({ selectedPlayers, locks, matchType, category }),
   };
+}
 
-  if (selectedPlayers.length === 0) {
-    return { ...base, message: `Select at least ${required} available players to build a ${matchType} match.` };
+// Groups unmatched players by shared backend explanation for compact notes.
+export function groupRotationUnmatchedPlayers(unmatchedPlayers) {
+  const groups = new Map();
+  for (const player of unmatchedPlayers) {
+    const reason = player.reason || "No complete compatible match was available.";
+    if (!groups.has(reason)) groups.set(reason, []);
+    groups.get(reason).push(player);
   }
-  if (selectedPlayers.length < required) {
-    const remaining = required - selectedPlayers.length;
-    return {
-      ...base,
-      message: `Need ${remaining} more compatible player${remaining === 1 ? "" : "s"} for ${matchType}.`,
-    };
-  }
+  return [...groups].map(([reason, players]) => ({ reason, players }));
+}
 
-  try {
-    const result = generateRotationMatches({
-      players: selectedPlayers,
-      locks,
-      matchType,
-      category,
-      random: () => 0.5,
-    });
-    const canGenerate = result.matches.length > 0;
-    const needsAttention = canGenerate && (
-      result.unmatchedPlayers.length > 0 || result.warnings.length > 0
-    );
-    let message = `${result.matches.length} complete match${result.matches.length === 1 ? "" : "es"} ready to generate.`;
-    if (!canGenerate) {
-      message = result.unmatchedPlayers[0]?.reason
-        || result.warnings[0]
-        || "No complete compatible match can be generated from this selection.";
-    } else if (result.unmatchedPlayers.length > 0) {
-      message += ` ${result.unmatchedPlayers.length} selected player${result.unmatchedPlayers.length === 1 ? "" : "s"} will remain available.`;
-    }
+// Chooses truthful success or warning feedback after generation finishes.
+export function getRotationGenerationFeedback(generatedCount, unmatchedCount) {
+  const count = Number(generatedCount || 0);
+  const unmatched = Number(unmatchedCount || 0);
+  if (count === 0) {
     return {
-      ...base,
-      ...result,
-      canGenerate,
-      tone: !canGenerate ? "blocked" : needsAttention ? "attention" : "ready",
-      message,
-    };
-  } catch (error) {
-    return {
-      ...base,
-      message: error instanceof Error ? error.message : "This selection cannot generate a match.",
+      tone: "warning",
+      message: "No compatible complete matches were generated.",
     };
   }
+  return {
+    tone: "success",
+    message: unmatched > 0
+      ? `Generated ${count} Rotation match${count === 1 ? "" : "es"}. ${unmatched} selected player${unmatched === 1 ? "" : "s"} remain unmatched.`
+      : `Generated ${count} Rotation match${count === 1 ? "" : "es"} and saved ${count === 1 ? "it" : "them"} in queue order.`,
+  };
 }
 
 // Counts selected same-rank and adjacent-rank preferences.

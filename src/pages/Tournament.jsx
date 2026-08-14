@@ -572,7 +572,7 @@ export default function Tournament() {
                           type="button"
                           disabled={summary.waitingMatches > 0 || summary.playingMatches > 0}
                           onClick={() => setShowFinishTournamentConfirm(true)}
-                          className="rounded-xl bg-[var(--success)] px-4 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="rounded-xl bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
                         >
                           Finish Tournament
                         </button>
@@ -587,9 +587,8 @@ export default function Tournament() {
                       <button
                         type="button"
                         onClick={() => setShowDeleteTournamentConfirm(true)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--danger)] px-4 py-2 text-xs font-semibold text-[var(--danger)] transition hover:bg-[var(--danger-light)]"
+                        className="inline-flex bg-red-500 items-center gap-1.5 rounded-xl text-white px-4 py-2 text-xs font-semibold transition hover:bg-red-700"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
                         Delete Tournament
                       </button>
                     </div>

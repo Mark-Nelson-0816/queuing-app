@@ -140,7 +140,8 @@ button {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
+  margin-right: 10px;
+  background: var(--text);
   border-radius: 3px;
 }
 

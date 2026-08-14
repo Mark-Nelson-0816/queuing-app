@@ -5,7 +5,9 @@ import RotationMatches from "../components/rotation/RotationMatches";
 import RotationPlayerPool from "../components/rotation/RotationPlayerPool";
 import { getLevelClasses, getLevelLabel } from "../utils/playerLevel";
 import {
+  getRotationGenerationFeedback,
   getPlayerConfigurationReason,
+  groupRotationUnmatchedPlayers,
   playerFitsConfiguration,
 } from "../utils/rotationUi";
 
@@ -96,6 +98,7 @@ export default function Queue() {
   const [preferenceActionId, setPreferenceActionId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState("success");
   const [warnings, setWarnings] = useState([]);
   const [unmatchedPlayers, setUnmatchedPlayers] = useState([]);
 
@@ -198,6 +201,7 @@ export default function Queue() {
     setCategory(nextCategory);
     if (removedIds.size > 0) {
       setSelectedPlayerIds((current) => current.filter((id) => !removedIds.has(id)));
+      setNoticeTone("success");
       setNotice(`${removedIds.size} incompatible selected player${removedIds.size === 1 ? " was" : "s were"} removed.`);
     }
   };
@@ -251,11 +255,12 @@ export default function Queue() {
       setWarnings(result.data.warnings || []);
       setUnmatchedPlayers(result.data.unmatchedPlayers || []);
       applyState(result.data);
-      setNotice(
-        result.data.generatedCount > 0
-          ? "Rotation matches generated and saved in queue order."
-          : "No compatible complete matches were generated.",
+      const feedback = getRotationGenerationFeedback(
+        result.data.generatedCount,
+        result.data.unmatchedPlayers?.length,
       );
+      setNoticeTone(feedback.tone);
+      setNotice(feedback.message);
     } catch (generationError) {
       setError(errorMessage(generationError, "Failed to generate rotation matches."));
     } finally {
@@ -278,7 +283,10 @@ export default function Queue() {
         return false;
       }
       applyState(result.data);
-      if (successMessage) setNotice(successMessage);
+      if (successMessage) {
+        setNoticeTone("success");
+        setNotice(successMessage);
+      }
       return true;
     } catch (actionError) {
       setError(errorMessage(actionError, "The rotation action failed."));
@@ -473,6 +481,14 @@ export default function Queue() {
     [rotationState.players],
   );
   const displayMatches = rotationState.matches;
+  const unmatchedPlayerGroups = useMemo(
+    () => groupRotationUnmatchedPlayers(unmatchedPlayers),
+    [unmatchedPlayers],
+  );
+  const uniqueWarnings = useMemo(
+    () => [...new Set(warnings)],
+    [warnings],
+  );
 
   return (
     <div className="space-y-6">
@@ -484,7 +500,7 @@ export default function Queue() {
         </div>
       )}
       {notice && (
-        <div className="rounded-xl bg-[var(--success-light)] border border-[var(--success)]/30 p-4 text-[var(--success)] flex justify-between gap-3">
+        <div className={`rounded-xl border p-4 flex justify-between gap-3 ${noticeTone === "warning" ? "border-[var(--warning)]/30 bg-[var(--warning-light)] text-[var(--warning)]" : "border-[var(--success)]/30 bg-[var(--success-light)] text-[var(--success)]"}`}>
           <p>{notice}</p>
           <button type="button" onClick={() => setNotice("")} className="font-bold">X</button>
         </div>
@@ -493,14 +509,14 @@ export default function Queue() {
       {/* Rotation status summary */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
-          [availablePlayerCount, "Available Players", "text-[var(--success)]"],
-          [summary.waiting + summary.incomplete, "Waiting", "text-[var(--warning)]"],
-          [summary.playing, "Playing", "text-[var(--primary)]"],
-          [summary.finished, "Finished", "text-[var(--success)]"],
-        ].map(([value, label, color]) => (
-          <div key={label} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-center">
-            <p className={`text-2xl font-bold ${color}`}>{value}</p>
-            <p className="text-sm text-[var(--text)]">{label}</p>
+          [availablePlayerCount, "Available Players"],
+          [summary.waiting + summary.incomplete, "Waiting"],
+          [summary.playing, "Playing"],
+          [summary.finished, "Finished"],
+        ].map(([value, label]) => (
+          <div key={label} className="rounded-2xl shadow-[var(--shadow)] border border-[var(--border)] bg-[var(--surface)] p-4 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text)]">{label}</p>
+            <p className={`mt-1 text-2xl font-bold text-[var(--text-h)]`}>{value}</p>
           </div>
         ))}
       </div>
@@ -529,13 +545,17 @@ export default function Queue() {
       {(warnings.length > 0 || unmatchedPlayers.length > 0) && (
         <section className="rounded-xl border border-[var(--warning)]/30 bg-[var(--warning-light)] px-4 py-3 space-y-2">
           <h2 className="text-sm font-bold text-[var(--text-h)]">Generation Notes</h2>
-          {warnings.map((warning) => <p key={warning} className="text-sm text-[var(--warning)]">{warning}</p>)}
-          {unmatchedPlayers.map((player) => (
-            <div key={player.id} className="flex flex-wrap items-center gap-2 rounded-xl bg-[var(--surface)] p-3">
-              <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}>
-                {player.name}
-              </span>
-              <span className="text-xs text-[var(--text)]">{player.reason}</span>
+          {uniqueWarnings.map((warning) => <p key={warning} className="text-sm text-[var(--warning)]">{warning}</p>)}
+          {unmatchedPlayerGroups.map((group) => (
+            <div key={group.reason} className="rounded-xl bg-[var(--surface)] p-3">
+              <p className="text-xs text-[var(--text)]">{group.reason}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {group.players.map((player) => (
+                  <span key={player.id} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}>
+                    {player.name} — {getLevelLabel(player.level)}
+                  </span>
+                ))}
+              </div>
             </div>
           ))}
         </section>

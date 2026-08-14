@@ -740,7 +740,10 @@ function doublesUnmatchedReason(player, selectedPlayers, lockPairs, category) {
   if (category === "mixed") {
     return "Mixed doubles requires two male and two female compatible players.";
   }
-  return "Doubles requires four compatible players per match.";
+  if (normalizeRankPreference(player.rankPreference) === "same_rank") {
+    return "Same Rank Only requires four compatible players of the same level for Doubles.";
+  }
+  return "No balanced complete Doubles match was available within the allowed adjacent-rank range.";
 }
 
 // Builds a fair doubles batch with bounded bucket and local candidate checks.

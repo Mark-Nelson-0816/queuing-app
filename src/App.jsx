@@ -19,7 +19,7 @@ const pageTitles = {
 
 // Controls application navigation, layout, and saved theme startup.
 function App() {
-  const [activePage, setActivePage] = useState("queue");
+  const [activePage, setActivePage] = useState("players");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Apply the saved theme when the application starts.

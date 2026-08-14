@@ -33,7 +33,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [sort, setSort] = useState({ field: "name", direction: "asc" });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
 
   // Filter and sort profiles without changing the source list.
   const filteredProfiles = useMemo(() => {
@@ -89,7 +89,10 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
             <h2 className="text-lg font-semibold text-[var(--text-h)]">All Player Profiles</h2>
             <p className="mt-0.5 text-xs text-[var(--text)]">Permanent details, preferences, and lifetime Rotation records.</p>
           </div>
-          <span className="rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">{profiles.length} profiles</span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">{profiles.length} profiles</span>
+            <button type="button" onClick={onOpenAdd} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"><UserPlus className="mr-1 inline h-3.5 w-3.5" /> Add Profile</button>
+          </div>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(13rem,1fr)_10rem_9rem_11rem_11rem]">
           <label className="relative">
@@ -119,7 +122,15 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
         <>
           {/* Player profile table */}
           <div className="overflow-x-auto">
-            <table className="min-w-[900px] w-full border-collapse text-sm">
+            <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
+              <colgroup>
+                <col className="w-[22%]" />
+                <col className="w-[14%]" />
+                <col className="w-[27%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[16%]" />
+              </colgroup>
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
                 <tr className="text-xs uppercase tracking-wide text-[var(--text)] shadow-[0_1px_0_var(--border)]">
                   <SortHeader label="Player" field="name" sort={sort} onSort={changeSort} />
@@ -138,9 +149,9 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
                   const activeToday = player.todayRegistration && !player.todayRegistration.isDone;
                   return (
                     <tr key={player.id} className="border-t border-[var(--border)] hover:bg-[var(--primary-light)]/35">
-                      <td className="px-3 py-2"><p className="font-semibold text-[var(--text-h)]">{player.name}</p><p className="text-xs text-[var(--text)]">{genderLabel(player.gender)} · {player.contactNumber || "No contact"}</p></td>
+                      <td className="px-3 py-2"><p className="truncate font-semibold text-[var(--text-h)]">{player.name}</p><p className="truncate text-xs text-[var(--text)]">{genderLabel(player.gender)} · {player.contactNumber || "No contact"}</p></td>
                       <td className="px-3 py-2"><PlayerLevelBadge level={player.level} /></td>
-                      <td className="px-3 py-2"><p className="font-medium text-[var(--text-h)]">{preferences.join(" · ") || "None"}</p><p className="mt-0.5 text-xs text-[var(--text)]">{rankPreferenceLabel(player.rankPreference)}</p></td>
+                      <td className="px-3 py-2"><p className="truncate font-medium text-[var(--text-h)]">{preferences.join(" · ") || "None"}</p><p className="mt-0.5 truncate text-xs text-[var(--text)]">{rankPreferenceLabel(player.rankPreference)}</p></td>
                       <td className="px-3 py-2 text-center font-semibold text-[var(--text-h)]">{player.lifetimeMatches}</td>
                       <td className="px-3 py-2 text-center"><span className="font-semibold text-[var(--success)]">{player.lifetimeWins}</span><span className="px-1 text-[var(--text)]">/</span><span className="font-semibold text-[var(--danger)]">{player.lifetimeLosses}</span></td>
                       <td className="w-px whitespace-nowrap px-3 py-2"><div className="flex items-center justify-end gap-1.5">

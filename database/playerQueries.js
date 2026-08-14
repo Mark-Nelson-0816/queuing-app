@@ -578,6 +578,53 @@ export function removeRegisteredPlayer(playerId) {
   }
 }
 
+// Marks every unassigned, non-playing daily registration done in one transaction.
+export function markAllRegisteredPlayersDone() {
+  try {
+    const transaction = db.transaction(() => {
+      const activePlayers = playerManagementTodayStatement
+        .all()
+        .map(mapTodayPlayer)
+        .filter((player) => !player.isDoneToday);
+      const eligiblePlayers = activePlayers.filter(
+        (player) => !["assigned", "playing"].includes(player.status),
+      );
+      const skippedPlayers = activePlayers
+        .filter((player) => ["assigned", "playing"].includes(player.status))
+        .map((player) => ({
+          playerId: player.id,
+          name: player.name,
+          reason: player.status,
+        }));
+
+      let markedDone = 0;
+      if (eligiblePlayers.length > 0) {
+        const eligibleRegistrationIds = eligiblePlayers.map(
+          (player) => player.registrationId,
+        );
+        const result = db.prepare(`
+          UPDATE registered_players_today
+          SET is_done_today = 1, status = 'done'
+          WHERE registered_date = CURRENT_DATE
+            AND is_done_today = 0
+            AND id IN (SELECT value FROM json_each(?))
+        `).run(JSON.stringify(eligibleRegistrationIds));
+        markedDone = result.changes;
+      }
+
+      return {
+        markedDone,
+        skipped: skippedPlayers.length,
+        skippedPlayers,
+      };
+    });
+
+    return { success: true, data: transaction() };
+  } catch (error) {
+    return failure(error, "Failed to mark today's players done.");
+  }
+}
+
 // Checks every match and lock table before allowing permanent profile deletion.
 function playerHasHistory(playerId) {
   const checks = [

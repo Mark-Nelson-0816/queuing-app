@@ -5,7 +5,9 @@ import {
   buildRotationPreview,
   buildRotationSelectionStatus,
   countRankPreferences,
+  getFilteredEligiblePlayerIds,
   getPlayerConfigurationReason,
+  sortPlayersByMatchesToday,
 } from "../src/utils/rotationUi.js";
 import {
   getEligibleTournamentProfiles,
@@ -86,6 +88,11 @@ for (const playerCount of [10, 25, 50, 100]) {
     selectedPlayers: Array.from({ length: playerCount }, (_, index) => ({
       id: index + 1,
       gender: index % 2 === 0 ? "male" : "female",
+      level: "beginner",
+      rankPreference: "same_rank",
+      preferNoGender: true,
+      eligible: true,
+      status: "available",
     })),
     matchType: "doubles",
     category: "no_gender",
@@ -118,6 +125,53 @@ assert.deepEqual(countRankPreferences(players.slice(0, 3)), {
   same_rank: 2,
   adjacent_rank: 1,
 });
+
+const countFilteredPlayers = Array.from({ length: 80 }, (_, index) => ({
+  ...players[0],
+  id: index + 1,
+  name: `Large Player ${index + 1}`,
+  gender: index % 2 === 0 ? "male" : "female",
+  matchCount: index % 5,
+}));
+const largeReasonMap = new Map(countFilteredPlayers.map((player) => [
+  player.id,
+  player.id % 9 === 0 ? "Unavailable" : "",
+]));
+const filteredCountResult = countFilteredPlayers.filter(
+  (player) => player.name.includes("Large Player")
+    && player.gender === "male"
+    && player.id <= 60,
+);
+const defaultCountOrder = sortPlayersByMatchesToday(filteredCountResult, "all");
+assert.equal(defaultCountOrder, filteredCountResult);
+const lowestCountOrder = sortPlayersByMatchesToday(filteredCountResult, "lowest");
+const highestCountOrder = sortPlayersByMatchesToday(filteredCountResult, "highest");
+assert.deepEqual(
+  lowestCountOrder.map((player) => player.matchCount),
+  [...lowestCountOrder.map((player) => player.matchCount)].sort((first, second) => first - second),
+);
+assert.deepEqual(
+  highestCountOrder.map((player) => player.matchCount),
+  [...highestCountOrder.map((player) => player.matchCount)].sort((first, second) => second - first),
+);
+for (const matchCount of [0, 1, 2, 3, 4]) {
+  assert.deepEqual(
+    lowestCountOrder.filter((player) => player.matchCount === matchCount).map((player) => player.id),
+    filteredCountResult.filter((player) => player.matchCount === matchCount).map((player) => player.id),
+  );
+}
+const firstSortedPage = lowestCountOrder.slice(0, 10);
+assert.deepEqual(
+  firstSortedPage.map((player) => player.id),
+  sortPlayersByMatchesToday(filteredCountResult, "lowest").slice(0, 10).map((player) => player.id),
+);
+assert.notDeepEqual(
+  firstSortedPage.map((player) => player.matchCount),
+  filteredCountResult.slice(0, 10).map((player) => player.matchCount),
+);
+const bulkEligibleIds = getFilteredEligiblePlayerIds(filteredCountResult, largeReasonMap);
+assert.equal(bulkEligibleIds.length, filteredCountResult.filter((player) => player.id % 9 !== 0).length);
+assert.equal(bulkEligibleIds.every((id) => id % 9 !== 0), true);
 
 const tournamentProfiles = [
   { id: 101, name: "Mens Beginner", level: "beginner", gender: "male" },

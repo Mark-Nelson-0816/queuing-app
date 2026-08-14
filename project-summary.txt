@@ -174,6 +174,10 @@ Backend/database:
   compatibility; new Tournament generation does not use it.
 - `database/settingsQueries.js`, `resetQueries.js`: preferences/runtime metadata
   and full data reset.
+- `database/maintenanceQueries.js`: safe SQLite backup and transactional
+  seven-day Rotation-history retention cleanup.
+- `electron/databaseBackupDialog.js`: native Save-dialog flow and dated backup
+  filename; the renderer never receives arbitrary filesystem access.
 
 React pages:
 
@@ -182,7 +186,8 @@ React pages:
 - `src/pages/Tournament.jsx`: revised event/configuration/match/history UI.
 - `src/pages/Courts.jsx`: court management and current assignment display.
 - `src/pages/PublicDisplayPage.jsx`: ten-second public data refresh.
-- `src/pages/Settings.jsx`: preferences, live statistics, metadata, and reset.
+- `src/pages/Settings.jsx`: preferences, live statistics, metadata, database
+  backup/history cleanup, and reset.
 
 Important Tournament UI/utility files:
 
@@ -407,7 +412,12 @@ Rotation:
 Settings/reset:
 
 - `getSettings()`, `updateSetting(key, value)`, `getApplicationInfo()`
+- `backupDatabase()`, `clearOldRotationHistory()`
 - `resetAllData()`
+
+Bulk daily registration:
+
+- `markAllRegisteredPlayersDone()`
 
 Some older simple APIs intentionally return arrays or raw values rather than the
 modern result envelope. Check callers before changing a contract.
@@ -432,6 +442,9 @@ Daily registration is separate:
 - Reactivating a done player reuses today's row, preserves daily counters, and
   resets availability time.
 - Mark Done is blocked while the player is assigned or playing.
+- Mark All Done performs one backend transaction. It marks every eligible
+  active daily registration done, skips assigned/playing players, returns
+  marked/skipped counts and skip reasons, and the renderer refreshes once.
 
 Effective current-day status priority:
 
@@ -539,6 +552,16 @@ Generation reloads canonical daily state and persists matches/slots in one
 transaction. Matched registrations become assigned; unmatched players remain
 available with reasons. React applies the returned state once.
 
+Match Preview is compatibility-aware rather than count-only. Doubles reuses the
+bounded pure Doubles generator core for category, rank, lock, Mixed-team, and
+balance checks. Singles uses a conservative quadratic pairing evaluator instead
+of the exhaustive saved-generation bitmask solver. Preview evaluates every
+selected player across pages, may conservatively underestimate a complex batch,
+and shows Ready only when at least one complete legal match is possible.
+Generation Notes group players that share an unmatched reason. Zero generated
+matches use warning feedback; partial generation remains successful and reports
+the unmatched players separately.
+
 Statuses:
 
 - waiting: valid and eligible to start/appear in Next Up;
@@ -556,6 +579,14 @@ daily/lifetime statistics once, marks operator-selected players done, requeues
 the rest as available with a new wait time, and releases the court. `autoRequeue`
 only sets the finish dialog's initial done checkboxes; the operator can change
 them before confirming.
+
+The player selector shows each registration's existing bulk-loaded
+`match_count` as Matches Today. The Matches Today control supports All, Lowest,
+and Highest; it stably sorts the complete filtered result before pagination and
+combines with search, level, gender, availability, and configuration eligibility.
+Select All Eligible operates on the complete filtered eligible result across
+every pagination page in one React state update; sorting does not change or
+remove the current selection.
 
 10.4 Rotation Next Up
 ---------------------
@@ -835,6 +866,10 @@ Pressing Escape reloads the renderer and returns to the default Queue page.
   vertical `overflow-y-auto`; their height follows the rows on the current page.
   A partial final page is naturally shorter.
 - Horizontal overflow remains for genuinely wide tables.
+- Player Profiles and Players Today use fixed table proportions/column groups so
+  headers and row content remain aligned as filtering changes the visible data.
+- Player Profiles exposes Add Profile in its own section header and reuses the
+  same profile modal/backend flow as the page-level Add New Player action.
 - Sticky table/list headers remain where useful with page-level scrolling.
 - Search, filters, sorting, and selection survive page navigation.
 - Player selection rows are fully clickable; checkbox keyboard behavior remains.
@@ -881,12 +916,25 @@ Settings live cards show registered today, profiles, courts, active Rotation
 matches, playing courts, and active Tournament. About shows app/Electron/React/
 SQLite versions, schema version, platform, database path, and developer.
 
-Reset Application Data is confirmed and transactional. It deletes Player,
+Database Management includes:
+
+- Backup Database: after confirmation, Electron opens a native Save dialog with
+  a dated `.db` filename. The main process uses `better-sqlite3` online backup,
+  rejects the live database as a destination, handles cancellation, and guards
+  duplicate requests. The renderer supplies no filesystem path.
+- Clear Old Rotation History: after destructive confirmation, one transaction
+  deletes only finished/cancelled `rotation_matches` whose effective history
+  timestamp is before the local-calendar cutoff `DATE('now', 'localtime',
+  '-6 days')`. This keeps today plus the prior six calendar dates, preserves
+  waiting/incomplete/playing matches, cascades
+  their deleted participant rows, and does not change profiles, lifetime/daily
+  statistics, Tournament data, or run VACUUM.
+- Reset Application Data is confirmed and transactional. It deletes Player,
 daily, Rotation, lock, revised/legacy Tournament, court, and legacy queue/match
 data, resets auto-increment sequences, and restores Court 1/2/3. Settings are
 not deleted.
 
-Backup, restore, export, archive, clear-today-only, and queue-only reset are not
+Restore, export, archive, clear-today-only, and queue-only reset are not
 implemented.
 
 
@@ -899,7 +947,10 @@ Renderer selection:
 - Maps/Sets and `useMemo` handle eligible profiles, pagination, counts, and
   active Tournament player status.
 - Player rows use `React.memo` and stable callbacks.
-- Select All/Clear perform one state update rather than one per player.
+- Rotation filtering derives the Matches Today result from the already-loaded
+  player collection; it performs no per-player IPC/database calls.
+- Select All/Clear perform one state update rather than one per player and use
+  the full filtered eligible collection rather than the paginated slice.
 - Match generation never runs automatically on selection changes.
 
 Tournament backend:
@@ -954,7 +1005,11 @@ Integration coverage verifies:
   disappearance after finish;
 - 10-row, 25-row, and partial-final pagination without internal vertical scroll;
 - Electron IPC/preload channel and argument contracts;
-- Rotation regression, performance, Player Management, Settings, and UI helpers.
+- Rotation regression, performance, Player Management, Settings, and UI helpers;
+- bulk Mark All Done protection for mixed available/assigned/playing players;
+- seven-day Rotation-history boundaries, participant cascade, data/statistics
+  preservation, backup integrity, live-path rejection, and dialog cancellation;
+- 80-player Matches Today filtering and full-result eligible ID selection.
 
 Electron-dependent tests run through the Electron executable with isolated
 temporary user-data directories. Pure logic/UI utilities run through Node.
@@ -981,7 +1036,7 @@ There is no npm test script; test files are invoked directly.
 - Settings backend accepts arbitrary key/value strings without a whitelist.
 - Rotation Singles still uses a memoized global bitmask solver; the bounded
   large-player redesign applies primarily to Doubles.
-- No backup, restore, export, authentication, remote synchronization, or web UI.
+- No restore, export, authentication, remote synchronization, or web UI.
 
 
 19. DEVELOPMENT SAFETY RULES

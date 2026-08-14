@@ -4,7 +4,12 @@ import Modal from "../Modal";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
 import { getLevelClasses, getLevelLabel, normalizePlayerLevel } from "../../utils/playerLevel";
-import { buildRotationSelectionStatus, getPlayerConfigurationReason } from "../../utils/rotationUi";
+import {
+  buildRotationSelectionStatus,
+  getFilteredEligiblePlayerIds,
+  getPlayerConfigurationReason,
+  sortPlayersByMatchesToday,
+} from "../../utils/rotationUi";
 
 const LEVELS = [
   ["beginner", "Beginner"],
@@ -63,10 +68,15 @@ const RotationPlayerRow = memo(function RotationPlayerRow({
         aria-label={`Select ${player.name}`}
       />
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name.toUpperCase()}</span>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{getLevelLabel(player.level)}</span>
-        {showGender && <span className="text-xs capitalize text-[var(--text)]">{player.gender}</span>}
-        {player.lockedTeammateName && <span title={`Locked with ${player.lockedTeammateName}`} className="text-purple-700"><Link2 size={13} /></span>}
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium text-[var(--text-h)]">{player.name.toUpperCase()}</span>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{getLevelLabel(player.level)}</span>
+            {showGender && <span className="text-xs capitalize text-[var(--text)]">{player.gender}</span>}
+            {player.lockedTeammateName && <span title={`Locked with ${player.lockedTeammateName}`} className="text-purple-700"><Link2 size={13} /></span>}
+          </div>
+          <p className="mt-0.5 text-[10px] text-[var(--text)]">{Number(player.matchCount || 0)} {Number(player.matchCount || 0) === 1 ? "Match" : "Matches"} Today</p>
+        </div>
       </div>
       <span title={reason || undefined} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badge.classes}`}>{badge.label}</span>
       <button
@@ -107,6 +117,7 @@ export default function RotationPlayerPool({
   const [levelFilter, setLevelFilter] = useState("all");
   const [genderFilter, setGenderFilter] = useState("all");
   const [availabilityFilter, setAvailabilityFilter] = useState("all");
+  const [matchCountSort, setMatchCountSort] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [lockModalOpen, setLockModalOpen] = useState(false);
@@ -142,9 +153,10 @@ export default function RotationPlayerPool({
   );
   const preview = useMemo(() => buildRotationSelectionStatus({
     selectedPlayers,
+    locks: selectedLocks,
     matchType,
     category,
-  }), [category, matchType, selectedPlayers]);
+  }), [category, matchType, selectedLocks, selectedPlayers]);
 
   // Count player states without removing done players from the summary.
   const availability = useMemo(() => players.reduce((summary, player) => {
@@ -167,12 +179,13 @@ export default function RotationPlayerPool({
         && (genderFilter === "all" || player.gender === genderFilter)
         && (availabilityFilter === "all" || (availabilityFilter === "available" ? !reason : Boolean(reason)));
     });
-    return filtered.sort((first, second) => {
+    const defaultOrderedPlayers = filtered.sort((first, second) => {
       const firstReason = playerReasonById.get(first.id);
       const secondReason = playerReasonById.get(second.id);
       return Number(Boolean(firstReason)) - Number(Boolean(secondReason)) || first.name.localeCompare(second.name);
     });
-  }, [availabilityFilter, genderFilter, levelFilter, playerReasonById, search, visiblePlayers]);
+    return sortPlayersByMatchesToday(defaultOrderedPlayers, matchCountSort);
+  }, [availabilityFilter, genderFilter, levelFilter, matchCountSort, playerReasonById, search, visiblePlayers]);
 
   // Limit filtered players to the current page.
   const pagination = useMemo(
@@ -187,15 +200,12 @@ export default function RotationPlayerPool({
     player,
     reason: playerReasonById.get(player.id),
   })), [pagedPlayers, playerReasonById]);
-  const selectablePagePlayerIds = useMemo(
-    () => pageRows.filter((row) => !row.reason).map((row) => row.player.id),
-    [pageRows],
+  const filteredEligiblePlayerIds = useMemo(
+    () => getFilteredEligiblePlayerIds(filteredPlayers, playerReasonById),
+    [filteredPlayers, playerReasonById],
   );
-  const selectablePagePlayers = useMemo(
-    () => pageRows.filter((row) => !row.reason).map((row) => row.player),
-    [pageRows],
-  );
-  const allPageSelected = selectablePagePlayers.length > 0 && selectablePagePlayers.every((player) => selectedIdSet.has(player.id));
+  const allFilteredSelected = filteredEligiblePlayerIds.length > 0
+    && filteredEligiblePlayerIds.every((playerId) => selectedIdSet.has(playerId));
   const preferencePlayer = useMemo(
     () => players.find((player) => player.id === preferencePlayerId) || null,
     [players, preferencePlayerId],
@@ -213,17 +223,17 @@ export default function RotationPlayerPool({
   const openPlayerSettings = useCallback((playerId) => {
     setPreferencePlayerId(playerId);
   }, []);
-  // Select or clear every eligible player on the current page.
-  const toggleSelectPage = useCallback(() => {
+  // Select or clear every eligible player in the complete filtered result.
+  const toggleSelectFiltered = useCallback(() => {
     onSelectionChange((current) => {
       const next = new Set(current.map(Number));
-      selectablePagePlayerIds.forEach((playerId) => {
-        if (allPageSelected) next.delete(playerId);
+      filteredEligiblePlayerIds.forEach((playerId) => {
+        if (allFilteredSelected) next.delete(playerId);
         else next.add(playerId);
       });
       return [...next];
     });
-  }, [allPageSelected, onSelectionChange, selectablePagePlayerIds]);
+  }, [allFilteredSelected, filteredEligiblePlayerIds, onSelectionChange]);
   // Apply a player filter and return to the first page.
   const updateFilter = (setter) => (event) => {
     setter(event.target.value);
@@ -251,9 +261,9 @@ export default function RotationPlayerPool({
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
         {/* Sticky match configuration and preview */}
-        <section className="self-start rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 xl:sticky xl:top-0">
+        <section className="self-start rounded-2xl border border-[var(--primary)]/30 bg-[var(--surface)] p-5 xl:sticky xl:top-0">
           <div>
             <h2 className="text-lg font-semibold text-[var(--text-h)]">Match Configuration</h2>
           </div>
@@ -280,7 +290,7 @@ export default function RotationPlayerPool({
             {selectedPlayers.length > 0 && (
               <div className="mt-3 flex items-center justify-between rounded-xl bg-[var(--surface-hover)] px-3 py-2 text-xs text-[var(--text)]">
                 <span>{selectedPlayers.length} selected players</span>
-                <strong className="text-[var(--text-h)]">Up to {preview.estimatedMatches} matches</strong>
+                <strong className="text-[var(--text-h)]">{preview.estimatedMatches > 0 ? `Up to ${preview.estimatedMatches} compatible match${preview.estimatedMatches === 1 ? "" : "es"}` : "No complete compatible match"}</strong>
               </div>
             )}
             <p className="mt-3 text-sm text-[var(--text)]">{preview.message}</p>
@@ -290,7 +300,7 @@ export default function RotationPlayerPool({
         </section>
 
         {/* Available player selection */}
-        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] xl:col-span-2">
+        <section className="overflow-hidden rounded-2xl border border-[var(--primary)]/30  bg-[var(--surface)] xl:col-span-3">
           <div className="border-b border-[var(--border)] p-4">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div><h2 className="font-semibold text-[var(--text-h)]">Available Players</h2><p className="text-sm text-[var(--text)]">Select registered players for this match.</p></div>
@@ -303,13 +313,14 @@ export default function RotationPlayerPool({
               </div>
               {selectedPlayers.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{selectedPlayers.slice(0, 8).map((player) => <button key={player.id} type="button" onClick={() => togglePlayer(player.id)} title={`Remove ${player.name}`} className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getLevelClasses(player.level)}`}>{player.name} ×</button>)}{selectedPlayers.length > 8 && <span className="px-2 py-0.5 text-[10px] font-semibold text-[var(--text)]">+{selectedPlayers.length - 8} more</span>}</div>}
             </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_10rem_9rem_11rem]">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(12rem,1fr)_10rem_9rem_11rem_10rem]">
               <label className="relative"><span className="sr-only">Search players</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" /><input value={search} onChange={updateFilter(setSearch)} placeholder="Search player..." className="w-full rounded-xl border border-[var(--border)] py-2 pl-9 pr-3 text-sm outline-none" /></label>
               <select value={levelFilter} onChange={updateFilter(setLevelFilter)} aria-label="Filter player level" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs"><option value="all">All Levels</option>{LEVELS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
               <select value={genderFilter} onChange={updateFilter(setGenderFilter)} aria-label="Filter player gender" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs"><option value="all">All Genders</option><option value="male">Male</option><option value="female">Female</option></select>
               <select value={availabilityFilter} onChange={updateFilter(setAvailabilityFilter)} aria-label="Filter availability" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs"><option value="all">All Availability</option><option value="available">Available</option><option value="unavailable">Unavailable</option></select>
+              <select value={matchCountSort} onChange={updateFilter(setMatchCountSort)} aria-label="Sort by matches today" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2 py-2 text-xs"><option value="all">Matches Today: All</option><option value="lowest">Matches Today: Lowest</option><option value="highest">Matches Today: Highest</option></select>
             </div>
-            <label className="mt-3 flex items-center gap-2 text-sm text-[var(--text)]"><input type="checkbox" checked={allPageSelected} onChange={toggleSelectPage} /> Select all eligible players on this page <span className="ml-auto">Selected: <strong className="text-[var(--text-h)]">{selectedPlayers.length}</strong></span></label>
+            <label className="mt-3 flex items-center gap-2 text-sm text-[var(--text)]"><input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectFiltered} /> Select all eligible players in filtered results <span className="ml-auto">Selected: <strong className="text-[var(--text-h)]">{selectedPlayers.length}</strong></span></label>
           </div>
 
           <div className="divide-y divide-[var(--border)]">

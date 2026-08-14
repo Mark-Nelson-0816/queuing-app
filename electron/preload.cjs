@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("api", {
   removeRegisteredPlayer: (id) =>
     ipcRenderer.invoke("remove-registered-player", id),
 
+  markAllRegisteredPlayersDone: () =>
+    ipcRenderer.invoke("mark-all-registered-players-done"),
+
   updatePlayerInfo: (id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference) =>
     ipcRenderer.invoke('update-player-info', id, name, level, gender, contact, preferMens, preferWomens, preferMixed, preferNoGender, rankPreference),
 
@@ -166,4 +169,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("update-setting", key, value),
   getApplicationInfo: () =>
     ipcRenderer.invoke("get-application-info"),
+  backupDatabase: () =>
+    ipcRenderer.invoke("backup-database"),
+  clearOldRotationHistory: () =>
+    ipcRenderer.invoke("clear-old-rotation-history"),
 });

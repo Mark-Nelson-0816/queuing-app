@@ -1,11 +1,4 @@
-import {
-  Activity,
-  CircleCheckBig,
-  Gamepad2,
-  UserCheck,
-  UserPlus,
-  Users,
-} from "lucide-react";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import AllPlayersTable from "../components/players/AllPlayersTable";
 import PlayerProfileModal from "../components/players/PlayerProfileModal";
@@ -29,23 +22,13 @@ const EMPTY_DATA = {
 };
 
 // Displays one Player Management summary statistic.
-function SummaryCard({ icon: Icon, label, value, detail, tone = "primary" }) {
-  const toneClasses = {
-    primary: "bg-[var(--primary-light)] text-[var(--primary)]",
-    success: "bg-[var(--success-light)] text-[var(--success)]",
-    warning: "bg-[var(--warning-light)] text-[var(--warning)]",
-    danger: "bg-[var(--danger-light)] text-[var(--danger)]",
-  };
+function SummaryCard({ label, value }) {
   return (
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow)]">
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-col items-center justify-center">
           <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text)]">{label}</p>
           <p className="mt-1 text-2xl font-bold text-[var(--text-h)]">{value}</p>
-        </div>
-        <span className={`rounded-lg p-2 ${toneClasses[tone]}`}><Icon className="h-4 w-4" /></span>
       </div>
-      <p className="mt-1.5 text-xs text-[var(--text)]">{detail}</p>
     </div>
   );
 }
@@ -59,8 +42,10 @@ export default function Players() {
   const [profileModal, setProfileModal] = useState(null);
   const [registerModalOpen, setRegisterModalOpen] = useState(false);
   const [doneTarget, setDoneTarget] = useState(null);
+  const [showMarkAllDoneConfirm, setShowMarkAllDoneConfirm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [busyPlayerId, setBusyPlayerId] = useState(null);
+  const [isMarkingAllDone, setIsMarkingAllDone] = useState(false);
   const actionRef = useRef(false);
 
   // Load complete Player Management data from the backend.
@@ -150,6 +135,32 @@ export default function Players() {
     if (completed) setDoneTarget(null);
   };
 
+  // Marks all eligible daily players done with one backend request and one refresh.
+  const confirmMarkAllDone = async () => {
+    if (actionRef.current || isMarkingAllDone) return;
+    actionRef.current = true;
+    setIsMarkingAllDone(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.api.markAllRegisteredPlayersDone();
+      if (!result?.success) {
+        throw new Error(result?.message || "Today's players could not be marked done.");
+      }
+      const { markedDone, skipped } = result.data;
+      await loadData({ quiet: true });
+      setShowMarkAllDoneConfirm(false);
+      setNotice(`Marked done: ${markedDone}. Skipped: ${skipped}.`);
+    } catch (actionError) {
+      setError(actionError instanceof Error
+        ? actionError.message
+        : "Today's players could not be marked done.");
+    } finally {
+      actionRef.current = false;
+      setIsMarkingAllDone(false);
+    }
+  };
+
   // Permanently delete an eligible player profile.
   const confirmDelete = async () => {
     const player = deleteTarget;
@@ -166,23 +177,18 @@ export default function Players() {
 
   return (
     <div className="space-y-4">
-      {/* Page heading and primary actions */}
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-h)]">Player Management</h1>
-          <p className="mt-1 text-sm text-[var(--text)]">
-            Manage permanent profiles and the players participating today.
-          </p>
-        </div>
+
+      {/* Primary actions */}
+      {/* <div className="flex flex-wrap justify-end">
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setRegisterModalOpen(true)} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text-h)] shadow-sm hover:bg-[var(--surface-hover)]">
-            <UserCheck className="mr-2 inline h-4 w-4" /> Register Existing
+             Register Existing
           </button>
           <button type="button" onClick={() => setProfileModal({ mode: "add", player: null })} className="rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)]">
-            <UserPlus className="mr-2 inline h-4 w-4" /> Add New Player
+             Add New Player
           </button>
         </div>
-      </header>
+      </div> */}
 
       {/* Action feedback */}
       {error && (
@@ -200,11 +206,11 @@ export default function Players() {
 
       {/* Player summary cards */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <SummaryCard icon={Users} label="Total Profiles" value={summary.totalProfiles} detail="Permanent player records" />
-        <SummaryCard icon={UserCheck} label="Registered Today" value={summary.registeredToday} detail={`${summary.activeToday} active · ${summary.doneToday} done`} tone="success" />
-        <SummaryCard icon={CircleCheckBig} label="Available Today" value={summary.availableToday} detail={`${summary.assignedToday} assigned to waiting matches`} tone="warning" />
-        <SummaryCard icon={Activity} label="Currently Playing" value={summary.playingToday} detail="Across active match sources" tone="danger" />
-        <SummaryCard icon={Gamepad2} label="Matches Today" value={summary.completedRotationMatchesToday} detail="Completed rotation matches" />
+        <SummaryCard label="Total Profiles" value={summary.totalProfiles} detail="Permanent player records" />
+        <SummaryCard label="Registered Today" value={summary.registeredToday} detail={`${summary.activeToday} active · ${summary.doneToday} done`} tone="success" />
+        <SummaryCard label="Available Today" value={summary.availableToday} detail={`${summary.assignedToday} assigned to waiting matches`} tone="warning" />
+        <SummaryCard label="Currently Playing" value={summary.playingToday} detail="Across active match sources" tone="danger" />
+        <SummaryCard  label="Matches Today" value={summary.completedRotationMatchesToday} detail="Completed rotation matches" />
       </div>
 
       {/* Players registered today */}
@@ -216,6 +222,8 @@ export default function Players() {
         onReactivate={registerPlayer}
         onOpenRegister={() => setRegisterModalOpen(true)}
         onOpenAdd={() => setProfileModal({ mode: "add", player: null })}
+        onMarkAllDone={() => setShowMarkAllDoneConfirm(true)}
+        isMarkingAllDone={isMarkingAllDone}
       />
 
       {/* Permanent player profiles */}
@@ -272,6 +280,18 @@ export default function Players() {
         confirmDisabled={busyPlayerId === doneTarget?.id}
         onConfirm={confirmMarkDone}
         onCancel={() => !busyPlayerId && setDoneTarget(null)}
+      />
+
+      {/* Bulk mark-done confirmation */}
+      <ConfirmDialog
+        open={showMarkAllDoneConfirm}
+        title="Mark All Players Done?"
+        message="This will mark all eligible players registered today as done for the day. Players assigned to a waiting Rotation match or currently playing will be skipped until their match is resolved."
+        confirmLabel={isMarkingAllDone ? "Working..." : "Mark All Done"}
+        variant="primary"
+        confirmDisabled={isMarkingAllDone}
+        onConfirm={confirmMarkAllDone}
+        onCancel={() => !isMarkingAllDone && setShowMarkAllDoneConfirm(false)}
       />
 
       {/* Profile deletion confirmation */}

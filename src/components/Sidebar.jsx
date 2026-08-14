@@ -1,8 +1,8 @@
 const navItems = [
+  { id: "players", label: "Players", icon: "" },
   { id: "queue", label: "Rotation Queue", icon: "" },
   { id: "tournament", label: "Tournament", icon: "" },
   { id: "courts", label: "Courts", icon: "" },
-  { id: "players", label: "Players", icon: "" },
   { id: "public", label: "Public Display", icon: "" },
   { id: "settings", label: "Settings", icon: "" },
 ];
