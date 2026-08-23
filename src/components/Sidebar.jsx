@@ -1,62 +1,91 @@
+import {
+  Activity,
+  LayoutGrid,
+  ListOrdered,
+  Monitor,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  Trophy,
+  UsersRound,
+} from "lucide-react";
+
 const navItems = [
-  { id: "players", label: "Players", icon: "" },
-  { id: "queue", label: "Rotation Queue", icon: "" },
-  { id: "tournament", label: "Tournament", icon: "" },
-  { id: "courts", label: "Courts", icon: "" },
-  { id: "public", label: "Public Display", icon: "" },
-  { id: "settings", label: "Settings", icon: "" },
+  { id: "players", label: "Players", icon: UsersRound },
+  { id: "queue", label: "Rotation Queue", icon: ListOrdered },
+  { id: "tournament", label: "Tournament", icon: Trophy },
+  { id: "courts", label: "Courts", icon: LayoutGrid },
+  { id: "public", label: "Public Display", icon: Monitor },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 // Displays collapsible application navigation.
 export default function Sidebar({ activePage, onNavigate, collapsed, onToggle }) {
   return (
     <aside
-      className={`h-screen bg-[var(--surface)] border-r border-[var(--border)] flex flex-col transition-all duration-300 ${
-        collapsed ? "w-16" : "w-64"
+      className={`relative z-20 flex h-screen shrink-0 flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-200 ${
+        collapsed ? "w-[4.5rem]" : "w-60"
       }`}
     >
       {/* Application name and collapse control */}
-      <div className="h-16 flex items-center px-4 border-b border-[var(--border)]">
-        <div className="flex items-center gap-3 min-w-0">
-          {!collapsed && (
-            <span className="font-bold text-lg text-[var(--text-h)] whitespace-nowrap truncate">
-              Badminton Queue
-            </span>
-          )}
-        </div>
-
-        <button
-          onClick={onToggle}
-          className="ml-auto p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text)] transition-colors flex-shrink-0"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <svg
-            className={`w-4 h-4 transition-transform ${collapsed ? "rotate-180" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+      <div className={`flex h-16 shrink-0 items-center border-b border-[var(--border)] ${collapsed ? "justify-center px-2" : "px-4"}`}>
+        {collapsed ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary-light)] text-[var(--primary)] transition-colors hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+            aria-expanded="false"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-          </svg>
-        </button>
+            <PanelLeftOpen aria-hidden="true" className="h-5 w-5" />
+          </button>
+        ) : (
+          <>
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)] text-white">
+                <Activity aria-hidden="true" className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-sm font-semibold text-[var(--text-h)]">Badminton Queue</p>
+                <p className="truncate text-[11px] text-[var(--text)]">Management System</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onToggle}
+              className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-h)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+              aria-expanded="true"
+            >
+              <PanelLeftClose aria-hidden="true" className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Main navigation links */}
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
+      <nav aria-label="Main navigation" className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
         {navItems.map((item) => {
           const isActive = activePage === item.id;
+          const Icon = item.icon;
           return (
             <button
+              type="button"
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+              aria-current={isActive ? "page" : undefined}
+              className={`flex h-11 w-full items-center rounded-lg border text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] ${
+                collapsed ? "justify-center px-2" : "gap-3 px-3"
+              } ${
                 isActive
-                  ? "bg-[var(--primary)] text-white shadow-md"
-                  : "text-[var(--text)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-h)]"
+                  ? "border-[var(--primary)]/15 bg-[var(--primary-light)] font-semibold text-[var(--primary)]"
+                  : "border-transparent font-medium text-[var(--text)] hover:bg-[var(--surface-hover)] hover:text-[var(--text-h)]"
               }`}
               title={collapsed ? item.label : undefined}
             >
-              <span className="text-lg flex-shrink-0">{item.icon}</span>
+              <Icon aria-hidden="true" className="h-5 w-5 shrink-0" />
               {!collapsed && <span className="truncate">{item.label}</span>}
             </button>
           );
@@ -64,13 +93,10 @@ export default function Sidebar({ activePage, onNavigate, collapsed, onToggle })
       </nav>
 
       {/* Application version */}
-      <div className="border-t border-[var(--border)] p-4">
-        {!collapsed && (
-          <div className="text-xs text-[var(--text)]">
-            <p className="font-medium text-[var(--text-h)]">Badminton Queue</p>
-            <p>v1.0.0</p>
-          </div>
-        )}
+      <div className={`shrink-0 border-t border-[var(--border)] ${collapsed ? "px-2 py-3 text-center" : "px-4 py-3"}`}>
+        <p className="text-[11px] font-medium text-[var(--text)]" title="Badminton Queue v1.0.0">
+          {collapsed ? "v1" : "Badminton Queue v1.0.0"}
+        </p>
       </div>
     </aside>
   );

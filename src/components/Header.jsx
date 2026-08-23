@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Clock3, UserRound } from "lucide-react";
 
 // Displays the current page title, time, date, and optional actions.
 export default function Header({ title, actions }) {
@@ -25,34 +26,40 @@ export default function Header({ title, actions }) {
   });
 
   return (
-    <header className="h-16 bg-[var(--surface)] border-b border-[var(--border)] flex items-center justify-between px-6">
+    <header className="relative z-20 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:px-5 lg:px-6">
 
       {/* Current page title */}
-      <div>
-        <h1 className="text-xl font-bold text-[var(--text-h)]">
+      <div className="flex min-w-0 items-center gap-3">
+        <span aria-hidden="true" className="hidden h-7 w-1 rounded-full bg-[var(--primary)] sm:block" />
+        <h1 className="truncate text-lg font-semibold tracking-tight text-[var(--text-h)]">
           {title}
         </h1>
       </div>
 
       {/* Clock, page actions, and operator badge */}
-      <div className="flex items-center gap-4">
-        <div className="text-right">
-          <p className="text-sm font-medium text-[var(--text-h)]">
-            {timeStr}
-          </p>
-          <p className="text-xs text-[var(--text)]">
-            {dateStr}
-          </p>
-        </div>
-
+      <div className="flex shrink-0 items-center gap-3 sm:gap-4">
         {actions && (
           <div className="flex items-center gap-2">
             {actions}
           </div>
         )}
 
-        <div className="w-9 h-9 rounded-full bg-[var(--primary)] text-white flex items-center justify-center text-sm font-bold">
-          A
+        <div className="hidden h-8 w-px bg-[var(--border)] sm:block" />
+
+        <div className="flex items-center gap-2 text-right" aria-label={`${dateStr}, ${timeStr}`}>
+          <Clock3 aria-hidden="true" className="h-4 w-4 text-[var(--primary)]" />
+          <div>
+            <p className="text-sm font-semibold leading-tight text-[var(--text-h)]">{timeStr}</p>
+            <p className="hidden text-[11px] leading-tight text-[var(--text)] sm:block">{dateStr}</p>
+          </div>
+        </div>
+
+        <div
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--primary-light)] text-[var(--primary)]"
+          aria-label="Operator"
+          title="Operator"
+        >
+          <UserRound aria-hidden="true" className="h-5 w-5" />
         </div>
       </div>
     </header>

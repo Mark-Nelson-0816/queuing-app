@@ -9,10 +9,10 @@ import PublicDisplayPage from "./pages/PublicDisplayPage";
 import Settings from "./pages/Settings";
 
 const pageTitles = {
-  queue: "Rotation Queue Management",
-  tournament: "Tournament Management",
-  courts: "Court Management",
-  players: "Player Management",
+  queue: "Rotation Queue",
+  tournament: "Tournament",
+  courts: "Courts",
+  players: "Players",
   public: "Public Display",
   settings: "Settings",
 };
@@ -20,7 +20,9 @@ const pageTitles = {
 // Controls application navigation, layout, and saved theme startup.
 function App() {
   const [activePage, setActivePage] = useState("players");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (
+    window.matchMedia("(max-width: 1023px)").matches
+  ));
 
   // Apply the saved theme when the application starts.
   useEffect(() => {
@@ -42,6 +44,17 @@ function App() {
       }
     }
     applySavedTheme();
+  }, []);
+
+  // Keep more room for page content when the desktop window becomes narrow.
+  useEffect(() => {
+    const compactLayout = window.matchMedia("(max-width: 1023px)");
+    const handleCompactLayout = (event) => {
+      if (event.matches) setSidebarCollapsed(true);
+    };
+
+    compactLayout.addEventListener("change", handleCompactLayout);
+    return () => compactLayout.removeEventListener("change", handleCompactLayout);
   }, []);
 
   // Render the page selected in the sidebar.
@@ -82,10 +95,10 @@ function App() {
 
       <div className="flex-1 flex flex-col min-w-0">
         {/* Current page header */}
-        <Header title={pageTitles[activePage] || "Rotation Queue Management"} />
+        <Header title={pageTitles[activePage] || "Rotation Queue"} />
 
         {/* Current page content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
           {renderPage()}
         </main>
       </div>
