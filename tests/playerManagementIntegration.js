@@ -140,7 +140,7 @@ try {
   db.prepare(`
     UPDATE registered_players_today
     SET match_count = 3, wins = 2, losses = 1
-    WHERE player_id = ? AND registered_date = CURRENT_DATE
+    WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
   `).run(first.data.id);
 
   const waitingMatch = db.prepare(`
@@ -193,7 +193,7 @@ try {
   db.prepare(`
     INSERT INTO registered_players_today (
       player_id, status, is_done_today, registered_date
-    ) VALUES (?, 'done', 1, DATE(CURRENT_DATE, '-1 day'))
+    ) VALUES (?, 'done', 1, DATE('now', 'localtime', '-1 day'))
   `).run(second.data.id);
   management = players.getPlayerManagementData();
   assert.equal(management.data.summary.registeredToday, 1);

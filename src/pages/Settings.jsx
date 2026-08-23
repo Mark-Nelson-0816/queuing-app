@@ -259,6 +259,7 @@ export default function Settings() {
 
   // Save one setting and update its control immediately.
   async function handleSettingChange(key, value) {
+    const previousValue = settings[key];
     setSettings((current) => ({ ...current, [key]: value }));
     setError("");
     if (key === "theme") applyTheme(value);
@@ -268,6 +269,11 @@ export default function Settings() {
       setSavedKey(key);
       window.setTimeout(() => setSavedKey(""), 1500);
     } catch (settingError) {
+      // Keep the visible control aligned with the persisted preference on failure.
+      setSettings((current) => (
+        current[key] === value ? { ...current, [key]: previousValue } : current
+      ));
+      if (key === "theme") applyTheme(previousValue);
       setError(settingError instanceof Error ? settingError.message : "The preference could not be saved.");
     }
   }
@@ -403,10 +409,13 @@ export default function Settings() {
               <div><p className="text-sm font-medium text-[var(--text-h)]">Backup Database</p><p className="mt-0.5 text-xs text-[var(--text)]">Save a consistent copy of player, Rotation, Tournament, court, and settings data.</p></div>
               <button type="button" onClick={() => setShowBackupConfirm(true)} disabled={isBackingUp} className="shrink-0 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50"><Download className="mr-1 inline h-3.5 w-3.5" /> Backup</button>
             </div>
-            <div className="flex items-center justify-between gap-4 py-3">
+            
+            {/* No need for this feature */}
+            {/* <div className="flex items-center justify-between gap-4 py-3">
               <div><p className="text-sm font-medium text-[var(--text-h)]">Clear Old Rotation History</p><p className="mt-0.5 text-xs text-[var(--text)]">Delete completed Rotation records older than the current 7-day retention window.</p></div>
               <button type="button" onClick={() => setShowClearHistoryConfirm(true)} disabled={isClearingHistory} className="shrink-0 rounded-xl border border-[var(--danger)]/40 px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:opacity-50"><Trash2 className="mr-1 inline h-3.5 w-3.5" /> Clear History</button>
-            </div>
+            </div> */}
+
             <div className="flex items-center justify-between gap-4 py-3">
               <div><p className="text-sm font-medium text-[var(--text-h)]">Reset Application Data</p><p className="mt-0.5 text-xs text-[var(--text)]">Deletes players, matches, tournaments, queue data, and courts before restoring the default courts.</p></div>
               <button type="button" onClick={() => setShowResetConfirm(true)} className="shrink-0 rounded-xl bg-[var(--danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Reset Data</button>

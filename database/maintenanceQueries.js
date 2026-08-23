@@ -1,4 +1,5 @@
 import path from "node:path";
+import process from "node:process";
 import db from "./database.js";
 
 // Converts maintenance errors into the shared renderer result shape.
@@ -11,10 +12,19 @@ function failure(error, fallbackMessage) {
   };
 }
 
+// Compares filesystem paths using Windows' case-insensitive path behavior.
+function isLiveDatabasePath(destinationPath) {
+  const destination = path.resolve(destinationPath);
+  const source = path.resolve(db.name);
+  return process.platform === "win32"
+    ? destination.toLowerCase() === source.toLowerCase()
+    : destination === source;
+}
+
 // Creates a consistent SQLite backup at the main-process-selected destination.
 export async function backupDatabase(destinationPath) {
   try {
-    if (path.resolve(destinationPath) === path.resolve(db.name)) {
+    if (isLiveDatabasePath(destinationPath)) {
       throw new Error("Choose a different location from the live application database.");
     }
     await db.backup(destinationPath);

@@ -9,6 +9,7 @@ import {
   genderLabel,
   rankPreferenceLabel,
 } from "./playerDisplay";
+import { filterRegistrationProfiles } from "../../utils/playerManagementUi";
 
 // Selects an existing profile for today's active player list.
 export default function RegisterPlayerToday({
@@ -25,22 +26,15 @@ export default function RegisterPlayerToday({
   const [isRegistering, setIsRegistering] = useState(false);
   const submissionRef = useRef(false);
 
-  // Keep unregistered and done profiles available for registration.
-  const eligibleProfiles = useMemo(() => profiles.filter((player) => (
-    !player.todayRegistration || player.todayRegistration.isDone
-  )), [profiles]);
-
   // Filter eligible profiles by the operator's search and selections.
-  const filteredProfiles = useMemo(() => {
-    const searchText = search.trim().toLowerCase();
-    return eligibleProfiles.filter((player) => (
-      (!searchText || player.name.toLowerCase().includes(searchText))
-      && (levelFilter === "all" || player.level === levelFilter)
-      && (genderFilter === "all" || player.gender === genderFilter)
-    ));
-  }, [eligibleProfiles, genderFilter, levelFilter, search]);
+  const eligibleProfiles = useMemo(() => filterRegistrationProfiles(profiles), [profiles]);
+  const filteredProfiles = useMemo(() => filterRegistrationProfiles(profiles, {
+    search,
+    levelFilter,
+    genderFilter,
+  }), [genderFilter, levelFilter, profiles, search]);
 
-  const selectedPlayer = eligibleProfiles.find((player) => player.id === selectedId);
+  const selectedPlayer = filteredProfiles.find((player) => player.id === selectedId);
 
   // Register or reactivate the selected profile for today.
   const handleRegister = async () => {

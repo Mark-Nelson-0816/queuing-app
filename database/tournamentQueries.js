@@ -38,7 +38,7 @@ const getSelectedPlayerUnavailableStatusesStatement = db.prepare(`
   unavailable_players AS (
     SELECT player_id, 3 AS priority
     FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
+    WHERE registered_date = (DATE('now', 'localtime'))
       AND (is_done_today = 1 OR LOWER(status) IN ('done', 'finished'))
 
     UNION ALL
@@ -106,7 +106,7 @@ const getSelectedPlayerUnavailableStatusesStatement = db.prepare(`
 
     SELECT player_id, 2
     FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
+    WHERE registered_date = (DATE('now', 'localtime'))
       AND status = 'playing'
       AND is_done_today = 0
 
@@ -122,7 +122,7 @@ const getSelectedPlayerUnavailableStatusesStatement = db.prepare(`
 
     SELECT player_id, 1
     FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
+    WHERE registered_date = (DATE('now', 'localtime'))
       AND status = 'assigned'
       AND is_done_today = 0
   )

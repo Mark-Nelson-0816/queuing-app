@@ -85,7 +85,7 @@ export default function RegisteredPlayers({
     ));
   }, [eligiblePlayers, search]);
 
-  const { selectedIdSet, selectedPlayers, genderCounts } = useMemo(
+  const { selectedIdSet, genderCounts } = useMemo(
     () => getTournamentSelectionDetails(selectedIds, eligiblePlayers),
     [eligiblePlayers, selectedIds],
   );
@@ -111,11 +111,16 @@ export default function RegisteredPlayers({
   }, [setSelectedIds]);
 
   const selectAllEligible = useCallback(() => {
-    setSelectedIds(eligiblePlayers.map((player) => Number(player.id)));
-  }, [eligiblePlayers, setSelectedIds]);
+    setSelectedIds((current) => [
+      ...new Set([
+        ...current.map(Number),
+        ...filteredPlayers.map((player) => Number(player.id)),
+      ]),
+    ]);
+  }, [filteredPlayers, setSelectedIds]);
 
-  const allEligibleSelected = eligiblePlayers.length > 0
-    && selectedPlayers.length === eligiblePlayers.length;
+  const allFilteredSelected = filteredPlayers.length > 0
+    && filteredPlayers.every((player) => selectedIdSet.has(Number(player.id)));
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
@@ -149,7 +154,7 @@ export default function RegisteredPlayers({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={eligiblePlayers.length === 0 || allEligibleSelected}
+              disabled={filteredPlayers.length === 0 || allFilteredSelected}
               onClick={selectAllEligible}
               className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-40"
             >

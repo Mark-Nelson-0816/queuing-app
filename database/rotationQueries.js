@@ -59,7 +59,7 @@ const getDailyPlayersStatement = db.prepare(`
   FROM registered_players_today
   JOIN players
     ON players.id = registered_players_today.player_id
-  WHERE registered_players_today.registered_date = CURRENT_DATE
+  WHERE registered_players_today.registered_date = (DATE('now', 'localtime'))
   ORDER BY
     registered_players_today.available_since ASC,
     registered_players_today.created_at ASC,
@@ -83,7 +83,7 @@ const getActiveLocksStatement = db.prepare(`
   WHERE player_team_locks.is_active = 1
     AND (
       player_team_locks.lock_type = 'permanent'
-      OR player_team_locks.lock_date = CURRENT_DATE
+      OR player_team_locks.lock_date = (DATE('now', 'localtime'))
     )
   ORDER BY player_team_locks.id ASC
 `);
@@ -267,7 +267,7 @@ function loadHistoryCounts(players) {
     JOIN rotation_matches
       ON rotation_matches.id = first.rotation_match_id
     WHERE rotation_matches.status = 'finished'
-      AND DATE(COALESCE(rotation_matches.end_time, rotation_matches.created_at)) = CURRENT_DATE
+      AND DATE(COALESCE(rotation_matches.end_time, rotation_matches.created_at), 'localtime') = (DATE('now', 'localtime'))
   `).all();
 
   for (const row of rows) {
@@ -593,7 +593,7 @@ const createTeamLockTransaction = db.transaction((firstPlayerId, secondPlayerId,
       lock_date,
       is_active
     )
-    VALUES (?, ?, 'today', CURRENT_DATE, 1)
+    VALUES (?, ?, 'today', (DATE('now', 'localtime')), 1)
   `).run(player1Id, player2Id);
   return Number(result.lastInsertRowid);
 });
@@ -1233,7 +1233,7 @@ function validateStoredMatch(match) {
     `).get(player.registrationId);
     if (
       !registration
-      || registration.registered_date !== db.prepare(`SELECT CURRENT_DATE AS value`).get().value
+      || registration.registered_date !== db.prepare(`SELECT (DATE('now', 'localtime')) AS value`).get().value
       || registration.is_done_today
       || registration.status !== "assigned"
     ) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PublicDisplay from "../components/PublicDisplay";
 
 // Formats queue creation times for the public screen.
@@ -16,49 +16,57 @@ export default function PublicDisplayPage() {
   const [courts, setCourts] = useState([]);
   const [queueNext, setQueueNext] = useState([]);
   const [courtError, setCourtError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
   // Refresh active courts and Rotation Queue Next Up matches every ten seconds.
   useEffect(() => {
     let isCancelled = false;
 
-    // Load both public-display data sources without blocking each other.
-    const refreshData = () => {
-      window.api.getCourts()
-        .then((courtsData) => {
-          if (isCancelled) return;
-          setCourts(Array.isArray(courtsData) ? courtsData : []);
+    // Load both public-display data sources without overlapping slow refreshes.
+    const refreshData = async () => {
+      if (refreshInFlightRef.current) return;
+      refreshInFlightRef.current = true;
+
+      try {
+        const [courtsResult, queueResult] = await Promise.allSettled([
+          window.api.getCourts(),
+          window.api.getRotationNextUpMatches(),
+        ]);
+        if (isCancelled) return;
+
+        if (courtsResult.status === "fulfilled") {
+          setCourts(Array.isArray(courtsResult.value) ? courtsResult.value : []);
           setCourtError("");
-        })
-        .catch(() => {
-          if (!isCancelled) {
-            setCourtError("Unable to load court information.");
-          }
-        });
+        } else {
+          // Do not leave an old active match visible after a failed refresh.
+          setCourts([]);
+          setCourtError("Unable to load court information.");
+        }
 
-      window.api.getRotationNextUpMatches()
-        .then((result) => {
-          if (isCancelled) return;
-
-          const mappedQueue = result?.success
-            ? result.data.matches
-              .filter((match) => match.source === "rotation")
-              .map((match) => ({
-                id: match.id,
-                source: match.source,
-                queuePosition: match.queuePosition,
-                name: [
-                  match.teamA.map((player) => player.name).join(" / "),
-                  match.teamB.map((player) => player.name).join(" / "),
-                ].join(" vs "),
-                timeJoined: formatTime(match.createdAt),
-              }))
-            : [];
+        const queueMatches = queueResult.status === "fulfilled"
+          ? queueResult.value?.data?.matches
+          : null;
+        if (queueResult.status === "fulfilled" && queueResult.value?.success && Array.isArray(queueMatches)) {
+          const mappedQueue = queueMatches
+            .filter((match) => match.source === "rotation")
+            .map((match) => ({
+              id: match.id,
+              source: match.source,
+              queuePosition: match.queuePosition,
+              name: [
+                match.teamA.map((player) => player.name).join(" / "),
+                match.teamB.map((player) => player.name).join(" / "),
+              ].join(" vs "),
+              timeJoined: formatTime(match.createdAt),
+            }));
 
           setQueueNext(mappedQueue);
-        })
-        .catch(() => {
-          if (!isCancelled) setQueueNext([]);
-        });
+        } else {
+          setQueueNext([]);
+        }
+      } finally {
+        refreshInFlightRef.current = false;
+      }
     };
 
     const initialRefresh = setTimeout(refreshData, 0);

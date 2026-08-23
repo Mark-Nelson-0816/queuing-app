@@ -36,7 +36,7 @@ try {
   const registrationByPlayerId = new Map(db.prepare(`
     SELECT id, player_id
     FROM registered_players_today
-    WHERE registered_date = CURRENT_DATE
+    WHERE registered_date = DATE('now', 'localtime')
   `).all().map((row) => [Number(row.player_id), Number(row.id)]));
   const insertMatch = db.prepare(`
     INSERT INTO rotation_matches (

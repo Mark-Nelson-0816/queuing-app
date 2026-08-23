@@ -213,7 +213,7 @@ assert.deepEqual(groupRotationUnmatchedPlayers([
 ]);
 
 // Large bounded Doubles previews stay responsive and avoid IPC/database work.
-for (const playerCount of [40, 80]) {
+for (const playerCount of [40, 80, 200]) {
   const largePlayers = Array.from(
     { length: playerCount },
     (_, index) => player(index + 1, "beginner"),

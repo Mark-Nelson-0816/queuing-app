@@ -41,8 +41,8 @@ legacyDatabase.exec(`
   INSERT INTO players (
     name, level, gender, prefer_mens, prefer_no_gender
   ) VALUES ('Legacy Player', 'Beginner', 'male', 1, 1);
-  INSERT INTO registered_players_today (player_id, status)
-  VALUES (1, 'waiting');
+  INSERT INTO registered_players_today (player_id, status, registered_date)
+  VALUES (1, 'waiting', DATE('now', 'localtime'));
 `);
 legacyDatabase.close();
 
@@ -607,7 +607,7 @@ try {
   db.prepare(`
     UPDATE registered_players_today
     SET status = 'playing'
-    WHERE player_id = ? AND registered_date = CURRENT_DATE
+    WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
   `).run(ids[9]);
   expectFailure(
     rotation.generateAndSaveRotationMatches([...exactMensIds, ids[9]], "doubles", "mens"),
@@ -616,7 +616,7 @@ try {
   db.prepare(`
     UPDATE registered_players_today
     SET status = 'done', is_done_today = 1
-    WHERE player_id = ? AND registered_date = CURRENT_DATE
+    WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
   `).run(ids[9]);
   expectFailure(
     rotation.generateAndSaveRotationMatches([...exactMensIds, ids[9]], "doubles", "mens"),
@@ -625,7 +625,7 @@ try {
   db.prepare(`
     UPDATE registered_players_today
     SET status = 'available', is_done_today = 0
-    WHERE player_id = ? AND registered_date = CURRENT_DATE
+    WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
   `).run(ids[9]);
   db.prepare(`
     UPDATE players
@@ -708,7 +708,7 @@ try {
 
   db.prepare(`
     UPDATE registered_players_today SET status = 'playing'
-    WHERE player_id = ? AND registered_date = CURRENT_DATE
+    WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
   `).run(removedPlayerId);
   expectFailure(rotation.updateWaitingMatch(
     editableMatch.id,
@@ -717,7 +717,7 @@ try {
   ), /not currently available/);
   db.prepare(`
     UPDATE registered_players_today SET status = 'available'
-    WHERE player_id = ? AND registered_date = CURRENT_DATE
+    WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
   `).run(removedPlayerId);
 
   const refilledMatch = rotation.updateWaitingMatch(
@@ -851,7 +851,7 @@ try {
   const tournamentPlayingLockId = Number(db.prepare(`
     INSERT INTO player_team_locks (
       player_1_id, player_2_id, lock_type, lock_date, is_active
-    ) VALUES (?, ?, 'today', CURRENT_DATE, 1)
+    ) VALUES (?, ?, 'today', DATE('now', 'localtime'), 1)
   `).run(...tournamentPlayerIds).lastInsertRowid);
   expectFailure(
     rotation.removeTeamLock(tournamentPlayingLockId),
@@ -878,7 +878,7 @@ try {
     const registration = db.prepare(`
       SELECT match_count, wins, losses, status, is_done_today
       FROM registered_players_today
-      WHERE player_id = ? AND registered_date = CURRENT_DATE
+      WHERE player_id = ? AND registered_date = DATE('now', 'localtime')
     `).get(player.id);
     assert.equal(registration.match_count, 1);
     assert.equal(registration.wins, winnerIds.has(player.id) ? 1 : 0);

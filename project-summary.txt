@@ -1,629 +1,692 @@
-BADMINTON QUEUING APP - CURRENT PROJECT CONTEXT
-===============================================
+BADMINTON QUEUING APP - CURRENT PROJECT SUMMARY
+================================================
 
-DOCUMENT PURPOSE
-================
+Purpose of this document
+------------------------
 
-This is the main current-system context document for the repository. It describes
-the implemented Electron, React, SQLite, Rotation Queue, Tournament, court,
-Public Display, Player Management, Settings, migration, performance, and test
-behavior after the Tournament revision through Phase 8.
+This is the primary technical context document for future development work on
+the Badminton Queuing App. It describes the current implemented system, not its
+development history. When this document and the repository disagree, use this
+order of authority:
 
-The repository is the final source of truth if this document and code ever
-disagree. `tournament-revision-spec.txt` remains as the historical finalized
-Tournament design and acceptance reference; that revision is now implemented.
+1. Current production code
+2. Current SQLite schema and startup migrations
+3. Electron preload and IPC handlers
+4. Backend query and business-logic modules
+5. Current integration/regression tests
+6. This document
 
-Important boundaries:
-
-- Rotation Queue and Tournament are independent matchmaking systems.
-- They share physical courts and permanent Player Profiles, but they do not
-  share selection, availability, queue-order, rank, or teammate-lock rules.
-- New Rotation data uses `rotation_*` tables.
-- New Tournament data uses revised Tournament events with
-  `tournament_format_version = 2` and normalized configuration tables.
-- Legacy tables and legacy Tournament rows remain for installed-database
-  compatibility. Do not use them for new revised workflows.
+`tournament-revision-spec.txt` remains a useful acceptance/design reference for
+the revised Tournament system, but the current code is authoritative.
 
 
-1. PROJECT PURPOSE
-==================
+1. APPLICATION OVERVIEW
+=======================
 
-The Badminton Queuing App is a local-first desktop application for badminton
-club operation. It manages:
+The Badminton Queuing App is an offline Windows desktop application for running
+a badminton club session. It manages:
 
-- permanent player profiles and lifetime statistics;
-- players registered for the current day and daily statistics;
+- permanent Player Profiles and lifetime statistics;
+- players registered for the current local calendar day;
 - Rotation Queue Singles and Doubles matchmaking;
-- waiting, incomplete, playing, finished, and cancelled Rotation matches;
-- daily teammate locks and same/adjacent-rank preferences;
-- multi-day Tournament events with independent configurations and history;
-- Tournament teams, groups, round robins, matches, standings, reset, and delete;
-- physical courts shared safely by all match sources;
-- a full-screen Public Display with Currently Playing and Rotation Next Up;
-- application preferences, runtime information, and full data reset.
+- Rotation teammate locks, rank preferences, queue order, and match lifecycle;
+- multi-day Tournament events, exact configurations, groups, round robins,
+  results, and history;
+- physical Courts shared by Rotation, Tournament, and legacy normal matches;
+- a read-only Public Display for active Courts and Rotation Next Up;
+- application preferences, database backup, Rotation-history cleanup, and data
+  reset.
 
-There is no web server, authentication, remote database, cloud synchronization,
-payment tracking, or multi-user collaboration.
+The application is local-only. It has no web server, authentication, cloud
+database, synchronization, payment tracking, or multi-user collaboration.
 
-
-2. ARCHITECTURE AND DATA FLOW
-=============================
-
-The application has four layers:
-
-1. React renderer (`src/`)
-   - Pages and components render operator/public interfaces.
-   - React owns selections, filters, pagination, modal state, loading guards,
-     and messages.
-   - Navigation is local state in `src/App.jsx`, not URL routing.
-
-2. Preload bridge (`electron/preload.cjs`)
-   - `contextBridge.exposeInMainWorld("api", ...)` exposes a limited
-     Promise-based `window.api`.
-   - Renderer calls use `ipcRenderer.invoke()` and are always awaited.
-
-3. Electron main process (`electron/main.js`)
-   - Creates the desktop BrowserWindow.
-   - Registers matching `ipcMain.handle()` channels.
-   - Calls synchronous database/query functions in the main process.
-
-4. SQLite/backend (`database/`)
-   - `better-sqlite3` provides synchronous prepared statements and transactions.
-   - Pure matching/generation rules are separated from persistence where useful.
-   - Query modules return renderer-friendly objects, usually using
-     `{ success, data }` or `{ success: false, message }`.
-
-Normal request flow:
-
-React component
-  -> window.api preload method
-  -> ipcRenderer.invoke(channel, arguments)
-  -> ipcMain.handle(channel, arguments)
-  -> database query/transaction
-  -> SQLite
-  -> renderer-friendly result
-  -> React state refresh
-
-There is no HTTP layer, Redux, or ORM.
+The initial page after application startup or a full renderer reload is Players.
+Navigation is application state in `src/App.jsx`; there is no URL router.
 
 
-3. TECH STACK, RUNTIME, AND BUILD
+2. TECHNOLOGY, RUNTIME, AND BUILD
 =================================
 
-Technology:
+Current stack:
 
 - JavaScript only; no TypeScript
 - Electron 43
-- React 19 / react-dom 19
+- React 19 and react-dom 19
 - Vite 8
-- Tailwind CSS 4 through `@tailwindcss/vite`
+- Tailwind CSS 4
 - lucide-react icons
 - better-sqlite3 13
-- React Compiler through the Vite/Babel integration
+- React Compiler through the Vite/Babel configuration
 - ESLint 10
-- electron-builder with Windows NSIS output
+- electron-builder with a Windows NSIS target
 
-Database runtime:
+Important commands:
 
-- Runtime filename: `badminton.db`
-- Runtime path: `path.join(app.getPath("userData"), "badminton.db")`
-- Repository `database.db` is not the normal runtime database.
-- `PRAGMA foreign_keys = ON` is enabled when the connection opens.
-- SQLite `user_version` is currently 0, so Settings reports
-  `Unversioned (0)`.
+- `npm run dev`: starts Vite and Electron together
+- `npm run build`: builds the renderer into `dist/`
+- `npm run lint`: runs ESLint over the repository
+- `npm run preview`: previews the Vite renderer build
+- `npm run electron`: starts Electron and expects the development Vite URL
+- `npm run dist`: builds and packages the Windows application
 
-Window/runtime behavior:
+Vite uses `base: "./"` so packaged file URLs work. Development loads
+`http://localhost:5173`; packaged builds load `dist/index.html`. The main window
+starts at 1200x800, maximizes, has no application menu, and supports F11
+fullscreen.
 
-- Window starts at 1200x800 and maximizes.
-- Packaged builds load `dist/index.html` with `loadFile()`.
-- Development loads `http://localhost:5173`.
-- Vite uses `base: "./"` for packaged file URLs.
-- F11 toggles fullscreen.
-- The package version is currently `0.0.0`; the Sidebar separately displays a
-  hard-coded version label.
+The package version is currently `0.0.0`. The Sidebar separately displays a
+hard-coded `v1.0.0`, so those two version labels are not currently synchronized.
 
-Commands:
-
-- `npm run dev`: Vite plus Electron
-- `npm run build`: production renderer build
-- `npm run lint`: ESLint
-- `npm run preview`: Vite preview
-- `npm run electron`: Electron only; development URL must already exist
-- `npm run dist`: build and package through electron-builder
-
-The NSIS build is configured with `deleteAppDataOnUninstall: true`.
+The NSIS setting `deleteAppDataOnUninstall: true` means uninstalling the
+packaged application is configured to delete its application data.
 
 
-4. IMPORTANT FILES
+3. ARCHITECTURE AND RESPONSIBILITIES
+====================================
+
+The application uses four layers:
+
+1. React renderer (`src/`)
+   - Renders operator and public interfaces.
+   - Owns filters, selections, pagination, modal state, loading guards, and
+     user-facing messages.
+   - Must not access SQLite, Node filesystem APIs, or Electron dialogs directly.
+
+2. Preload bridge (`electron/preload.cjs`)
+   - Uses `contextBridge.exposeInMainWorld("api", ...)`.
+   - Exposes a limited Promise-based `window.api` contract.
+   - Every method calls a named `ipcRenderer.invoke()` channel.
+
+3. Electron main process (`electron/main.js`)
+   - Creates the BrowserWindow and registers `ipcMain.handle()` channels.
+   - Owns native dialogs and filesystem destinations.
+   - Calls backend/database functions.
+
+4. SQLite/backend (`database/`)
+   - Uses synchronous better-sqlite3 prepared statements and transactions.
+   - Keeps pure Rotation/Tournament generation logic separate where practical.
+   - Revalidates critical operations against current database state.
+   - Usually returns `{ success: true, data }` or
+     `{ success: false, message }`; a few read APIs intentionally return raw
+     arrays or key/value objects.
+
+Normal data flow:
+
+Renderer
+  -> `window.api`
+  -> preload bridge
+  -> Electron IPC handler
+  -> backend query/transaction
+  -> SQLite
+  -> renderer-friendly response
+  -> React state refresh
+
+There is no HTTP API, ORM, Redux store, or direct renderer database access.
+
+
+4. DATABASE LOCATION, INITIALIZATION, AND DATE CONVENTIONS
+==========================================================
+
+Runtime database:
+
+- Filename: `badminton.db`
+- Path: `path.join(app.getPath("userData"), "badminton.db")`
+- The repository-root `database.db` file is not the normal runtime database.
+- `PRAGMA foreign_keys = ON` is enabled whenever the connection opens.
+- `PRAGMA user_version` is currently 0; Settings reports `Unversioned (0)`.
+
+`database/init.js` runs at startup. It creates missing tables, adds compatible
+columns to older installations, creates indexes/triggers, normalizes older daily
+statuses, and is intended to be safe when run repeatedly. It preserves legacy
+Tournament and normal-match data instead of replacing those tables.
+
+Local calendar-day rule
+-----------------------
+
+Business-day logic must use the machine's local calendar date:
+
+```sql
+DATE('now', 'localtime')
+```
+
+Do not reintroduce SQLite `CURRENT_DATE` for current-day business rules because
+`CURRENT_DATE` is UTC-based.
+
+Historical timestamp columns continue to use UTC timestamps:
+
+```sql
+CURRENT_TIMESTAMP
+```
+
+When a UTC timestamp must be assigned to a business/calendar day, convert it:
+
+```sql
+DATE(timestamp_column, 'localtime')
+```
+
+Current convention:
+
+- business day: `DATE('now', 'localtime')`
+- historical timestamp: `CURRENT_TIMESTAMP`
+- UTC timestamp interpreted as a local day:
+  `DATE(timestamp_column, 'localtime')`
+
+Fresh `registered_players_today.registered_date` and
+`player_team_locks.lock_date` schemas use local-date defaults. SQLite cannot
+safely replace an existing column default through the current additive migration,
+so an older installed table may still report `DEFAULT CURRENT_DATE`. Production
+registration and teammate-lock inserts explicitly write
+`DATE('now', 'localtime')`, and all current-day queries use the local date, which
+keeps old databases correct without destructive table rebuilding.
+
+
+5. IMPORTANT FILES
 ==================
 
-Root:
+Electron and startup:
 
-- `project-summary.txt`: current whole-system context (this file).
-- `tournament-revision-spec.txt`: implemented historical Tournament design and
-  acceptance requirements.
-- `system-flow.txt`: older workflow notes; prefer this summary/current code when
-  it conflicts.
-- `package.json`, `vite.config.js`, `eslint.config.js`: build/tool configuration.
+- `electron/main.js`: BrowserWindow startup and all IPC handlers.
+- `electron/preload.cjs`: complete renderer-facing `window.api` bridge.
+- `electron/databaseBackupDialog.js`: native Save dialog and backup filename.
 
-Electron:
-
-- `electron/main.js`: BrowserWindow and every IPC handler.
-- `electron/preload.cjs`: complete renderer-facing `window.api` contract.
-
-Backend/database:
+Database/backend:
 
 - `database/database.js`: opens the per-user database and enables foreign keys.
-- `database/init.js`: base schema plus idempotent compatibility migrations,
-  indexes, and triggers.
-- `database/playerQueries.js`: profile CRUD, daily registration/status, summary,
-  and protected profile deletion.
-- `database/courtQueries.js`: source-safe court state and public active matches.
-- `database/rotationLogic.js`: Rotation matching, level/rank, locks, fairness,
-  balance, and bounded generation.
-- `database/rotationQueries.js`: Rotation state, persistence, editing, ordering,
-  start, finish, and Next Up.
-- `database/tournamentGenerationLogic.js`: revised pure configuration validation,
-  random teams, deterministic group sizes, labels, and group round robins.
-- `database/tournamentRevisionQueries.js`: revised event/configuration lifecycle,
-  bulk retrieval, persistence, standings, courts, statistics, reset, and delete.
-- `database/tournamentQueries.js`: compatibility facade. It dispatches match
-  start/finish by explicit `configuration_id` and retains legacy Tournament
-  database operations for old-data compatibility tests/recovery.
-- `database/tournamentLogic.js`: legacy single-event generator retained only for
-  compatibility; new Tournament generation does not use it.
-- `database/settingsQueries.js`, `resetQueries.js`: preferences/runtime metadata
-  and full data reset.
-- `database/maintenanceQueries.js`: safe SQLite backup and transactional
-  seven-day Rotation-history retention cleanup.
-- `electron/databaseBackupDialog.js`: native Save-dialog flow and dated backup
-  filename; the renderer never receives arbitrary filesystem access.
+- `database/init.js`: schema, additive migrations, indexes, and triggers.
+- `database/playerQueries.js`: profile CRUD, daily registration/status, Player
+  Management data, bulk Mark All Done, and protected deletion.
+- `database/rotationLogic.js`: Rotation compatibility, fairness, rank rules,
+  locks, balance, and match generation.
+- `database/rotationQueries.js`: Rotation state, persistence, queue editing,
+  rebalancing, start, finish, cancellation, and Next Up.
+- `database/tournamentGenerationLogic.js`: revised pure Tournament validation,
+  team creation, group sizing, group labels, and group round robin.
+- `database/tournamentRevisionQueries.js`: revised Tournament event and match
+  lifecycle, retrieval, persistence, standings, reset, and deletion.
+- `database/tournamentQueries.js`: compatibility facade. Revised match start and
+  finish are dispatched by the presence of `configuration_id`; legacy Tournament
+  operations remain available internally for old data.
+- `database/tournamentLogic.js`: legacy single-configuration Tournament logic;
+  it is not the revised UI's generator.
+- `database/courtQueries.js`: Court management and source-safe active matches.
+- `database/settingsQueries.js`: settings and runtime metadata.
+- `database/maintenanceQueries.js`: online backup and Rotation-history cleanup.
+- `database/resetQueries.js`: destructive application-data reset.
 
-React pages:
+Main React pages:
 
-- `src/pages/Queue.jsx`: default Rotation operator page.
-- `src/pages/Players.jsx`: profiles and Players Today.
-- `src/pages/Tournament.jsx`: revised event/configuration/match/history UI.
-- `src/pages/Courts.jsx`: court management and current assignment display.
-- `src/pages/PublicDisplayPage.jsx`: ten-second public data refresh.
-- `src/pages/Settings.jsx`: preferences, live statistics, metadata, database
-  backup/history cleanup, and reset.
+- `src/pages/Players.jsx`: permanent profiles and Registered Today.
+- `src/pages/Queue.jsx`: complete Rotation operator workflow.
+- `src/pages/Tournament.jsx`: revised Tournament events/configurations/matches.
+- `src/pages/Courts.jsx`: Court add/list/delete UI.
+- `src/pages/PublicDisplayPage.jsx`: read-only polling controller.
+- `src/pages/Settings.jsx`: preferences, statistics, metadata, and maintenance.
 
-Important Tournament UI/utility files:
+Shared utilities/components:
 
-- `TournamentEventNavigator.jsx`: Current/Draft versus History event navigation.
-- `TournamentOptions.jsx`: compact division/type/category/level selectors.
-- `RegisteredPlayers.jsx`: permanent-profile filtering, selection, pagination,
-  validation feedback, and generation action.
-- `TournamentConfigurationSummary.jsx`: teams, snapshots, groups, standings,
-  results, rounds, and reset action.
-- `TournamentMatchManagement.jsx`: waiting/playing/finished filters, courts,
-  winners, Playing badges, and pagination.
-- `tournamentSelection.js`: current exact-level/gender selection derivations.
-- `tournamentMatchStatus.js`: one-pass map of Tournament players currently
-  playing elsewhere.
-- `tournamentDisplay.js`: event date/status presentation.
-- `playerLevel.js`: normalized labels, hierarchy, colors, and counts.
+- `src/utils/playerLevel.js`: level normalization, order, labels, and colors.
+- `src/utils/playerManagementUi.js`: Player table filters and sorting.
+- `src/utils/rotationUi.js`: Rotation eligibility feedback and Match Preview.
+- `src/utils/tournamentSelection.js`: exact Tournament selection validation.
+- `src/utils/tournamentMatchStatus.js`: Playing indicators for waiting
+  Tournament matches.
+- `src/components/PaginationControls.jsx`: 10/25/50/100 pagination.
 
 
-5. CURRENT SQLITE DATA MODEL
-============================
+6. PLAYER PROFILES
+==================
 
-5.1 Player and daily-session tables
------------------------------------
+`players` is the permanent profile table. Current fields are:
 
-`players`
+- `id`
+- `name`
+- `level`
+- `gender`
+- `contact_number`
+- `prefer_mixed`
+- `prefer_mens`
+- `prefer_womens`
+- `prefer_no_gender`
+- `total_matches_played`
+- `total_wins`
+- `total_losses`
+- `rank_match_preference`
+- `created_at`
 
-- Permanent profile: name, level, gender, contact, category preferences,
-  rank-match preference, lifetime matches/wins/losses, timestamps.
-- Levels are beginner, intermediate, upper_intermediate, or advanced.
-- Gender is male or female.
-- Rank preference is same_rank or adjacent_rank.
+There is no separate preferred match-type/mode field and no separate preferred
+level field. The profile's `level` is its current skill level. Category
+preferences and rank-match preference are used by Rotation, not Tournament.
 
-`registered_players_today`
+Supported levels and display colors:
 
-- Daily registration linked to `players.id`.
-- Stores daily match_count, wins, losses, status, done flag, registration date,
-  available_since, and timestamps.
-- Current workflows query `registered_date = CURRENT_DATE`; old rows persist.
+- `beginner`: Beginner, yellow, Rotation strength 1
+- `intermediate`: Intermediate, green, strength 2
+- `upper_intermediate`: Upper Intermediate, blue, strength 3
+- `advanced`: Advanced, red, strength 4
 
-5.2 Revised Tournament tables
------------------------------
+Level helpers normalize case, spaces, and hyphens before displaying/sorting.
+Unknown values use neutral styling, although profile create/update rejects an
+unsupported level.
 
-`tournaments`
+Supported gender values are `male` and `female`.
 
-- Shared top-level table for legacy and revised rows.
-- Revised rows have `tournament_format_version = 2`.
-- Revised fields: name, start_date, end_date, status, created_at.
-- Revised statuses: draft, ongoing, finished.
-- Legacy match_type/category fields remain only for old rows.
-- Revised validation triggers require name/dates, valid status, and
-  start_date <= end_date.
+Rank preferences:
 
-`tournament_configurations`
-
-- Belongs to one Tournament with ON DELETE CASCADE.
-- Stores division, match_type, category, level, created_at.
-- Unique `(tournament_id, division, match_type, category, level)`.
-- CHECK constraints enforce legal values and reject Mixed Singles.
-
-`tournament_participants`
-
-- Belongs to one exact configuration with ON DELETE CASCADE.
-- References permanent `players.id` with ON DELETE RESTRICT.
-- Stores level_snapshot and gender_snapshot; names are not snapshotted.
-- Unique `(configuration_id, player_id)`.
-- Insert/update triggers enforce configuration level and gender category.
-
-`tournament_groups`
-
-- Belongs to one configuration with ON DELETE CASCADE.
-- Stores group_number, name, created_at.
-- Group number and name are unique within one configuration.
-
-`tournament_teams`
-
-- Belongs to Tournament and, for revised rows, configuration/group.
-- Stores compatibility player_1_id/player_2_id and team_number.
-- Revised team number is unique within its configuration.
-- Legacy rows may have null configuration/group.
-
-`tournament_team_players`
-
-- Normalized revised team membership.
-- Links a team to a participant snapshot and slot 1 or 2.
-- A participant can belong to only one team in that configuration.
-- Team/slot is unique; triggers enforce matching configuration and Singles size.
-
-`tournament_rounds`
-
-- Revised rows belong to Tournament, configuration, and group.
-- Round number is unique within its group.
-- Legacy rows may contain only Tournament scope.
-
-`tournament_matches`
-
-- Revised rows belong to Tournament, configuration, group, and round.
-- References Team A, Team B, optional winner, and optional court.
-- Revised statuses: waiting, playing, finished.
-- Revised insertion always uses waiting; the base table retains legacy pending
-  compatibility.
-- Revised triggers enforce status/court/winner lifecycle and complete ownership.
-- A unique unordered team pair is enforced per revised group.
-- A unique partial index prevents two playing Tournament matches from using the
-  same non-null court inside this source.
-
-5.3 Rotation and court tables
------------------------------
-
-`courts`: name, stored status, timestamps.
-
-`rotation_matches`: explicit queue position, type/category/status, court,
-winner team, team strengths, balance difference, warnings/validation, start/end
-times, and timestamps.
-
-`rotation_match_players`: Rotation match participant, daily registration,
-permanent player, team, slot, and optional lock. Unique constraints prevent the
-same registration or team slot from appearing twice in one match.
-
-`player_team_locks`: daily/permanent lock rows with ordered player IDs. Current
-UI creates daily locks. Indexes/triggers prevent overlapping active locks.
-
-5.4 Other and legacy compatibility tables
------------------------------------------
-
-- `settings`: unique key/value strings.
-- `queue`, `matches`, `match_players`, `match_history`: older queue/normal-match
-  storage retained for compatibility and source-safe court/player checks.
-- `round_robin_matches`: removed pre-revision round-robin storage. It is not used
-  for new Tournament data, but remains for old history, court detach, reset, and
-  profile deletion protection.
-
-Legacy Tournament rows are not silently converted, deleted, or shown as revised
-events. Their rows remain readable by compatibility backend/court code. New event
-lists and history explicitly require `tournament_format_version >= 2`.
-
-
-6. SCHEMA INITIALIZATION AND MIGRATION SAFETY
-==============================================
-
-`database/init.js` is idempotent and runs on startup in a transaction.
-
-Important additive compatibility work:
-
-- Adds Tournament name, dates, and format version to older `tournaments` tables.
-- Adds configuration/group ownership columns to older Tournament team/round/
-  match tables.
-- Adds `tournament_matches.court_id` when missing.
-- Creates normalized configuration, participant, group, and team-player tables.
-- Adds player rank preference and daily available_since when missing.
-- Normalizes compatible old daily statuses and timestamps.
-- Replaces old global Tournament numbering indexes with partial legacy indexes
-  and revised configuration/group indexes.
-- Adds Tournament ownership/lifecycle validation triggers and indexes.
-- Adds profile-delete protection for legacy and revised Tournament references.
-- Adds Rotation/court/lock indexes and triggers.
-- Creates the unique one-ongoing-Tournament index only when installed legacy data
-  does not already contain multiple ongoing rows. Triggers still block adding a
-  further ongoing Tournament.
-
-No migration drops or rebuilds user Tournament tables. Existing old Tournament
-rows are preserved as legacy data. Repeated startup is covered by schema tests.
-
-Only one Tournament may be ongoing. Database triggers and, where safely
-creatable, a unique partial expression index enforce this in addition to backend
-transactions.
-
-Cross-source court exclusivity cannot be expressed by one SQLite index because
-normal, Rotation, and Tournament matches use different tables. Start transactions
-therefore check every supported source before reserving a court. Release queries
-also verify that no source still has a playing match.
-
-
-7. RENDERER-FACING WINDOW.API CONTRACT
-=======================================
-
-Player:
-
-- `addPlayer(...)`
-- `getPlayerManagementData()`
-- `registerPlayer(id)`
-- `getRegisteredPlayersToday()`
-- `removeRegisteredPlayer(id)`
-- `updatePlayerInfo(...)`
-- `deletePlayerProfile(id)`
-
-Revised Tournament:
-
-- `createTournament(name, startDate, endDate)`
-- `listTournaments()`
-- `getTournament(tournamentId)`
-- `getTournamentHistory()`
-- `deleteTournament(tournamentId)`
-- `getTournamentConfigurationData()`
-- `generateTournamentConfiguration(tournamentId, playerIds, division,
-  matchType, category, level)`
-- `resetTournamentConfiguration(configurationId)`
-- `startTournamentMatch(matchId, courtId)`
-- `finishTournamentMatch(matchId, winnerTeamId)`
-- `finishTournament(tournamentId)`
-
-The obsolete renderer APIs `createRoundRobinTournament()` and
-`getLatestTournament()` are removed. Revised pages always use explicit event IDs.
-The shared start/finish facade identifies revised versus legacy rows from the
-stored `configuration_id`, never from coincident numeric IDs across sources.
-
-Courts:
-
-- `getCourts()`, `getAvailableCourts()`, `addCourt(name)`, `removeCourt(id)`
-
-Rotation:
-
-- `getRotationState()`
-- `createTeamLock(...)`, `removeTeamLock(lockId)`
-- `updateRotationRankPreference(playerId, preference)`
-- `generateRotationMatches(playerIds, matchType, category)`
-- `getRotationMatches()`, `getRotationNextUpMatches()`
-- `updateWaitingMatch(...)`, `rebalanceWaitingMatch(matchId)`
-- `reorderWaitingMatch(matchId, direction)`, `cancelWaitingMatch(matchId)`
-- `startRotationMatch(matchId, courtId)`
-- `finishRotationMatch(matchId, winnerTeam, donePlayerIds)`
-
-Settings/reset:
-
-- `getSettings()`, `updateSetting(key, value)`, `getApplicationInfo()`
-- `backupDatabase()`, `clearOldRotationHistory()`
-- `resetAllData()`
-
-Bulk daily registration:
-
-- `markAllRegisteredPlayersDone()`
-
-Some older simple APIs intentionally return arrays or raw values rather than the
-modern result envelope. Check callers before changing a contract.
-
-
-8. PLAYER PROFILES AND DAILY REGISTRATION
-==========================================
+- `same_rank`: Same Rank Only
+- `adjacent_rank`: Adjacent Rank Allowed
 
 Profile validation:
 
-- Name is required, trimmed, and case-insensitively unique in application code.
-- Gender must be male or female.
-- Level must normalize to one of the four supported levels.
-- At least one Rotation category preference is required.
-- Rank preference must be same_rank or adjacent_rank.
-- Blank contact becomes `N/A`.
+- trimmed non-empty full name;
+- valid level and gender;
+- valid rank preference;
+- at least one preferred category;
+- empty contact becomes `N/A`;
+- names are duplicate-checked case-insensitively after trimming.
 
-Daily registration is separate:
+Name uniqueness is enforced by backend lookup, not a database UNIQUE constraint.
+Add and edit reject another profile with the same normalized name.
 
-- First registration today creates an available row with zero daily counters.
-- An already-active registration is rejected.
-- Reactivating a done player reuses today's row, preserves daily counters, and
-  resets availability time.
-- Mark Done is blocked while the player is assigned or playing.
-- Mark All Done performs one backend transaction. It marks every eligible
-  active daily registration done, skips assigned/playing players, returns
-  marked/skipped counts and skip reasons, and the renderer refreshes once.
-
-Effective current-day status priority:
-
-1. done flag -> done;
-2. active Rotation, Tournament, or legacy normal match -> playing;
-3. waiting/incomplete Rotation assignment -> assigned;
-4. stored playing -> playing;
-5. otherwise available.
-
-Profile deletion:
-
-- Blocked by an active current-day registration.
-- Blocked by revised Tournament participant/history references.
-- Also blocked by Rotation, locks, legacy Tournament teams, normal matches,
-  legacy history, or old round-robin references.
-- Unreferenced profile and unprotected daily rows are deleted atomically.
-
-Statistics:
-
-- Daily counters are in `registered_players_today`.
-- Lifetime counters are in `players`.
-- Finished Rotation matches update both daily and lifetime counters.
-- Finished revised Tournament matches update lifetime counters only.
-- Player Management's Matches Today summary counts completed Rotation matches,
-  not Tournament matches.
+Profile deletion is intentionally conservative. It is blocked while the player
+has an active current-day registration or any saved Rotation, Tournament,
+teammate-lock, normal-match, legacy match-history, or legacy round-robin
+reference. A history-free profile can be deleted together with its unprotected
+daily registration rows.
 
 
-9. COURTS AND SOURCE-SAFE ACTIVE MATCHES
-=========================================
+7. DAILY PLAYER REGISTRATION AND PLAYERS PAGE
+=============================================
 
-`getCourts()` merges active rows from:
+Permanent profile versus daily registration
+--------------------------------------------
 
-- `source: "tournament"`
-- `source: "rotation"`
-- `source: "normal"` for legacy compatibility
+A Player Profile persists across days. `registered_players_today` represents
+that profile's participation on a specific local calendar day.
 
-Every active match carries source plus match ID. Numeric ID alone is never a
-safe identity because separate tables may all contain ID 1.
+Current daily fields are:
 
-Start operations transactionally validate court existence, stored availability,
-active normal/Rotation/Tournament conflicts, and match lifecycle before marking
-the court/match playing.
+- `id` (daily registration ID)
+- `player_id` -> `players.id`
+- `match_count`
+- `wins`
+- `losses`
+- `status`
+- `is_done_today`
+- `registered_date`
+- `available_since`
+- `created_at`
 
-Finish, reset, and delete release a court only if no supported source still uses
-it. Removing a court is blocked for active Rotation/Tournament use. Legacy normal
-matches attached to an idle removed court are deleted; legacy round-robin rows
-are retained but reset to pending with no court.
+Current daily statuses are:
 
+- `available`: eligible for a new Rotation match if other rules pass
+- `assigned`: stored in a waiting/incomplete Rotation match
+- `playing`: currently playing
+- `done`: finished for the day and unavailable
 
-10. ROTATION QUEUE - CURRENT BEHAVIOR
-=====================================
+Startup migration maps older `waiting` and `finished` daily statuses to
+`available`, unless `is_done_today = 1`, which becomes `done`.
 
-10.1 Eligibility and categories
--------------------------------
+The same profile can register on another day. Current backend registration:
 
-A player may enter Rotation generation only when registered today, not done,
-not already assigned/playing in Rotation, and not playing in Tournament or
-legacy normal sources. Actual gender and Rotation profile preferences must fit
-the chosen category.
+- creates the first local-today row;
+- rejects a second active registration today;
+- reactivates the existing local-today row if it was marked done;
+- writes the local date explicitly on old as well as fresh schemas.
 
-- Singles: one versus one, minimum two.
-- Doubles: two versus two, minimum four.
-- Men's: male players.
-- Women's: female players.
-- Mixed: Doubles only, one male and one female per team.
-- No Gender: no team-gender restriction.
+There is no database UNIQUE constraint on `(player_id, registered_date)`;
+same-day uniqueness is enforced by the transactional backend. Existing legacy
+duplicate rows are not destructively migrated.
 
-An exact Men's/Women's/Mixed preference is preferred. A gender-compatible
-No Gender preference may be a fallback, but never bypasses gender, rank, lock,
-availability, or balance rules.
-
-10.2 Level, rank, balance, locks, and fairness
-----------------------------------------------
-
-Strength values:
-
-- Beginner 1
-- Intermediate 2
-- Upper Intermediate 3
-- Advanced 4
-
-Same Rank Only requires equal-level Singles or all four equal-level Doubles.
-Adjacent Rank allows one-level separation only when every affected player allows
-it. Doubles team strength is summed; balance difference is the absolute Team A
-minus Team B difference. `Balance 2-2 (0)` means equal team totals and zero gap.
-
-Daily teammate locks apply to Doubles, cannot overlap, must remain category
-valid, and keep partners together. Mixed locks require one male and one female.
-A lock never forces an otherwise invalid match. Wide-level locks are accepted
-only through the existing narrow balanced exception.
-
-Fairness sorts primarily by older available_since, fewer matches today, then
-stable player ID. Candidate scoring also considers exact preference/rank,
-balance, repeated teammates/opponents, and random tie value.
-
-10.3 Generation and lifecycle
------------------------------
-
-Singles uses compatible-pair construction and a memoized bitmask selection.
-Doubles uses bounded fairness sorting, lock-first local checks, exact-level
-buckets, and small adjacent-level windows rather than exhaustive four-player
-global search.
-
-Generation reloads canonical daily state and persists matches/slots in one
-transaction. Matched registrations become assigned; unmatched players remain
-available with reasons. React applies the returned state once.
-
-Match Preview is compatibility-aware rather than count-only. Doubles reuses the
-bounded pure Doubles generator core for category, rank, lock, Mixed-team, and
-balance checks. Singles uses a conservative quadratic pairing evaluator instead
-of the exhaustive saved-generation bitmask solver. Preview evaluates every
-selected player across pages, may conservatively underestimate a complex batch,
-and shows Ready only when at least one complete legal match is possible.
-Generation Notes group players that share an unmatched reason. Zero generated
-matches use warning feedback; partial generation remains successful and reports
-the unmatched players separately.
-
-Statuses:
-
-- waiting: valid and eligible to start/appear in Next Up;
-- incomplete: editable but not startable or public;
-- playing: on a court;
-- finished: locked winner/statistics;
-- cancelled: removed from active queue.
-
-Waiting/incomplete matches may be edited, rebalanced, reordered, or cancelled.
-Queue positions are explicit, 1-based, compacted after start/cancel, and can be
-swapped by operator reorder.
-
-Finish requires a playing match, assigned court, and Team 1/2 winner. It updates
-daily/lifetime statistics once, marks operator-selected players done, requeues
-the rest as available with a new wait time, and releases the court. `autoRequeue`
-only sets the finish dialog's initial done checkboxes; the operator can change
-them before confirming.
-
-The player selector shows each registration's existing bulk-loaded
-`match_count` as Matches Today. The Matches Today control supports All, Lowest,
-and Highest; it stably sorts the complete filtered result before pagination and
-combines with search, level, gender, availability, and configuration eligibility.
-Select All Eligible operates on the complete filtered eligible result across
-every pagination page in one React state update; sorting does not change or
-remove the current selection.
-
-10.4 Rotation Next Up
+Players page behavior
 ---------------------
 
-Next Up queries only `rotation_matches` and requires waiting status, queue
-position, no court, no validation error, and complete team/player counts.
-Ordering is queue_position, created_at, then ID ascending. Public Display shows
-the first six. Tournament waiting matches can never enter this query.
+The Players page loads profiles, today's rows, and summary counts in one backend
+payload. It provides:
+
+- Player Profiles and Registered Today sections;
+- Add Profile from the Profiles section;
+- one shared Add/Edit Profile modal and validation flow;
+- Register Existing with search, level, and gender filtering;
+- reactivation of a profile marked done today;
+- edit and protected profile deletion;
+- Mark Done with confirmation;
+- bulk Mark All Done with confirmation;
+- search, filters, sorting, empty/loading states, and pagination;
+- stable fixed table proportions and horizontal scrolling on narrow screens.
+
+Player Profiles search name/contact and filter by level, gender, rank preference,
+and category preference. Registered Today searches name and filters by level,
+gender, and status. Both use client-side sorting before pagination. Shared rows
+per page are 10, 25, 50, and 100; default is 10.
+
+Registered Today shows current computed status across Rotation, Tournament, and
+legacy normal playing matches, plus daily match count, daily wins/losses, and
+active locked teammate.
+
+Mark Done rejects a player who is assigned to a waiting/incomplete Rotation
+match or playing in any recognized active source. It never deletes the profile.
+
+Mark All Done is one backend transaction and one renderer refresh. It marks all
+currently active, unassigned, non-playing daily registrations done. Assigned and
+playing players are skipped and returned with their names/reasons; already-done
+rows are not counted as new work.
 
 
-11. REVISED TOURNAMENT - CURRENT IMPLEMENTED BEHAVIOR
-=====================================================
+8. ROTATION QUEUE
+=================
 
-11.1 Event model
-----------------
-
-A Tournament event has a required name, start date, end date, created timestamp,
-and status:
-
-- draft: editable and not yet started;
-- ongoing: at least one match has started; still allows configuration generation
-  and reset;
-- finished: manually closed, read-only history.
-
-Multiple drafts and finished events may coexist. Only one event may be ongoing.
-Events are multi-day records and do not reset at midnight.
-
-Starting the first waiting match of a draft changes it to ongoing inside the same
-transaction. This fails if another event is ongoing. Completing the last match
-does not auto-finish the event. Manual Finish Tournament succeeds only when no
-waiting or playing match exists anywhere in the event.
-
-Finished events appear in History with full read-only configuration/group/match
-data unless explicitly permanently deleted.
-
-11.2 Configuration matrix
+8.1 Scope and data source
 -------------------------
+
+Rotation uses current-local-day registrations, their Rotation preferences,
+current status, current-day statistics, and active teammate locks. It does not
+reuse Tournament configuration/group rules.
+
+Supported match types:
+
+- Singles
+- Doubles
+
+Supported categories:
+
+- Men's (`mens`)
+- Women's (`womens`)
+- Mixed (`mixed`, Doubles only)
+- No Gender Preference (`no_gender`)
+
+Category eligibility combines gender and profile preference:
+
+- Men's requires male; exact Men's preference is preferred, while a compatible
+  No Gender preference may be used as fallback.
+- Women's requires female; exact Women's preference is preferred, while a
+  compatible No Gender preference may be used as fallback.
+- Mixed requires male/female profile gender and Doubles; exact Mixed preference
+  is preferred, while No Gender may be fallback.
+- No Gender accepts either gender but requires No Gender preference. Legacy
+  profiles with no stored category preference are also allowed in No Gender.
+
+An exact category preference is ranked ahead of a No Gender fallback. Category
+fallback never bypasses Men's/Women's gender requirements.
+
+8.2 Authoritative eligibility
+-----------------------------
+
+A player can enter a newly generated Rotation match only when all current
+backend checks pass:
+
+- profile is registered for the current local day;
+- daily row is not done;
+- player is not playing a Rotation, Tournament, or legacy normal match;
+- player is not already assigned to another waiting/incomplete/playing Rotation
+  match;
+- daily status is `available` or compatible legacy `waiting`;
+- selected category, gender, rank, and lock rules pass.
+
+The frontend explains incompatibility and disables selection, but the database
+transaction reloads canonical current state and revalidates everything. Stale
+renderer state cannot authorize an unavailable player.
+
+Done players remain in Player Management and statistics/history but are hidden
+from the Rotation selectable list. Playing, assigned, and category-incompatible
+players can remain visible as unavailable rows depending on the current filters.
+
+8.3 Rotation player-list UX
+---------------------------
+
+The player pool supports:
+
+- name search;
+- level and gender filters;
+- availability filter;
+- `Matches Today: All`, `Lowest`, and `Highest`;
+- whole-row selection plus accessible checkbox selection;
+- clear selection and Select All Eligible;
+- pagination at 10/25/50/100 rows;
+- current selection preserved across pagination;
+- a sessionStorage draft for selection, match type, and category while navigating
+  within the current renderer session.
+
+Matches Today uses the current daily row's `match_count`; React does not scan
+match history or query once per row. Previous-day daily rows are excluded.
+Lowest/Highest sorts the entire already-filtered result before pagination and
+preserves existing order when counts tie. All keeps the default ordering:
+eligible rows before blocked rows, then player name.
+
+Select All Eligible applies to every eligible row in the complete current
+filtered result, not only the visible page, using one state update. Changing
+filters does not silently deselect hidden players. A backend state refresh does
+remove selections that have become genuinely ineligible. Changing match type or
+category asks for confirmation before removing incompatible selected players.
+
+8.4 Same Rank and Adjacent Rank rules
+-------------------------------------
+
+Singles:
+
+- same-level opponents are valid;
+- adjacent levels differ by exactly one level;
+- an adjacent-level Singles pair is legal only when both players allow adjacent
+  rank;
+- a Same Rank Only player cannot be paired across levels.
+
+Doubles:
+
+- four players of one level are exact-rank compatible;
+- if any participant is Same Rank Only, all four must be the same level;
+- otherwise adjacent-rank matching normally requires the four-player level span
+  to be no more than one level;
+- each Mixed Doubles team must contain one male and one female;
+- team strength is the sum of level values; displayed balance difference is the
+  absolute difference between team strengths;
+- a deliberately locked wide-level teammate pair has a narrow exception: both
+  wide teams must be explicitly locked where applicable and the final teams must
+  remain balanced within one strength point. The generator adds a warning.
+
+The generator prefers exact rank over adjacent fallback and records warnings
+when fallback rules are used.
+
+8.5 Fairness and repeat avoidance
+---------------------------------
+
+Fairness applies only after category, gender, rank, lock, and complete-match
+compatibility. It does not force an illegal match.
+
+The base player fairness order is:
+
+1. older `available_since` (longer waiting) first;
+2. fewer current-day Rotation matches;
+3. stable player ID.
+
+Candidate scoring also prefers:
+
+- exact category preference over No Gender fallback;
+- exact rank over adjacent fallback;
+- better team-strength balance;
+- fewer repeated teammate pairings today;
+- fewer repeated opponent pairings today;
+- randomness only as a final tie-breaker.
+
+Repeat counts come from finished Rotation matches whose end/creation timestamp
+belongs to the current local calendar day.
+
+8.6 Match Preview and generation
+--------------------------------
+
+Match Preview uses the real compatibility rules. It shows only complete legal
+matches and can report that numerically sufficient players still cannot form a
+match. It respects category, availability, rank preferences, Mixed composition,
+and teammate locks. It reports unmatched selected players and reasons.
+
+Doubles preview/generation uses bounded bucket and local candidate checks.
+Singles persisted generation uses a memoized bitmask solver to maximize a
+non-overlapping compatible set; the renderer preview uses a bounded conservative
+Singles pass so large selection changes remain responsive.
+
+Generate Matches is explicit and guarded against duplicate clicks. One SQLite
+transaction reloads selected players, generates matches, inserts each waiting
+match and participant slots, assigns queue positions, and changes only matched
+daily registrations to `assigned`. Unmatched players remain available. A failure
+rolls back the batch.
+
+8.7 Rotation teammate locks
+---------------------------
+
+Teammate locks are Rotation-only and currently created as daily (`today`) locks.
+The schema also recognizes `permanent`, but the current UI/backend creation flow
+creates today's lock.
+
+Rules:
+
+- exactly two different profiles;
+- both must be registered today, available, and eligible;
+- both must fit the selected Doubles category;
+- Mixed lock requires one male and one female;
+- one player cannot belong to overlapping active locks;
+- locked players must remain on the same generated/edited team;
+- partial selection of a locked pair cannot fabricate a match;
+- rank and team-balance rules still apply;
+- lock membership does not guarantee a match if no legal opponent team exists.
+
+Participant rows store `lock_id`. Removing a lock is prohibited while either
+member is playing. Removal deactivates the lock, clears it from affected
+waiting/incomplete participant rows, and revalidates those matches. Saved
+finished history can retain its original lock reference.
+
+Tournament does not use Rotation teammate locks.
+
+8.8 Waiting match controls and queue order
+------------------------------------------
+
+Generated matches start as `waiting`. Operator edits can create `incomplete`
+matches when slots or compatibility are invalid. Waiting/incomplete matches have
+a unique queue position and support:
+
+- move up/down in real queue order;
+- edit player/team slots;
+- Rebalance using the same rank/category/lock rules;
+- unlock where allowed;
+- cancellation.
+
+Queue positions are normalized to a stable one-based sequence after relevant
+actions. Alternative UI sorting can be used for viewing, but reordering buttons
+are disabled unless Queue Order is active.
+
+Rebalance keeps the current participants and searches for the best valid team
+arrangement; it does not replace them with other players.
+
+Cancellation changes the match to `cancelled`, removes its queue position, and
+returns non-done participants to `available` with a new availability time. It
+does not award statistics.
+
+8.9 Rotation lifecycle, Courts, and statistics
+-----------------------------------------------
+
+Current flow:
+
+Available daily players
+  -> compatibility-aware Match Preview
+  -> atomic generation
+  -> Waiting (or Incomplete after editing)
+  -> Playing on a selected Court
+  -> Finished with Team 1 or Team 2 winner
+  -> statistics, player state, and Court update
+
+Start Match transactionally verifies:
+
+- match still exists and is complete `waiting`;
+- stored category/rank/lock arrangement is still valid;
+- all participants are still current-day, assigned, not done, and not playing;
+- selected Court exists and is available;
+- no playing normal, Rotation, or Tournament match occupies the Court.
+
+Finishing requires a `playing` match, assigned Court, and winner Team 1 or 2.
+Duplicate finish is rejected by status and conditional update. Every participant
+receives +1 daily match and +1 lifetime match; winners receive wins and losers
+receive losses in both daily and lifetime totals.
+
+The finish modal lets the operator mark any participants done. Unchecked players
+return to `available` with a new `available_since`, placing them behind longer
+waiting compatible players. The `autoRequeue` setting only controls the modal's
+default selection: when enabled, nobody is preselected as done; when disabled,
+all participants are preselected as done. The operator can still change the
+checkboxes before confirming. It does not automatically generate another match.
+
+The Court is released only if no active match from any supported source still
+uses it.
+
+8.10 Rotation Next Up
+---------------------
+
+Next Up is a dedicated Rotation-only query. A row must be:
+
+- source `rotation`;
+- status `waiting`;
+- have a non-null queue position;
+- have no Court;
+- have no validation message;
+- contain exactly 2 Singles or 4 Doubles participants;
+- contain the correct number of players on each team.
+
+Ordering is `queue_position`, then `created_at`, then match ID ascending. Public
+Display shows at most the first six. Incomplete, playing, finished, cancelled,
+and Tournament waiting matches never appear.
+
+
+9. REVISED TOURNAMENT SYSTEM
+============================
+
+9.1 Current architecture
+------------------------
+
+The active Tournament UI uses the revised event/configuration model marked by
+`tournament_format_version = 2`:
+
+Tournament Event
+  -> exact Configurations
+  -> participant snapshots
+  -> Teams
+  -> Groups
+  -> Rounds
+  -> Matches
+
+It is not the old one-global-round-robin model and is independent from Rotation
+selection, preferences, locks, and queueing.
+
+9.2 Event model
+---------------
+
+A revised event contains:
+
+- required name;
+- required `start_date` and `end_date` in YYYY-MM-DD form;
+- `start_date <= end_date`;
+- status `draft`, `ongoing`, or `finished`;
+- creation timestamp.
+
+Multiple draft and finished events may coexist. Only one Tournament row may be
+ongoing. The database uses validation triggers and, when existing legacy data is
+already consistent, a partial unique index for this rule.
+
+Events can span multiple days and do not reset at midnight. Starting the first
+match of a draft changes that event to ongoing in the same transaction. If a
+different event is ongoing, the start fails. Configurations may still be
+generated or reset while the event is ongoing.
+
+Finishing is manual. The backend rejects Finish Tournament while any revised
+match in the event is waiting or playing. A finished event is read-only for
+generation, reset, start, and match finish, and appears in Tournament History.
+The current backend only checks for unfinished matches; therefore a draft with
+zero generated matches can currently be marked finished.
+
+Deletion is a separate explicit action and is allowed for draft, ongoing, and
+finished revised events after confirmation.
+
+9.3 Exact configuration matrix
+------------------------------
+
+One exact configuration is uniquely identified by:
+
+Tournament + division + match type + category + level
 
 Divisions:
 
@@ -634,78 +697,90 @@ Divisions:
 - 11 Under (`u11`)
 - 9 Under (`u9`)
 
-Age is a label only. The app has no birthday, age, birth-month, or division-age
-eligibility fields; the administrator handles age eligibility manually.
+The application does not store birthday/age or validate age eligibility. The
+administrator chooses the division.
 
-Singles categories: Men's, Women's, No Gender.
-Doubles categories: Men's, Women's, Mixed, No Gender.
-Mixed Singles is invalid.
+Singles categories:
 
-Levels: Beginner, Intermediate, Upper Intermediate, Advanced. Tournament level
-matching is exact only; Rotation adjacent-level preference is ignored.
+- Men's
+- Women's
+- No Gender
 
-An exact configuration is:
+Doubles categories:
 
-  Tournament + division + match type + category + level
+- Men's
+- Women's
+- Mixed
+- No Gender
 
-It is unique inside an event. Six divisions times 28 legal configurations per
-division gives 168 possible legal combinations. An event generates only the
-specific configurations the administrator needs.
+Mixed Singles is invalid in pure logic, UI options, SQL CHECK constraints, and
+tests. Tournament levels are the same four displayed profile levels, but matching
+is exact only. Tournament has no adjacent-level rule.
 
-11.3 Player selection and snapshots
------------------------------------
+Six divisions times 28 legal type/category/level combinations per division gives
+168 possible configurations. An event creates only the configurations the
+administrator chooses. Duplicate exact configurations inside one event are
+prevented by both backend handling and a database UNIQUE constraint.
 
-Tournament selection loads permanent `players` profiles directly in one bulk
-query. It does not require or read `registered_players_today` for eligibility.
-It ignores Rotation category preferences, rank preference, queue status, and
-teammate locks.
+9.4 Participant source and snapshots
+------------------------------------
 
-Eligibility is exact configuration level plus:
+Tournament configuration selection loads permanent `players` profiles directly
+in one bulk query. It does not require Registered Today and ignores:
 
-- Men's: male only;
-- Women's: female only;
-- No Gender: male or female;
-- Mixed Doubles: male and female, with equality validated before generation.
+- daily Rotation status;
+- Rotation category preferences;
+- Rotation rank preference;
+- Rotation queue order;
+- Rotation teammate locks.
 
-One player may join many different configurations, including different
-categories in the same event. The same player may appear only once inside one
-exact configuration.
+Eligibility is exact current profile level plus category gender:
 
-Participant rows snapshot level and gender. Later permanent profile level/gender
-changes do not rewrite history. Name is intentionally not snapshotted; current
-profile name corrections appear in Tournament display/history. Profile deletion
-is blocked while any Tournament participation/history remains.
+- Men's: male only
+- Women's: female only
+- No Gender: male or female
+- Mixed Doubles: male and female, with equal selected counts
 
-There is no Tournament payment, check-in, age, or daily-registration field.
+The same player may participate in multiple different configurations, including
+multiple categories in one event. The same player may appear only once inside
+one exact configuration.
 
-Level presentation:
+`tournament_participants` stores `level_snapshot` and `gender_snapshot`. Later
+profile level/gender edits do not change historical configuration eligibility.
+Name is intentionally not snapshotted: displays and History use the current
+profile name. Permanent profile deletion is blocked while any Tournament
+participation/history references the player.
 
-- Beginner: yellow
-- Intermediate: green
-- Upper Intermediate: blue
-- Advanced: red
+Tournament has no payment, check-in, age, daily-statistic, or registration-status
+fields.
 
-11.4 Teams
-----------
+9.5 Team generation
+-------------------
 
-Singles creates one randomized one-player team per selected profile; minimum two
-teams.
+Singles:
 
-Doubles requires at least four players and an even count:
+- one selected player becomes one team;
+- minimum two players/teams;
+- team order is randomized before grouping.
 
-- Men's: random male pairs;
-- Women's: random female pairs;
-- No Gender: random pairs regardless of gender;
-- Mixed: males and females shuffled separately, then paired one male plus one
-  female. Counts must be equal, with a specific shortage message.
+Doubles:
 
-Tournament has no teammate locks, manual partner editing, rank balancing, or
-adjacent-level pairing.
+- two players per team;
+- minimum four selected players;
+- total count must be even;
+- Men's uses random male pairs;
+- Women's uses random female pairs;
+- No Gender uses random pairs regardless of gender;
+- Mixed shuffles male and female lists separately, then pairs one male and one
+  female; counts must be equal.
 
-11.5 Groups
------------
+There is no Tournament teammate locking, manual partner editing, Rotation rank
+balancing, or adjacent-level fallback.
 
-Required deterministic group-size table:
+9.6 Group sizing and labels
+---------------------------
+
+The pure generator uses this exact fixed table:
 
 - 1 team -> reject
 - 2 -> [2]
@@ -724,342 +799,864 @@ Required deterministic group-size table:
 - 15 -> [5,5,5]
 - 16 -> [4,4,4,4]
 
-Above 16, the bounded formula creates the maximum balanced number of groups
-with at least four teams, keeping sizes between four and six. Team membership is
-randomized. Groups are `Group A`, `Group B`, ... `Group Z`, `Group AA`, etc.
-Lettering restarts for every configuration.
+Above 16 teams, the current formula creates `floor(teamCount / 4)` groups and
+distributes teams evenly. This produces balanced four- or five-team groups for
+current inputs. Teams are shuffled before assignment.
 
-11.6 Group round robin
-----------------------
+Groups are named Group A, Group B, ... Group Z, Group AA, and beyond. Labels
+restart independently for each exact configuration.
 
-Each group independently uses the circle method. Every unordered team pair in
-that group occurs once; no self-match, duplicate, or cross-group match is stored.
-Odd group sizes use an in-memory dummy bye that is never inserted. Expected
-matches per group are `n * (n - 1) / 2`.
+9.7 Group round robin
+---------------------
 
-There are no automatic semifinals, finals, championship bracket, seeds, or
-cross-group scheduling. Administrators handle any finals outside this workflow.
+Each group independently uses the circle method:
 
-11.7 Atomic configuration persistence
---------------------------------------
+- every unordered team pair in that group occurs exactly once;
+- no self-match or duplicate pair;
+- no cross-group match;
+- even groups normally use `n - 1` rounds;
+- odd groups add an in-memory dummy bye, use `n` rounds, and never store a dummy
+  match;
+- matches per group equal `n * (n - 1) / 2`.
 
-Generation validates event editability and exact uniqueness, bulk-loads
-canonical profiles through SQLite `json_each`, runs pure generation, then writes
-configuration, participant snapshots, groups, teams, team members, rounds, and
-waiting matches in one transaction with real inserted IDs. Any failure rolls
-back the complete configuration and leaves other configurations untouched.
+There are no automatic semifinals, finals, seeds, championship brackets, scores,
+sets, or cross-group scheduling.
 
-11.8 Match lifecycle and Playing indicators
---------------------------------------------
+Confirmed current large Mixed Doubles example:
 
-Statuses are waiting, playing, and finished.
+80 profiles
+  -> 40 teams
+  -> 10 groups
+  -> 4 teams per group
+  -> 3 rounds per group
+  -> 6 matches per group
+  -> 60 total matches
 
-Waiting Tournament matches are not a queue: no queue position, auto-next, or
-Tournament Next Up exists. The administrator can choose any eligible waiting
-match and an available court.
+It is not a 780-match global round robin.
 
-Start validates event status, waiting status, complete participants, court
-availability across every match source, and that no participant is already in
-another playing Tournament match. A player may have any number of waiting
-Tournament matches but only one playing Tournament match. Tournament deliberately
-does not add a Tournament-versus-Rotation player conflict; events and Rotation
-are expected on separate venue days. Shared court conflict protection still
-applies.
+9.8 Atomic persistence and retrieval
+------------------------------------
 
-Phase 7.5 UI behavior: every waiting match lists players individually and shows
-a `Playing` badge beside each player currently active in another Tournament
-match. Multiple affected players all receive badges. The match remains visible
-and is not reordered. A memoized one-pass Map is derived from the already-loaded
-complete event graph, so no per-player query or N+1 IPC call occurs. Finishing
-the active match refreshes the graph and removes the badge. Backend start
-validation remains authoritative.
+Configuration generation:
 
-Finish is allowed only for a playing match with a court and winner Team A or
-Team B. There is no individual match tie, score, set, or result editing. The
-transaction conditionally changes playing to finished, saves the winner, updates
-lifetime statistics once, and safely releases the court. Duplicate finishes are
-rejected and cannot increment statistics twice.
+- verifies event editability and exact uniqueness;
+- bulk-loads canonical profiles through SQLite `json_each`;
+- runs the pure generator;
+- inserts configuration, participant snapshots, groups, teams, normalized team
+  members, rounds, and waiting matches in one transaction;
+- uses actual inserted database IDs for every foreign key;
+- rolls back the entire exact configuration on failure;
+- leaves all other configurations untouched.
 
-11.9 Standings and group result
+Event retrieval uses a fixed set of bulk queries for configurations,
+participants, groups, teams, rounds, and matches, then assembles renderer data
+with Maps. It returns current names plus stored level/gender snapshots, Courts,
+standings, and group results.
+
+9.9 Tournament match lifecycle
 -------------------------------
 
-Standings are derived from match rows for each group:
+Current statuses are:
+
+- `waiting`
+- `playing`
+- `finished`
+
+Tournament waiting matches are not a queue. They have no queue position,
+auto-next behavior, or Public Display Next Up entry. The administrator chooses
+any eligible waiting match and available Court.
+
+Start Match transactionally verifies:
+
+- revised match/event exists and is not finished;
+- match is still waiting;
+- Singles/Doubles participant membership is complete and unique;
+- Court exists, has stored status available, and is not occupied by a playing
+  normal, Rotation, or Tournament match;
+- no participating profile is already playing another Tournament match;
+- first start can change draft to ongoing without violating the one-ongoing rule.
+
+A profile may have multiple waiting Tournament matches across configurations,
+but can play only one Tournament match at a time. Tournament intentionally does
+not check whether that player is playing Rotation or a legacy normal match; the
+current product assumes Rotation and Tournament run on separate venue days.
+Shared Court conflict checks still apply across all sources.
+
+Waiting match cards show a `Playing` badge beside every player currently active
+in another Tournament match. The match stays visible and in the same order. The
+badge map is derived in one pass from the already-loaded event graph and clears
+after refresh when the other match finishes. Backend validation remains final.
+
+Finish Match requires:
+
+- event not finished;
+- match status playing;
+- assigned Court;
+- winner exactly Team A or Team B.
+
+There is no score, set, individual-match tie, or result editing. One transaction
+conditionally stores the winner, changes status to finished, increments lifetime
+profile statistics once, and safely releases the Court. Duplicate finish attempts
+cannot increment statistics twice.
+
+Tournament never changes `registered_players_today.match_count`, wins, losses,
+or daily status.
+
+9.10 Standings and group results
+--------------------------------
+
+Standings are derived from finished group matches:
 
 - matches played
 - wins
 - losses
 
-Sort is wins descending, losses ascending, team number ascending. When a group
-is complete, one highest-win team is Group Winner. Equal highest wins produce a
-Tie that displays every top team. There is no head-to-head, point, set, score,
+Sort order is wins descending, losses ascending, then team number ascending.
+When every match in a group is finished:
+
+- one highest-win team -> Group Winner;
+- multiple teams sharing highest wins -> Tie listing every leader.
+
+There is no head-to-head, point difference, set difference, score difference,
 or manual tiebreaker.
 
-11.10 Lifetime statistics
---------------------------
-
-Singles winner: +1 lifetime match/+1 win; loser: +1 match/+1 loss.
-Doubles: both winning players receive +1 match/+1 win and both losing players
-receive +1 match/+1 loss.
-
-Tournament never updates registered_players_today match_count/wins/losses.
-
-11.11 Reset Configuration
--------------------------
-
-Available only for draft/ongoing events and protected by confirmation. It
-deletes exactly one configuration and its participants, teams, team members,
-groups, rounds, waiting/playing/finished matches, winners, and results. Other
-configurations remain intact. Playing courts are collected and safely released.
-
-Intentional rule: lifetime statistics already awarded by finished matches are
-not reversed. The same exact configuration may be generated again after reset.
-Finished events are read-only and cannot reset.
-
-11.12 Delete Tournament
------------------------
-
-Permanent deletion is available for draft, ongoing, and finished revised events
-after a strong confirmation. One transaction collects playing courts, deletes
-the event and all cascade-owned configuration data, then safely releases those
-courts. It does not delete Player Profiles, daily rows, Rotation data, other
-Tournaments, or lifetime statistics.
-
-Deleting a finished event removes it from History. Deleting the ongoing event
-leaves no stale ongoing state, so another draft may start. A duplicate delete
-returns Tournament not found.
-
-11.13 Tournament History
+9.11 Lifetime statistics
 ------------------------
 
-History lists finished revised events and reloads the complete event graph:
-dates, configurations, participants, snapshots, teams, groups, rounds, matches,
-winners, standings, and group winner/tie results. Finished data is read-only
-unless the whole event is explicitly deleted. Records persist across days and
-application restarts.
+Singles winner and loser each receive +1 lifetime match; the winner receives
++1 win and the loser +1 loss.
+
+Doubles applies the same increments to both winning players and both losing
+players.
+
+Tournament reset and deletion intentionally do not reverse lifetime statistics
+already awarded by finished matches.
+
+9.12 Reset Configuration
+------------------------
+
+Reset is available only for draft/ongoing events after confirmation. It deletes
+one exact configuration and all of its participant snapshots, team members,
+teams, groups, rounds, waiting/playing/finished matches, winners, and results.
+Other configurations remain untouched. Courts used by that configuration's
+playing matches are collected and safely released.
+
+Lifetime profile statistics remain. The exact configuration can be generated
+again afterward. Finished events cannot reset.
+
+9.13 Delete Tournament and History
+----------------------------------
+
+Delete Tournament is allowed for draft, ongoing, and finished revised events
+after confirmation. One transaction:
+
+- collects playing Courts;
+- deletes the event and cascade-owned revised data;
+- releases Courts that are no longer active;
+- leaves Player Profiles, daily rows, Rotation data, other events, and lifetime
+  statistics untouched.
+
+Deleting the ongoing event removes its ongoing state, allowing another draft to
+start. Deleting a finished event removes it from History. Duplicate deletion
+returns Tournament not found.
+
+History lists finished revised events and reloads their complete read-only graph:
+event dates, exact configurations, participants/snapshots, teams, groups, rounds,
+matches, Courts, winners, standings, and group winner/tie results. Events persist
+across local days and application restarts.
+
+
+10. ROTATION AND TOURNAMENT ISOLATION
+=====================================
+
+Rotation and Tournament use different match structures:
+
+- Rotation: `rotation_matches` and `rotation_match_players`
+- Revised Tournament: normalized `tournament_*` event/configuration tables
+
+Never infer source from numeric match ID. Equal numeric IDs can exist in normal,
+Rotation, and Tournament tables. Renderer-ready Court/Public data carries an
+explicit source: `normal`, `rotation`, or `tournament`.
+
+Tournament generation must not mutate Rotation queue order, daily Rotation
+statistics, category preferences, rank preferences, or teammate locks. Rotation
+operations must not mutate Tournament configurations or results.
+
+Shared Courts are the intentional intersection. Rotation player eligibility also
+detects a currently playing Tournament/normal player, while Tournament's player
+start check is intentionally Tournament-only. This asymmetry is current design.
+
+
+11. COURTS
+==========
+
+`courts` contains:
+
+- `id`
+- `name`
+- stored `status`
+- `created_at`
+
+Current recognized operational statuses are `available` and `playing`.
+
+Court UI/backend support:
+
+- list Courts ordered by ID;
+- add a Court;
+- delete an idle Court;
+- display source-safe active match details;
+- load only currently available Courts for match start.
+
+There is no Edit Court feature.
+
+Add Court trims the name and rejects non-string, empty, or whitespace-only
+values. The schema and backend intentionally allow duplicate names and do not
+currently impose a maximum name length.
+
+Active assignment
+-----------------
+
+`getCourts()` loads playing legacy normal, Rotation, and Tournament matches and
+returns each Court with an explicit source-safe `activeMatch`. A real active
+match makes the returned status `playing` even if a stored Court status is stale.
+`getAvailableCourts()` requires both stored availability and no active match.
+
+Invariant:
+
+> A Court must not host more than one active playing match.
+
+Rotation and Tournament have per-source partial unique indexes for playing Court
+IDs. Start transactions additionally query all three match sources and reserve
+the Court with a conditional status update. Because active matches live in
+separate tables, cross-source safety is enforced transactionally rather than by
+one global SQL UNIQUE constraint.
+
+Finishing a match, resetting a Tournament configuration, or deleting a
+Tournament releases a Court only if no other active source uses it.
+
+Court deletion validates the ID and rejects active normal, Rotation, or
+Tournament use. For an idle Court:
+
+- legacy normal matches on that Court and their `match_players` rows are deleted;
+- legacy `round_robin_matches` are detached and returned to `pending`;
+- Rotation/Tournament historical Court foreign keys use `ON DELETE SET NULL`;
+- the Court is then deleted atomically.
 
 
 12. PUBLIC DISPLAY
 ==================
 
-Public Display replaces the normal navigation layout and refreshes every ten
-seconds.
+Public Display is read-only and replaces the normal Sidebar/header layout.
 
-Currently Playing uses `getCourts()` and includes playing Tournament, Rotation,
-and legacy normal matches. Tournament cards show court, event name, division,
-match type, category, configuration level, group, round, and team/player names.
-Finished matches are excluded because only playing rows are loaded.
+Currently Playing:
 
-Next Up independently calls `getRotationNextUpMatches()` and defensively checks
-`source === "rotation"`. It never loads Tournament waiting matches.
+- shows only Courts with `status === "playing"` and an authoritative
+  `activeMatch`;
+- excludes available Courts and finished matches;
+- supports explicit `normal`, `rotation`, and `tournament` sources;
+- displays correct Singles/Doubles team membership and current profile names;
+- Tournament cards include event name, division, type, category, level, group,
+  round, Court, and player names.
 
-Pressing Escape reloads the renderer and returns to the default Queue page.
+Next Up:
 
+- uses only `getRotationNextUpMatches()`;
+- defensively filters `source === "rotation"`;
+- keeps authoritative Rotation queue order;
+- displays at most six waiting matches;
+- never displays Tournament waiting matches.
 
-13. UI/UX AND PAGINATION
-========================
+Refresh reliability:
 
-- Shared CSS variables define light/dark colors, surfaces, borders, shadows,
-  primary, warning, success, and danger states.
-- Tables/lists use shared 10/25/50/100 pagination with record range, page count,
-  Previous/Next, and page numbers.
-- Paginated Player and Tournament lists do not use fixed/max heights or internal
-  vertical `overflow-y-auto`; their height follows the rows on the current page.
-  A partial final page is naturally shorter.
-- Horizontal overflow remains for genuinely wide tables.
-- Player Profiles and Players Today use fixed table proportions/column groups so
-  headers and row content remain aligned as filtering changes the visible data.
-- Player Profiles exposes Add Profile in its own section header and reuses the
-  same profile modal/backend flow as the page-level Add New Player action.
-- Sticky table/list headers remain where useful with page-level scrolling.
-- Search, filters, sorting, and selection survive page navigation.
-- Player selection rows are fully clickable; checkbox keyboard behavior remains.
-- Interactive controls stop row-toggle propagation.
-- Selected rows have a primary left border and highlighted background.
-- Tournament selection and match lists are paginated; large group match details
-  are collapsed until requested.
-- Mutation buttons use loading flags and ref locks to block duplicate clicks.
-- Destructive Tournament reset/delete, finish, and winner actions use confirmation.
+- schedules an initial zero-delay refresh;
+- polls every 10 seconds;
+- prevents overlapping refreshes with one in-flight ref;
+- loads Courts and Next Up independently with `Promise.allSettled()`;
+- clears stale Court cards and shows an error if Court refresh fails;
+- clears stale Next Up safely if its request fails;
+- one source failure does not prevent processing the other source;
+- clears timeout/interval resources on unmount.
+
+Public Display has no start, finish, edit, delete, or statistics action and must
+never mutate Courts, Players, Rotation, Tournament, or statistics. Escape reloads
+the renderer; because the application's startup page is Players, the reload
+returns to Players.
 
 
-14. LEVEL NORMALIZATION AND COLORS
-==================================
+13. SETTINGS AND DATABASE MAINTENANCE
+=====================================
 
-Level helpers normalize case, spaces, and hyphens to underscore codes. Sorting
-uses skill order rather than alphabetic order:
+13.1 Live Settings dashboard
+----------------------------
 
-- beginner: Beginner, yellow, Rotation strength 1
-- intermediate: Intermediate, green, strength 2
-- upper_intermediate: Upper Intermediate, blue, strength 3
-- advanced: Advanced, red, strength 4
+Settings loads independent current data sources and shows:
 
-Unknown values use neutral slate/Unknown presentation. Selection counters count
-only passed selected players in one reduce pass.
+- Registered Players Today
+- Total Player Profiles
+- total Courts
+- active Rotation matches (waiting + incomplete + playing)
+- Courts currently playing an authoritative match
+- number of ongoing revised Tournaments
 
+About reports application/package version, Electron, React, SQLite engine,
+schema version, platform, database path, and developer (`Not configured`).
 
-15. SETTINGS AND FULL RESET
-===========================
+13.2 Persisted preferences
+--------------------------
 
-Persisted string settings:
+Current UI setting keys are stored as strings in the SQLite `settings` table:
 
-- `theme`: light, dark, or system
-- `defaultMatchType`: Rotation Singles/Doubles
-- `autoRequeue`: "true" or "false"
-- `defaultTournamentMatchType`: Tournament Singles/Doubles default
-- `defaultTournamentCategory`: Tournament category default
+- `theme`: `light`, `dark`, or `system`
+- `defaultMatchType`: Rotation default `singles` or `doubles`
+- `autoRequeue`: `"true"` or `"false"`
+- `defaultTournamentMatchType`: `singles` or `doubles`
+- `defaultTournamentCategory`: `mens`, `womens`, `mixed`, or `no_gender`
 
-Theme applies immediately. Tournament Singles forces an invalid Mixed default
-back to No Gender. The Settings Active Tournament card uses revised
-`listTournaments()` and counts ongoing revised events; it no longer uses the
-obsolete latest-legacy API.
+`settings.key` is UNIQUE and writes use UPSERT. The backend currently accepts
+arbitrary key/value strings and does not maintain a whitelist; the UI only sends
+the keys above.
 
-Settings live cards show registered today, profiles, courts, active Rotation
-matches, playing courts, and active Tournament. About shows app/Electron/React/
-SQLite versions, schema version, platform, database path, and developer.
+Theme applies immediately and follows operating-system changes in System mode.
+If an optimistic settings save fails, the visible control and theme roll back to
+the previously persisted value.
 
-Database Management includes:
+Rotation default match type is applied only when there is no saved session draft.
+Auto Requeue affects the finish modal's default done-player choices as described
+in the Rotation lifecycle section.
 
-- Backup Database: after confirmation, Electron opens a native Save dialog with
-  a dated `.db` filename. The main process uses `better-sqlite3` online backup,
-  rejects the live database as a destination, handles cancellation, and guards
-  duplicate requests. The renderer supplies no filesystem path.
-- Clear Old Rotation History: after destructive confirmation, one transaction
-  deletes only finished/cancelled `rotation_matches` whose effective history
-  timestamp is before the local-calendar cutoff `DATE('now', 'localtime',
-  '-6 days')`. This keeps today plus the prior six calendar dates, preserves
-  waiting/incomplete/playing matches, cascades
-  their deleted participant rows, and does not change profiles, lifetime/daily
-  statistics, Tournament data, or run VACUUM.
-- Reset Application Data is confirmed and transactional. It deletes Player,
-daily, Rotation, lock, revised/legacy Tournament, court, and legacy queue/match
-data, resets auto-increment sequences, and restores Court 1/2/3. Settings are
-not deleted.
+Tournament defaults initialize type/category. Selecting Singles makes Mixed
+unavailable and corrects an invalid Mixed default to No Gender. Tournament team
+shuffling is shown as Always On because it is built into generation.
 
-Restore, export, archive, clear-today-only, and queue-only reset are not
-implemented.
+There are no current Restore Database, export, archive, payment, or remote-sync
+actions.
 
+13.3 Backup Database
+--------------------
 
-16. PERFORMANCE CHARACTERISTICS
-===============================
+Backup requires confirmation and has renderer/main-process duplicate-click
+guards. Electron main opens a native Save dialog in Documents with default name:
 
-Renderer selection:
+`badminton-backup-YYYY-MM-DD.db`
 
-- Memoized Sets provide O(1) selected-ID checks.
-- Maps/Sets and `useMemo` handle eligible profiles, pagination, counts, and
-  active Tournament player status.
-- Player rows use `React.memo` and stable callbacks.
-- Rotation filtering derives the Matches Today result from the already-loaded
-  player collection; it performs no per-player IPC/database calls.
-- Select All/Clear perform one state update rather than one per player and use
-  the full filtered eligible collection rather than the paginated slice.
-- Match generation never runs automatically on selection changes.
+The renderer never receives filesystem APIs and does not choose an arbitrary
+path programmatically. Main process calls better-sqlite3 `db.backup()` for a
+consistent online SQLite backup rather than copying the live file directly.
 
-Tournament backend:
+Safety behavior:
 
-- Selected profiles load in one bulk `json_each` query.
-- Event retrieval uses a fixed small set of bulk queries and assembles data with
-  Maps; it does not query once per player/match.
-- Configuration generation uses bounded shuffle, grouping, and circle-method
-  round robin. Complexity is output-sensitive to stored teams/matches, not
-  exponential search.
-- Persistence, start, finish, reset, and delete use SQLite transactions and
-  prepared statements.
-- Retrieval exposes complete event context once; Phase 7.5 badges are derived
-  in the renderer without new IPC calls.
-- Configuration-scoped indexes support participants, teams, groups, rounds,
-  match status, player conflict, court conflict, and history.
+- cancellation returns success with `cancelled: true` and writes nothing;
+- destination cannot be the live database;
+- Windows source/destination comparison is case-insensitive;
+- live database remains open and unchanged;
+- success returns the saved filename;
+- backup includes the complete SQLite state, including settings and legacy data.
 
-Performance tests cover 80, 160, and 640 Tournament players and the complete
-168-configuration persisted matrix. Rotation performance covers up to 80 valid
-Mixed players plus an impossible imbalanced selection.
+There is no Restore Database implementation.
 
+13.4 Clear Old Rotation History
+-------------------------------
 
-17. TEST COVERAGE
-=================
+This confirmed destructive action keeps the most recent seven local calendar
+days: today through six days ago.
 
-Pure Tournament tests verify:
+Cutoff:
 
-- all six divisions;
-- all four levels;
-- all legal Singles/Doubles categories and rejection of Mixed Singles;
-- 2-16 exact group distributions and larger balanced groups;
-- every round-robin unordered pair exactly once and match formula;
-- wrong level/gender, duplicates, odd Doubles, and unequal Mixed counts;
-- bounded generation at 80, 160, and larger synthetic sizes.
+```sql
+DATE('now', 'localtime', '-6 days')
+```
 
-Integration coverage verifies:
+It deletes only `rotation_matches` where:
 
-- schema migration idempotency, constraints, foreign keys, triggers, and indexes;
-- all 168 legal persisted configuration combinations;
-- permanent profiles without daily registration;
-- participant snapshots and current profile names;
-- event draft/ongoing/finished lifecycle and one-ongoing rule;
-- player overlap prevention for playing Tournament matches;
-- match start/finish, duplicate click safety, courts, statistics, and standings;
-- per-configuration reset, court release, isolation, and retained lifetime stats;
-- permanent event deletion for draft/ongoing/finished, cascade isolation, court
-  release, history removal, duplicate failure, and retained lifetime stats;
-- profile deletion protection;
-- Public Display full Tournament context and Rotation-only Next Up;
-- source-safe equal numeric IDs;
-- Phase 7.5 Playing badges for Singles, Doubles, multiple affected players, and
-  disappearance after finish;
-- 10-row, 25-row, and partial-final pagination without internal vertical scroll;
-- Electron IPC/preload channel and argument contracts;
-- Rotation regression, performance, Player Management, Settings, and UI helpers;
-- bulk Mark All Done protection for mixed available/assigned/playing players;
-- seven-day Rotation-history boundaries, participant cascade, data/statistics
-  preservation, backup integrity, live-path rejection, and dialog cancellation;
-- 80-player Matches Today filtering and full-result eligible ID selection.
+- status is `finished` or `cancelled`; and
+- local date of `COALESCE(end_time, updated_at, created_at)` is before cutoff.
 
-Electron-dependent tests run through the Electron executable with isolated
-temporary user-data directories. Pure logic/UI utilities run through Node.
-There is no npm test script; test files are invoked directly.
+It never deletes waiting, incomplete, or playing matches, even when old. Their
+participant rows and active queue state remain. Deleted match participant rows
+cascade through `ON DELETE CASCADE`.
+
+Cleanup is one transaction, is safe when repeated, does not run VACUUM, and does
+not change Player Profiles, daily/lifetime statistics, teammate locks,
+Tournament data, Courts, or legacy match tables.
+
+13.5 Reset Application Data
+---------------------------
+
+Reset is confirmed and transactional. Current code deletes:
+
+- Rotation participants and matches;
+- teammate locks;
+- legacy `match_players`, `round_robin_matches`, and `matches`;
+- revised and legacy Tournament matches/rounds/teams/events, with cascades
+  removing revised configurations, participants, groups, and team membership;
+- legacy queue rows;
+- daily registrations;
+- Player Profiles;
+- Courts.
+
+It then restores Court 1, Court 2, and Court 3 as available and clears SQLite
+auto-increment sequence rows. The `settings` table is intentionally preserved.
+
+Important current limitation: `resetAllData()` does not delete the legacy
+`match_history` table. If that table contains rows referencing Player Profiles,
+foreign-key enforcement can block profile deletion and roll back the reset. The
+UI wording says all application data, so this is a current implementation/UI
+inconsistency to address deliberately in a future code task.
 
 
-18. CONFIRMED CURRENT LIMITATIONS
+14. CURRENT SQLITE SCHEMA SUMMARY
 =================================
 
-- No Tournament age validation despite age-division labels.
-- No Tournament scores, sets, points, seeds, brackets, automatic finals,
-  match cancellation, manual partner editing, or result editing.
-- No Tournament-versus-Rotation player conflict by intentional venue-day rule.
-- Lifetime Tournament statistics are intentionally not reversible on reset or
-  permanent event deletion.
-- Finished legacy format-1 Tournament events are preserved but are not surfaced
-  in the revised History navigator.
-- Legacy Tournament backend generation/retrieval remains internally for old-data
-  compatibility tests/recovery, but obsolete renderer IPC creation/latest-event
-  APIs are removed.
-- No formal numbered migration framework; schema version remains 0.
-- Fresh initialization does not seed courts; full Reset restores three courts.
-- Court names can be empty/duplicate if backend APIs are called directly.
-- Settings backend accepts arbitrary key/value strings without a whitelist.
-- Rotation Singles still uses a memoized global bitmask solver; the bounded
-  large-player redesign applies primarily to Doubles.
-- No restore, export, authentication, remote synchronization, or web UI.
+Player/session tables
+---------------------
+
+`players`
+  Permanent profile, category/rank preferences, lifetime statistics.
+
+`registered_players_today`
+  Daily row referencing `players`; daily stats/status/date/availability time.
+
+Rotation tables
+---------------
+
+`player_team_locks`
+  Pair of ordered Player Profile IDs, `today` or schema-supported `permanent`
+  type, local lock date, active flag. CHECK prevents self/reversed pairs. A
+  partial unique index and trigger prevent duplicate/overlapping active locks.
+
+`rotation_matches`
+  Queue position, match type/category, lifecycle status, optional Court/winner,
+  team strengths, balance difference, JSON warnings, validation message,
+  start/end/update/create timestamps. Status CHECK allows `waiting`,
+  `incomplete`, `playing`, `finished`, `cancelled`.
+
+`rotation_match_players`
+  References Rotation match, daily registration, permanent profile, team, slot,
+  and optional lock. Cascades when its Rotation match is deleted. Unique
+  constraints prevent a duplicate daily participant or duplicate team/slot in
+  one match.
+
+Court/settings tables
+---------------------
+
+`courts`
+  Name, stored status, creation timestamp.
+
+`settings`
+  UNIQUE key and string value.
+
+Revised Tournament tables
+-------------------------
+
+`tournaments`
+  Shared top-level table. Revised rows have name, dates, status, and
+  `tournament_format_version = 2`; legacy type/category fields remain.
+
+`tournament_configurations`
+  Event FK with cascade; division/type/category/level CHECKs and exact UNIQUE
+  configuration key.
+
+`tournament_participants`
+  Configuration FK with cascade, Player FK with RESTRICT, level/gender snapshots,
+  unique profile within configuration.
+
+`tournament_groups`
+  Configuration FK with cascade; unique number and name within configuration.
+
+`tournament_teams`
+  Event/configuration/group ownership, compatibility `player_1_id` and
+  `player_2_id`, team number. Revised team number is unique per configuration.
+
+`tournament_team_players`
+  Normalized team -> participant membership and slot. A participant belongs to
+  only one team; team/slot is unique.
+
+`tournament_rounds`
+  Event/configuration/group ownership and round number. Revised round number is
+  unique per group.
+
+`tournament_matches`
+  Event/configuration/group/round, Team A/B, optional winner/Court, status, and
+  creation timestamp. Revised matches use waiting/playing/finished. Triggers
+  validate ownership, distinct teams, status/Court/winner lifecycle, and winner
+  membership. Unordered team pair is unique inside a revised group.
+
+Legacy compatibility tables
+---------------------------
+
+`queue`
+  Old daily queue-position model. Not the current Rotation Queue.
+
+`matches`
+  Legacy normal match with direct players, Court, status, winner, and times.
+  Still read for player activity, Court conflicts, and Public Display.
+
+`match_players`
+  Additional legacy normal-match participants with team/type/source.
+
+`match_history`
+  Legacy two-player history. Still protects profile deletion and is not cleared
+  by current Reset Application Data.
+
+`round_robin_matches`
+  Older player-vs-player round-robin table. Not used for revised Tournament
+  generation; retained for compatibility and Court deletion cleanup.
+
+Legacy Tournament rows use the shared `tournaments`, `tournament_teams`,
+`tournament_rounds`, and `tournament_matches` tables with format version 1 and
+null revised configuration/group links. Revised UI list/history APIs filter to
+format version 2.
+
+Important database protections
+------------------------------
+
+- foreign keys enabled;
+- one active Rotation Court within Rotation;
+- one active Tournament Court within Tournament;
+- unique waiting/incomplete Rotation queue positions;
+- one ongoing Tournament when existing installed data permits creating the
+  partial index;
+- exact Tournament configuration uniqueness;
+- Tournament relationship/status/winner triggers;
+- Tournament-participating profile deletion trigger;
+- participant/team-slot uniqueness;
+- active teammate-lock overlap protection;
+- lookup indexes for event history, configurations, groups, matches, players,
+  Courts, Rotation order, and participant joins.
 
 
-19. DEVELOPMENT SAFETY RULES
+15. IPC CONTRACT AND VALIDATION PHILOSOPHY
+==========================================
+
+Current preload methods and argument order:
+
+Players:
+
+- `addPlayer(name, level, gender, contact, preferMens, preferWomens,
+  preferMixed, preferNoGender, rankPreference)`
+- `getPlayerManagementData()`
+- `registerPlayer(id)`
+- `getRegisteredPlayersToday()`
+- `removeRegisteredPlayer(id)` (the current Mark Done operation; it does not
+  delete the permanent profile)
+- `markAllRegisteredPlayersDone()`
+- `updatePlayerInfo(id, name, level, gender, contact, preferMens,
+  preferWomens, preferMixed, preferNoGender, rankPreference)`
+- `deletePlayerProfile(id)`
+
+Revised Tournament:
+
+- `createTournament(name, startDate, endDate)`
+- `listTournaments()`
+- `getTournament(tournamentId)`
+- `getTournamentHistory()`
+- `deleteTournament(tournamentId)`
+- `getTournamentConfigurationData()`
+- `generateTournamentConfiguration(tournamentId, playerIds, division,
+  matchType, category, level)`
+- `resetTournamentConfiguration(configurationId)`
+- `startTournamentMatch(matchId, courtId)`
+- `finishTournamentMatch(matchId, winnerTeamId)`
+- `finishTournament(tournamentId)`
+
+Courts:
+
+- `getCourts()`
+- `getAvailableCourts()`
+- `addCourt(name)`
+- `removeCourt(id)`
+
+Rotation:
+
+- `getRotationState()`
+- `createTeamLock(firstPlayerId, secondPlayerId, matchType, category)`
+- `removeTeamLock(lockId)`
+- `updateRotationRankPreference(playerId, preference)`
+- `generateRotationMatches(playerIds, matchType, category)`
+- `getRotationMatches()`
+- `getRotationNextUpMatches()`
+- `updateWaitingMatch(matchId, teamAIds, teamBIds)`
+- `rebalanceWaitingMatch(matchId)`
+- `reorderWaitingMatch(matchId, direction)`
+- `cancelWaitingMatch(matchId)`
+- `startRotationMatch(matchId, courtId)`
+- `finishRotationMatch(matchId, winnerTeam, donePlayerIds)`
+
+Settings and maintenance:
+
+- `getSettings()`
+- `updateSetting(key, value)`
+- `getApplicationInfo()`
+- `backupDatabase()`
+- `clearOldRotationHistory()`
+- `resetAllData()`
+
+Each preload method invokes the same capability's kebab-case IPC channel in
+`electron/main.js`. There are no exposed revised Tournament methods without
+matching handlers. Rotation channel names and argument order are separate and
+must not be changed while working on Tournament.
+
+Critical rules are not frontend-only:
+
+- React validation provides immediate operator feedback.
+- Backend functions parse IDs and reload canonical rows.
+- Start/finish operations use conditional status updates.
+- Court and player conflicts are checked inside transactions where required.
+- Winner identity is checked against the stored match.
+- Multi-row generation, lifecycle, reset, delete, and cleanup operations are
+  transactional.
+- Duplicate-click refs/loading flags improve UX, while database state remains the
+  final duplicate-action protection.
+
+Different API return shapes are intentional legacy/current reality. Most modern
+mutations return `{ success, data/message }`; `getCourts()` and
+`getAvailableCourts()` return arrays, and `getSettings()` returns a key/value
+object. Future changes must verify each real contract rather than assume one
+universal shape.
+
+
+16. UI, PAGINATION, AND PERFORMANCE CHARACTERISTICS
+====================================================
+
+Shared pagination provides 10, 25, 50, and 100 rows, record range, total records,
+page number, Previous/Next, and numbered pages. Search/filter/sort is performed
+before client-side pagination. Player/Tournament paginated tables avoid fixed
+internal vertical scrolling; horizontal scrolling remains for wide tables.
+
+Selection performance:
+
+- memoized Sets provide selected-ID lookup;
+- derived eligible/filtered/paginated lists use `useMemo`;
+- selected level/gender counts use single passes;
+- player selection rows are memoized where used at scale;
+- whole-row click and checkbox share one toggle path;
+- interactive controls stop row-toggle propagation;
+- bulk select/clear uses one React state update;
+- match generation never runs merely because selection changes.
+
+Tournament performance:
+
+- canonical profiles use one `json_each` bulk query;
+- persistence uses prepared statements and one transaction;
+- event retrieval uses a fixed set of bulk queries and Maps;
+- group calculation is deterministic and bounded;
+- round-robin generation is output-sensitive O(sum of group match counts), not
+  exponential;
+- UI derives Playing-player badges from the loaded graph without per-player IPC.
+
+Rotation performance:
+
+- Doubles generation is bounded rather than exhaustive;
+- Match Preview uses bounded Singles logic;
+- Matches Today uses the loaded daily count and stable in-memory sorting;
+- tests cover large player lists and generation.
+
+Known scalability detail: current Rotation state loading checks eligibility with
+per-player backend lookups, and Rotation/Court mapping loads participant rows per
+saved active match. This has passed current 80/200-player and Court scale tests
+but is not a fully bulk-query architecture. Preserve correctness first if this
+area is optimized later.
+
+
+17. IMPORTANT SYSTEM INVARIANTS
+===============================
+
+- A player cannot occupy multiple slots in one Rotation or revised Tournament
+  match.
+- A matched Rotation player cannot be assigned to another active Rotation match.
+- Rotation start blocks a player already playing any recognized source.
+- Tournament start blocks a player already playing another Tournament match.
+- A Court cannot be started by two active matches; all sources are checked.
+- Match source is explicit and never inferred from numeric ID.
+- Finished Rotation/Tournament matches cannot be completed twice.
+- Rotation winner must be Team 1 or Team 2.
+- Tournament winner must be Team A or Team B.
+- Waiting/incomplete matches cannot be started until complete and valid.
+- Revised Tournament exact configurations and group pairings are unique.
+- Tournament participant level/gender snapshots remain stable after profile edit.
+- Tournament current display name follows the current Player Profile name.
+- Profile deletion cannot orphan protected match/Tournament/lock history.
+- Failed transactional mutations roll back their multi-table changes.
+- Public Display is read-only.
+- Tournament waiting matches never enter Rotation Next Up.
+- Tournament match completion never updates daily Rotation statistics.
+- Reset/Delete Tournament intentionally retain already-awarded lifetime stats.
+
+
+18. INTEGRATION AND REGRESSION TEST STATUS
+==========================================
+
+Tests use isolated temporary Electron `userData` directories for database work.
+Pure logic/UI utilities run with Node; Electron-dependent tests run through the
+Electron executable. There is no aggregate `npm test` script, so suites are
+invoked directly.
+
+Players guarantees
+------------------
+
+Dedicated tests cover profile CRUD/validation, trimmed case-insensitive duplicate
+names, editing, protected deletion, daily registration/reactivation, rapid
+duplicate registration, status computation, Mark Done, transactional Mark All
+Done with skipped assigned/playing players, search/filter/sort/pagination,
+80-player registration, 200-profile scale, local-date boundaries, old-schema
+local-date compatibility, foreign keys, and integrity.
+
+Rotation guarantees
+-------------------
+
+Dedicated tests cover existing-schema migration, category/gender compatibility,
+Same Rank and Adjacent Rank, fairness, current-day repeat history, Matches Today
+sorting, stable filtering/pagination, cross-page Select All, Match Preview,
+waiting/incomplete edits, rebalancing, queue ordering, cancellation, start/finish,
+statistics, player return/done state, Court/source conflicts, Next Up, local-date
+behavior, restart persistence, 80/200-player performance, and impossible
+selections.
+
+Rotation teammate-lock tests cover 16 focused scenarios including no locks, one
+lock with loose players, two locks, all categories, Same Rank, Adjacent Rank,
+fairness differences, unavailable/done/unregistered players, partial selection,
+duplicate selection paths, extra unmatched players, impossible locked matches,
+Preview/backend agreement, direct backend bypass attempts, participant uniqueness,
+and waiting -> playing -> finished behavior.
+
+Tournament guarantees
+---------------------
+
+Pure and integration suites cover all six divisions, four levels, every legal
+Singles/Doubles category, Mixed Singles rejection, all 168 persisted legal exact
+configurations, fixed group sizes 2-16, larger balanced grouping, unique
+round-robin pairs/math, wrong gender/level/duplicates, odd Doubles, unequal Mixed,
+multiple drafts, one ongoing event, automatic draft -> ongoing, lifecycle,
+winner validation, duplicate clicks, standings/ties, snapshots/current names,
+configuration reset, event deletion, Court release/conflict, History, profile
+deletion protection, source isolation, Public Display context, Playing badges,
+80-player Mixed regression, and large generation/retrieval performance including
+80, 160, and larger synthetic selections.
+
+Courts guarantees
+-----------------
+
+Court tests cover required trimmed names, intentionally duplicated names, add/read
+/delete, invalid/repeated delete, idle legacy cleanup, active normal/Rotation/
+Tournament deletion protection, cross-source stale Court conflicts, release on
+finish/reset/delete, source-safe equal numeric IDs, restart persistence, 104-row
+retrieval scale, foreign keys, and active-Court integrity.
+
+Public Display guarantees
+-------------------------
+
+Tests cover empty state, read-only API use, Rotation/Tournament/legacy source
+mapping, Singles/Doubles teams, every Tournament division/category/level context,
+Playing-only Courts, current profile names, Rotation-only Next Up, six-item UI
+limit, immediate/10-second polling contracts, overlap guard, stale-state clearing,
+independent source failures, cleanup on unmount, restart persistence, reset/delete
+release, repeated read non-mutation, 100-Court scale, foreign keys, and integrity.
+
+Settings guarantees
+-------------------
+
+Tests cover preference persistence/UPSERT, UI rollback contract, dashboard reads
+without mutation, runtime database location, SQLite online backup integrity and
+foreign keys, repeated backup, cancellation, invalid/live-path rejection including
+Windows case variants, seven-local-day cleanup boundaries, active data retention,
+participant cascade, rollback on injected failure, 1,000-row cleanup, Reset
+behavior, Settings preservation, IPC/preload contracts, and shared module
+regressions.
+
+
+19. LEGACY COMPATIBILITY AND MIGRATION BOUNDARIES
+=================================================
+
+Current active architecture:
+
+- Rotation uses `rotation_*` tables.
+- Revised Tournament UI uses format-2 events and normalized configuration tables.
+- Public/Court state uses explicit source tags.
+
+Legacy compatibility retained:
+
+- `queue`, `matches`, `match_players`, `match_history`, and
+  `round_robin_matches` remain in schema.
+- legacy normal `matches` remain visible on active Courts/Public Display and are
+  included in player/Court conflict checks.
+- format-1 Tournament rows remain readable internally.
+- common Tournament start/finish functions inspect `configuration_id` to route
+  revised versus legacy behavior.
+- old Tournament creation/latest-event APIs are not exposed by the current
+  preload; the revised renderer uses explicit event APIs.
+- finished legacy format-1 events are not listed by the revised History navigator.
+
+Startup migration is intentionally additive. It does not blindly drop old
+Tournament tables or delete incompatible historical rows. If an installed
+database already has multiple ongoing rows, startup preserves them and avoids
+creating the one-ongoing partial unique index until data is valid; triggers still
+prevent creating another ongoing row.
+
+Do not remove legacy code/tables merely because their names look obsolete.
+Check Court/Public/player-history compatibility and migration tests first.
+
+
+20. INTENTIONAL DECISIONS AND CURRENT LIMITATIONS
+=================================================
+
+Do not automatically "fix" these without an explicit product change:
+
+- offline/local-only desktop architecture;
+- local business dates with UTC historical timestamps;
+- backend-enforced daily uniqueness instead of a database UNIQUE constraint;
+- duplicate Court names are allowed;
+- no Court Edit feature;
+- Tournament division labels do not validate age;
+- Tournament uses permanent profiles, not Registered Today;
+- Tournament ignores Rotation preferences, status, queue fairness, and locks;
+- Tournament has no teammate locks or manual partner editing;
+- Tournament matching is exact-level-only;
+- Tournament is grouped round robin, not one global round robin;
+- no automatic Tournament finals/brackets, scores, or sets;
+- Tournament-versus-Rotation player conflict is not checked by Tournament start;
+- Tournament waiting matches are not a queue and never appear in Next Up;
+- Public Display lists playing Courts only, not available Courts;
+- Public Display Next Up is Rotation-only and capped at six visible items;
+- Tournament reset/delete do not reverse lifetime statistics;
+- no database Restore feature;
+- settings keys are not backend-whitelisted;
+- schema version remains 0 with no formal numbered migration framework;
+- fresh initialization does not seed Courts; full Reset restores three defaults;
+- a zero-match draft Tournament can currently be manually finished;
+- Reset Application Data preserves Settings and currently leaves legacy
+  `match_history`, which can block reset when it references players;
+- Sidebar/package version labels currently differ;
+- current Rotation state loading is not fully bulk-query optimized;
+- legacy tables/logic remain where compatibility tests and active display/conflict
+  paths still depend on them.
+
+
+21. DEVELOPMENT SAFETY NOTES
 ============================
 
-- Treat Tournament and Rotation rules as separate unless a shared-court rule is
-  explicitly involved.
-- Never require daily registration for Tournament configuration selection.
-- Never use Rotation preferences, locks, queue status, or adjacent ranks for
-  Tournament selection.
+- Inspect current code before changing UI; recent layout changes may be newer
+  than older prompts or design notes.
+- Keep Rotation and Tournament business rules separate.
+- Never require daily registration for revised Tournament selection.
+- Never use Rotation locks/rank preferences for Tournament generation.
 - Never put Tournament waiting matches in Rotation Next Up.
-- Never identify a match source by numeric ID alone.
-- Keep backend/database validation authoritative; renderer disabled states are
-  only operator guidance.
-- Use real inserted database IDs as foreign keys.
-- Keep multi-step writes transactional and condition lifecycle updates.
-- Do not delete or rewrite legacy tables/data without an explicit safe migration.
-- Preserve current participant snapshots and profile deletion restrictions.
-- Do not reverse Tournament lifetime statistics on reset/delete unless the
-  product rule is explicitly changed with a migration/accounting design.
-- Run Tournament, court/Public Display, player, Rotation, build, and lint checks
-  after Tournament or shared-court changes.
+- Never identify a match only by numeric ID; keep explicit source/configuration.
+- Use local calendar-date SQL for daily behavior.
+- Keep renderer IPC asynchronous even though better-sqlite3 work is synchronous
+  in the main process.
+- Use prepared statements and transactions for multi-step mutations.
+- Use actual inserted IDs for foreign keys.
+- Keep backend validation authoritative; disabled buttons are not integrity rules.
+- Preserve installed databases and legacy compatibility unless a migration is
+  explicitly designed and tested.
+- Do not reverse Tournament lifetime statistics on reset/delete without a new
+  accounting requirement.
+- Run focused module tests plus shared Court/Public regressions after changing
+  match lifecycle or source handling.
+- `npm run build` currently succeeds. Full `npm run lint` currently reports the
+  existing unused `Trash2` import in `src/pages/Tournament.jsx`; documentation
+  work must not silently alter production code to hide it.
 
 
-END OF CURRENT PROJECT CONTEXT
+END OF CURRENT PROJECT SUMMARY
 ==============================

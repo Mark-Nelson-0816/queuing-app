@@ -7,6 +7,29 @@ const getCourtRowsStatement = db.prepare(`
   ORDER BY id ASC
 `);
 
+// Validates court names for UI and direct IPC callers.
+function normalizeCourtName(name) {
+  if (typeof name !== "string") {
+    throw new Error("Court name is required.");
+  }
+
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error("Court name is required.");
+  }
+
+  return normalizedName;
+}
+
+// Validates a court ID before it is used by a management action.
+function parseCourtId(value) {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("Court not found.");
+  }
+  return id;
+}
+
 // Finds legacy normal matches that currently occupy courts.
 const getActiveNormalMatchesStatement = db.prepare(`
   SELECT id, court_id, player_one, player_two, status
@@ -353,14 +376,48 @@ export function getAvailableCourts() {
 
 // Adds a new court with the default available status.
 export function addCourt(name) {
-  return db.prepare(`
-    INSERT INTO courts(name)
-    VALUES(?)
-  `).run(name);
+  try {
+    const result = db.prepare(`
+      INSERT INTO courts(name)
+      VALUES(?)
+    `).run(normalizeCourtName(name));
+
+    return {
+      success: true,
+      data: { courtId: Number(result.lastInsertRowid) },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unable to add court.",
+    };
+  }
 }
 
-// Removes a court only when no active tournament or rotation match uses it.
-export function removeCourt(id) {
+// Removes an idle court and its legacy normal-match records atomically.
+const removeCourtTransaction = db.transaction((id) => {
+  const court = db.prepare(`
+    SELECT id
+    FROM courts
+    WHERE id = ?
+  `).get(id);
+
+  if (!court) {
+    throw new Error("Court not found.");
+  }
+
+  // Active legacy matches need the same protection as Rotation and Tournament.
+  const activeNormalMatch = db.prepare(`
+    SELECT id
+    FROM matches
+    WHERE court_id = ? AND status = 'playing'
+    LIMIT 1
+  `).get(id);
+
+  if (activeNormalMatch) {
+    throw new Error("Cannot remove a court with an active normal match.");
+  }
+
   // Protect courts that still host an active tournament match.
   const activeTournamentMatch = db.prepare(`
     SELECT id
@@ -370,10 +427,7 @@ export function removeCourt(id) {
   `).get(id);
 
   if (activeTournamentMatch) {
-    return {
-      success: false,
-      error: "Cannot remove a court with an active tournament match.",
-    };
+    throw new Error("Cannot remove a court with an active tournament match.");
   }
 
   // Protect courts that still host an active Rotation Queue match.
@@ -385,13 +439,20 @@ export function removeCourt(id) {
   `).get(id);
 
   if (activeRotationMatch) {
-    return {
-      success: false,
-      error: "Cannot remove a court with an active rotation match.",
-    };
+    throw new Error("Cannot remove a court with an active rotation match.");
   }
 
-  // Remove legacy normal matches tied directly to this court.
+  // Delete dependent legacy participants before their normal-match rows.
+  db.prepare(`
+    DELETE FROM match_players
+    WHERE match_id IN (
+      SELECT id
+      FROM matches
+      WHERE court_id = ?
+    )
+  `).run(id);
+
+  // Remove idle legacy normal matches tied directly to this court.
   db.prepare(`
     DELETE FROM matches
     WHERE court_id = ?
@@ -410,5 +471,18 @@ export function removeCourt(id) {
     WHERE id = ?
   `).run(id);
 
-  return { success: true };
+  return id;
+});
+
+// Removes a court only when no active match source uses it.
+export function removeCourt(id) {
+  try {
+    const courtId = removeCourtTransaction(parseCourtId(id));
+    return { success: true, data: { courtId } };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unable to remove court.",
+    };
+  }
 }

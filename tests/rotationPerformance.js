@@ -28,7 +28,7 @@ function seedPlayers(count) {
       status,
       registered_date,
       available_since
-    ) VALUES (?, 'available', CURRENT_DATE, datetime('now', ?))
+    ) VALUES (?, 'available', DATE('now', 'localtime'), datetime('now', ?))
   `);
   const insertAll = db.transaction(() => {
     const playerIds = [];
@@ -67,7 +67,7 @@ try {
   } = await import("../database/rotationQueries.js");
 
   const measurements = [];
-  for (const playerCount of [8, 16, 40, 80]) {
+  for (const playerCount of [8, 16, 40, 80, 200]) {
     clearFixture();
     const playerIds = seedPlayers(playerCount);
     const selectedPlayers = getRotationState().data.players;

@@ -7,6 +7,7 @@ export default function Courts() {
   const [courtName, setCourtName] = useState("");
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isAddingCourt, setIsAddingCourt] = useState(false);
 
   // Reload all courts from the main process.
   const loadCourts = async () => {
@@ -48,12 +49,25 @@ export default function Courts() {
 
   // Adds a named court and refreshes the list.
   const handleAddCourt = async () => {
+    if (isAddingCourt) return;
+
     const name = courtName.trim();
     if (!name) return;
 
-    await window.api.addCourt(name);
-    setCourtName("");
-    loadCourts();
+    setIsAddingCourt(true);
+    try {
+      const result = await window.api.addCourt(name);
+      if (result?.success === false) {
+        showMessage(result.error || "Unable to add court.");
+        return;
+      }
+      setCourtName("");
+      await loadCourts();
+    } catch {
+      showMessage("Unable to add court.");
+    } finally {
+      setIsAddingCourt(false);
+    }
   };
 
   // Removes an idle court after checking its current status.
@@ -95,9 +109,10 @@ export default function Courts() {
         />
         <button
           onClick={handleAddCourt}
+          disabled={isAddingCourt}
           className="px-5 py-2 rounded-xl bg-green-500 text-white"
         >
-          Add Court
+          {isAddingCourt ? "Adding..." : "Add Court"}
         </button>
       </div>
 
@@ -112,6 +127,11 @@ export default function Courts() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading && (
           <p className="text-sm text-[var(--text)]">Loading courts...</p>
+        )}
+        {!isLoading && courts.length === 0 && (
+          <p className="text-sm text-[var(--text)]">
+            No courts have been added yet.
+          </p>
         )}
         {courts.map((court) => (
           <CourtCard

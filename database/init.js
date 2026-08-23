@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS registered_players_today (
     is_done_today INTEGER DEFAULT 0,
     -- 1 = done playing for the whole day, else 0 
     
-    registered_date DATE DEFAULT CURRENT_DATE,
+    registered_date DATE DEFAULT (DATE('now', 'localtime')),
     available_since DATETIME DEFAULT CURRENT_TIMESTAMP,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (player_id) REFERENCES players(id)
@@ -322,7 +322,7 @@ CREATE TABLE IF NOT EXISTS player_team_locks (
     player_1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     player_2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
     lock_type TEXT NOT NULL DEFAULT 'today',
-    lock_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    lock_date DATE NOT NULL DEFAULT (DATE('now', 'localtime')),
     is_active INTEGER NOT NULL DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CHECK (player_1_id < player_2_id),

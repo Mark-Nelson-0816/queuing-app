@@ -2,15 +2,9 @@ import { ArrowUpDown, Search, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
-import { comparePlayerLevels } from "../../utils/playerLevel";
+import { filterAndSortProfiles } from "../../utils/playerManagementUi";
 import { PlayerLevelBadge } from "./PlayerBadges";
 import { formatPlayerPreferences, genderLabel, rankPreferenceLabel } from "./playerDisplay";
-
-// Compares numeric or text values for table sorting.
-function compareValues(first, second) {
-  if (typeof first === "number" && typeof second === "number") return first - second;
-  return String(first || "").localeCompare(String(second || ""));
-}
 
 // Displays a sortable player-profile table heading.
 function SortHeader({ label, field, sort, onSort, centered = false }) {
@@ -36,34 +30,14 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
   const [pageSize, setPageSize] = useState(10);
 
   // Filter and sort profiles without changing the source list.
-  const filteredProfiles = useMemo(() => {
-    const searchText = search.trim().toLowerCase();
-    const filtered = profiles.filter((player) => (
-      (!searchText || player.name.toLowerCase().includes(searchText) || String(player.contactNumber || "").toLowerCase().includes(searchText))
-      && (levelFilter === "all" || player.level === levelFilter)
-      && (genderFilter === "all" || player.gender === genderFilter)
-      && (rankFilter === "all" || player.rankPreference === rankFilter)
-      && (categoryFilter === "all"
-        || (categoryFilter === "mens" && player.preferMens)
-        || (categoryFilter === "womens" && player.preferWomens)
-        || (categoryFilter === "mixed" && player.preferMixed)
-        || (categoryFilter === "no_gender" && player.preferNoGender))
-    ));
-    // Read the active sort value from a profile.
-    const getValue = (player) => ({
-      name: player.name,
-      level: player.level,
-      gender: player.gender,
-      matches: player.lifetimeMatches,
-      results: player.lifetimeWins - player.lifetimeLosses,
-    })[sort.field];
-    return filtered.sort((first, second) => (
-      sort.field === "level"
-        ? comparePlayerLevels(first.level, second.level, sort.direction)
-        : compareValues(getValue(first), getValue(second))
-          * (sort.direction === "asc" ? 1 : -1)
-    ));
-  }, [categoryFilter, genderFilter, levelFilter, profiles, rankFilter, search, sort]);
+  const filteredProfiles = useMemo(() => filterAndSortProfiles(profiles, {
+    search,
+    levelFilter,
+    genderFilter,
+    rankFilter,
+    categoryFilter,
+    sort,
+  }), [categoryFilter, genderFilter, levelFilter, profiles, rankFilter, search, sort]);
 
   // Limit the filtered profiles to the current page.
   const pagination = getPagination(filteredProfiles.length, page, pageSize);

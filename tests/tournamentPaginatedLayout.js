@@ -42,4 +42,12 @@ for (const relativePath of [
   );
 }
 
+const tournamentSelectorSource = readFileSync(
+  path.join(repositoryRoot, "src/components/tournament/RegisteredPlayers.jsx"),
+  "utf8",
+);
+// Select All must use the complete search-filtered result, not only the page or all profiles.
+assert.match(tournamentSelectorSource, /filteredPlayers\.map\(\(player\) => Number\(player\.id\)\)/);
+assert.match(tournamentSelectorSource, /filteredPlayers\.every\(\(player\) => selectedIdSet\.has\(Number\(player\.id\)\)\)/);
+
 console.log("Tournament paginated-layout checks passed for 10, 25, and partial pages.");

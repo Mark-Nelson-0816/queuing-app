@@ -158,7 +158,7 @@ const playerManagementProfilesStatement = db.prepare(`
       SELECT current_registration.id
       FROM registered_players_today AS current_registration
       WHERE current_registration.player_id = players.id
-        AND current_registration.registered_date = CURRENT_DATE
+        AND current_registration.registered_date = (DATE('now', 'localtime'))
       ORDER BY current_registration.is_done_today ASC, current_registration.id DESC
       LIMIT 1
     )
@@ -243,7 +243,7 @@ const playerManagementTodayStatement = db.prepare(`
     ON player_team_locks.is_active = 1
     AND (
       player_team_locks.lock_type = 'permanent'
-      OR player_team_locks.lock_date = CURRENT_DATE
+      OR player_team_locks.lock_date = (DATE('now', 'localtime'))
     )
     AND players.id IN (
       player_team_locks.player_1_id,
@@ -255,12 +255,12 @@ const playerManagementTodayStatement = db.prepare(`
         THEN player_team_locks.player_2_id
       ELSE player_team_locks.player_1_id
     END
-  WHERE registered_players_today.registered_date = CURRENT_DATE
+  WHERE registered_players_today.registered_date = (DATE('now', 'localtime'))
     AND registered_players_today.id = (
       SELECT current_registration.id
       FROM registered_players_today AS current_registration
       WHERE current_registration.player_id = registered_players_today.player_id
-        AND current_registration.registered_date = CURRENT_DATE
+        AND current_registration.registered_date = (DATE('now', 'localtime'))
       ORDER BY current_registration.is_done_today ASC, current_registration.id DESC
       LIMIT 1
     )
@@ -278,7 +278,7 @@ function loadPlayerManagementData() {
     SELECT COUNT(*) AS count
     FROM rotation_matches
     WHERE status = 'finished'
-      AND DATE(end_time) = CURRENT_DATE
+      AND DATE(end_time, 'localtime') = (DATE('now', 'localtime'))
   `).get().count || 0);
 
   return {
@@ -444,7 +444,7 @@ export function registerPlayer(playerId) {
       const registration = db.prepare(`
         SELECT id, is_done_today
         FROM registered_players_today
-        WHERE player_id = ? AND registered_date = CURRENT_DATE
+        WHERE player_id = ? AND registered_date = (DATE('now', 'localtime'))
         ORDER BY is_done_today ASC, id DESC
         LIMIT 1
       `).get(id);
@@ -453,8 +453,8 @@ export function registerPlayer(playerId) {
       if (!registration) {
         const result = db.prepare(`
           INSERT INTO registered_players_today (
-            player_id, status, is_done_today, available_since
-          ) VALUES (?, 'available', 0, CURRENT_TIMESTAMP)
+            player_id, status, is_done_today, registered_date, available_since
+          ) VALUES (?, 'available', 0, DATE('now', 'localtime'), CURRENT_TIMESTAMP)
         `).run(id);
         return {
           registrationId: Number(result.lastInsertRowid),
@@ -542,7 +542,7 @@ export function removeRegisteredPlayer(playerId) {
     const registration = db.prepare(`
       SELECT id, is_done_today
       FROM registered_players_today
-      WHERE player_id = ? AND registered_date = CURRENT_DATE
+      WHERE player_id = ? AND registered_date = (DATE('now', 'localtime'))
       ORDER BY is_done_today ASC, id DESC
       LIMIT 1
     `).get(id);
@@ -605,7 +605,7 @@ export function markAllRegisteredPlayersDone() {
         const result = db.prepare(`
           UPDATE registered_players_today
           SET is_done_today = 1, status = 'done'
-          WHERE registered_date = CURRENT_DATE
+          WHERE registered_date = (DATE('now', 'localtime'))
             AND is_done_today = 0
             AND id IN (SELECT value FROM json_each(?))
         `).run(JSON.stringify(eligibleRegistrationIds));
@@ -651,7 +651,7 @@ export function deletePlayerProfile(playerId) {
       SELECT id
       FROM registered_players_today
       WHERE player_id = ?
-        AND registered_date = CURRENT_DATE
+        AND registered_date = (DATE('now', 'localtime'))
         AND is_done_today = 0
     `).get(id);
     if (activeRegistration) {

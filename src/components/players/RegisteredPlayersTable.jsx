@@ -2,15 +2,9 @@ import { ArrowUpDown, Search, UserPlus, Users, UserCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
-import { comparePlayerLevels } from "../../utils/playerLevel";
+import { filterAndSortTodayPlayers } from "../../utils/playerManagementUi";
 import { PlayerLevelBadge, PlayerStatusBadge } from "./PlayerBadges";
 import { genderLabel } from "./playerDisplay";
-
-// Compares numeric or text values for table sorting.
-function compareValues(first, second) {
-  if (typeof first === "number" && typeof second === "number") return first - second;
-  return String(first || "").localeCompare(String(second || ""));
-}
 
 // Displays a sortable heading for today's player table.
 function SortHeader({ label, field, sort, onSort, align = "left" }) {
@@ -55,30 +49,13 @@ export default function RegisteredPlayersTable({
   }, { active: 0, done: 0 }), [players]);
 
   // Filter and sort today's players without changing the source list.
-  const filteredPlayers = useMemo(() => {
-    const searchText = search.trim().toLowerCase();
-    const filtered = players.filter((player) => (
-      (!searchText || player.name.toLowerCase().includes(searchText))
-      && (levelFilter === "all" || player.level === levelFilter)
-      && (genderFilter === "all" || player.gender === genderFilter)
-      && (statusFilter === "all" || player.status === statusFilter)
-    ));
-    // Read the active sort value from a daily player.
-    const getValue = (player) => ({
-      name: player.name,
-      level: player.level,
-      gender: player.gender,
-      status: player.status,
-      matches: player.matchesToday,
-      results: player.winsToday - player.lossesToday,
-    })[sort.field];
-    return filtered.sort((first, second) => (
-      sort.field === "level"
-        ? comparePlayerLevels(first.level, second.level, sort.direction)
-        : compareValues(getValue(first), getValue(second))
-          * (sort.direction === "asc" ? 1 : -1)
-    ));
-  }, [genderFilter, levelFilter, players, search, sort, statusFilter]);
+  const filteredPlayers = useMemo(() => filterAndSortTodayPlayers(players, {
+    search,
+    levelFilter,
+    genderFilter,
+    statusFilter,
+    sort,
+  }), [genderFilter, levelFilter, players, search, sort, statusFilter]);
 
   // Limit filtered players to the current page.
   const pagination = getPagination(filteredPlayers.length, page, pageSize);
@@ -119,7 +96,17 @@ export default function RegisteredPlayersTable({
             <span className="rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">
               {dailyCounts.active} active · {dailyCounts.done} done
             </span>
-            <button type="button" onClick={onMarkAllDone} disabled={isMarkingAllDone || dailyCounts.active === 0} className="rounded-lg bg-green-500 px-3 py-2 text-xs font-semibold text-white hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-50"><UserCheck className="mr-1 inline h-3.5 w-3.5" /> {isMarkingAllDone ? "Working..." : "Mark All Done"}</button>
+            <button
+              type="button"
+              onClick={onMarkAllDone}
+              disabled={isMarkingAllDone || dailyCounts.active === 0}
+              className="rounded-lg bg-green-500 px-3 py-2 text-xs font-semibold text-white
+                        hover:bg-green-600
+                        disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-green-500"
+          >
+              <UserCheck className="mr-1 inline h-3.5 w-3.5" />
+              {isMarkingAllDone ? "Working..." : "Mark All Done"}
+          </button>
             <button type="button" onClick={onOpenRegister} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"> <Users className="mr-1 inline h-3.5 w-3.5" /> Register Existing</button>
           </div>
         </div>
@@ -151,7 +138,7 @@ export default function RegisteredPlayersTable({
           <h3 className="font-semibold text-[var(--text-h)]">No players registered today</h3>
           <p className="mt-1 text-sm text-[var(--text)]">Register an existing profile or add a new player profile.</p>
           <div className="mt-4 flex justify-center gap-2">
-            <button type="button" onClick={onOpenRegister} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white">Register Existing</button>
+            <button type="button" onClick={onOpenRegister} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white"><Users className="mr-1 inline h-3.5 w-3.5" />Register Existing</button>
             <button type="button" onClick={onOpenAdd} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-h)]"><UserPlus className="mr-1 inline h-4 w-4" /> Add New</button>
           </div>
         </div>
@@ -202,7 +189,7 @@ export default function RegisteredPlayersTable({
                         {player.isDoneToday ? (
                           <button type="button" onClick={() => onReactivate(player)} disabled={actionsDisabled} className="rounded-lg bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">{isBusy ? "Working..." : "Reactivate"}</button>
                         ) : (
-                          <button type="button" onClick={() => onMarkDone(player)} disabled={actionsDisabled || cannotMarkDone} title={cannotMarkDone ? `This player is currently ${player.status}.` : "Mark this player done for today"} className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-40">{isBusy ? "Working..." : "Mark Done"}</button>
+                          <button type="button" onClick={() => onMarkDone(player)} disabled={actionsDisabled || cannotMarkDone} title={cannotMarkDone ? `This player is currently ${player.status}.` : "Mark this player done for today"} className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40">{isBusy ? "Working..." : "Mark Done"}</button>
                         )}
                       </td>
                     </tr>
