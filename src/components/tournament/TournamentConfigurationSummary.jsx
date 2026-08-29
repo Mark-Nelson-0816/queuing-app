@@ -27,7 +27,7 @@ function GroupResult({ result }) {
       <p className={`text-xs font-semibold uppercase tracking-wide ${isWinner ? "text-[var(--success)]" : "text-[var(--warning)]"}`}>
         {isWinner ? "Group Winner" : "Tie in Wins"}
       </p>
-      <p className="mt-1 font-semibold text-[var(--text-h)]">
+      <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
         {teams.map((team) => team.players.map((player) => player.name).join(" / ")).join(" · ")}
       </p>
       {!isWinner && (
@@ -69,7 +69,7 @@ function GroupCard({ group }) {
 
       <div className="grid gap-2 p-4 md:grid-cols-2">
         {group.teams.map((team) => (
-          <div key={team.id} className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
+          <div key={team.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
             <span className="shrink-0 rounded-md bg-[var(--primary-light)] px-2 py-1 text-[10px] font-bold text-[var(--primary)]">
               Team {team.teamNumber}
             </span>
@@ -85,21 +85,23 @@ function GroupCard({ group }) {
         ))}
       </div>
 
-      <div className="mx-4 mb-4 overflow-hidden rounded-xl border border-[var(--border)]">
-        <table className="w-full text-left text-sm">
+      <div className="mx-4 mb-4 overflow-x-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-[34rem] w-full table-fixed text-left text-sm">
           <thead className="bg-[var(--surface-hover)] text-xs uppercase tracking-wide text-[var(--text)]">
             <tr>
-              <th className="px-3 py-2">Standings</th>
-              <th className="px-3 py-2 text-center">Played</th>
-              <th className="px-3 py-2 text-center">Wins</th>
-              <th className="px-3 py-2 text-center">Losses</th>
+              <th className="w-[55%] px-3 py-2">Standings</th>
+              <th className="w-[15%] px-3 py-2 text-center">Played</th>
+              <th className="w-[15%] px-3 py-2 text-center">Wins</th>
+              <th className="w-[15%] px-3 py-2 text-center">Losses</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
             {group.standings.map((standing) => (
               <tr key={standing.teamId}>
                 <td className="px-3 py-2 font-medium text-[var(--text-h)]">
-                  Team {standing.teamNumber}: <TeamName team={standing.team} />
+                  <span className="block truncate" title={`Team ${standing.teamNumber}: ${standing.team?.players?.map((player) => player.name).join(" / ") || "Unknown team"}`}>
+                    Team {standing.teamNumber}: <TeamName team={standing.team} />
+                  </span>
                 </td>
                 <td className="px-3 py-2 text-center text-[var(--text)]">{standing.matchesPlayed}</td>
                 <td className="px-3 py-2 text-center font-semibold text-[var(--success)]">{standing.wins}</td>
@@ -129,12 +131,12 @@ function GroupCard({ group }) {
               <div className="space-y-1.5">
                 {round.matches.map((match) => (
                   <div key={match.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm">
-                    <span className="text-[var(--text-h)]">
+                    <span className="min-w-0 flex-1 break-words text-[var(--text-h)]">
                       <TeamName team={match.teamA} />
                       <span className="mx-2 text-xs text-[var(--text)]">vs</span>
                       <TeamName team={match.teamB} />
                     </span>
-                    <div className="text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
+                    <div className="shrink-0 text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
                       <p>{match.status}{match.court ? ` · ${match.court.name}` : ""}</p>
                       {Number.isInteger(match.teamAScore) && Number.isInteger(match.teamBScore) && (
                         <p className="mt-0.5 text-xs text-[var(--text-h)]">
@@ -166,7 +168,7 @@ export default function TournamentConfigurationSummary({
   return (
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-[var(--text-h)]">Generated Configuration</h2>
             {configuration.division === "adult" && (
@@ -184,7 +186,7 @@ export default function TournamentConfigurationSummary({
             type="button"
             disabled={isResetting}
             onClick={onReset}
-            className="flex items-center gap-2 rounded-xl border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RotateCcw className="h-4 w-4" />
             {isResetting ? "Resetting..." : "Reset Configuration"}
@@ -192,7 +194,7 @@ export default function TournamentConfigurationSummary({
         )}
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           [configuration.summary.totalParticipants, "Players"],
           [configuration.summary.totalTeams, "Teams"],

@@ -44,14 +44,16 @@ const TournamentProfileRow = memo(function TournamentProfileRow({
           {getLevelLabel(player.level)}
         </span>
       </div>
-      <span className="shrink-0 text-xs capitalize text-[var(--text)]">
-        {player.gender}
-      </span>
-      {selected && (
-        <span className="shrink-0 rounded-full bg-[var(--primary)] px-2.5 py-1 text-[10px] font-semibold text-white">
-          Selected
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-xs capitalize text-[var(--text)]">
+          {player.gender}
         </span>
-      )}
+        {selected && (
+          <span className="rounded-full bg-[var(--primary)] px-2.5 py-1 text-[10px] font-semibold text-white">
+            Selected
+          </span>
+        )}
+      </div>
     </div>
   );
 });
@@ -127,7 +129,7 @@ export default function RegisteredPlayers({
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
       <div className="border-b border-[var(--border)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h2 className="font-semibold text-[var(--text-h)]">Permanent Player Profiles</h2>
             <p className="mt-1 text-sm text-[var(--text)]">
               {division === "adult"
@@ -135,12 +137,12 @@ export default function RegisteredPlayers({
                 : "Profiles from every level matching this category are shown."}
             </p>
           </div>
-          <span className="rounded-full bg-[var(--primary-light)] px-3 py-1 text-xs font-semibold text-[var(--primary)]">
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-[var(--primary-light)] px-3 py-1 text-xs font-semibold text-[var(--primary)]">
             {eligiblePlayers.length} Eligible
           </span>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(14rem,1fr)_auto] lg:items-center">
+        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(14rem,1fr)_auto] xl:items-center">
           <label className="relative">
             <span className="sr-only">Search eligible profiles</span>
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" />
@@ -195,7 +197,7 @@ export default function RegisteredPlayers({
       <div className="divide-y divide-[var(--border)]">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--text)]">
           <span>Player</span>
-          <span>Gender</span>
+          <span>Status</span>
         </div>
         {eligiblePlayers.length === 0 ? (
           <div className="p-10 text-center">

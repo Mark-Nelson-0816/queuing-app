@@ -545,18 +545,18 @@ export default function Tournament() {
     <div className="space-y-5">
       {error && (
         <div className="flex justify-between gap-4 rounded-xl bg-red-500 p-4 text-white">
-          <p>{error}</p>
-          <button type="button" className="font-bold" onClick={() => setError("")} aria-label="Dismiss error">X</button>
+          <p className="min-w-0">{error}</p>
+          <button type="button" className="font-bold" onClick={() => setError("")} aria-label="Dismiss error">×</button>
         </div>
       )}
       {notice && (
         <div className="flex justify-between gap-4 rounded-xl border border-[var(--success)]/30 bg-[var(--success-light)] p-4 text-[var(--success)]">
-          <p>{notice}</p>
-          <button type="button" className="font-bold" onClick={() => setNotice("")} aria-label="Dismiss message">X</button>
+          <p className="min-w-0">{notice}</p>
+          <button type="button" className="font-bold" onClick={() => setNotice("")} aria-label="Dismiss message">×</button>
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[19rem_minmax(0,1fr)]">
+      <div className="grid gap-5 2xl:grid-cols-[18rem_minmax(0,1fr)]">
         <TournamentEventNavigator
           view={view}
           events={events}
@@ -584,10 +584,10 @@ export default function Tournament() {
             <>
               <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h1 className="text-2xl font-bold text-[var(--text-h)]">{tournament.name}</h1>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${getTournamentStatusClasses(tournament.status)}`}>
+                      <h1 className="min-w-0 truncate text-2xl font-bold text-[var(--text-h)]" title={tournament.name}>{tournament.name}</h1>
+                      <span className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold capitalize ${getTournamentStatusClasses(tournament.status)}`}>
                         {tournament.status}
                       </span>
                     </div>
@@ -601,7 +601,7 @@ export default function Tournament() {
                       </p>
                     )}
                   </div>
-                  <div>
+                  <div className="w-full sm:w-auto">
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div className="rounded-xl bg-[var(--surface-hover)] px-3 py-2">
                         <p className="font-bold text-[var(--text-h)]">{summary.totalConfigurations}</p>
@@ -622,7 +622,7 @@ export default function Tournament() {
                           type="button"
                           disabled={summary.waitingMatches > 0 || summary.playingMatches > 0}
                           onClick={() => setShowFinishTournamentConfirm(true)}
-                          className="rounded-xl bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-green-500"
+                          className="whitespace-nowrap rounded-xl bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-green-500"
                         >
                           Finish Tournament
                         </button>
@@ -637,7 +637,7 @@ export default function Tournament() {
                       <button
                         type="button"
                         onClick={() => setShowDeleteTournamentConfirm(true)}
-                        className="inline-flex bg-red-500 items-center gap-1.5 rounded-xl text-white px-4 py-2 text-xs font-semibold transition hover:bg-red-700"
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl bg-red-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
                       >
                         Delete Tournament
                       </button>
@@ -830,20 +830,21 @@ export default function Tournament() {
         open={Boolean(resultConfirmation)}
         title="Confirm Match Result"
         onClose={() => !finishingMatchId && setResultConfirmation(null)}
+        maxWidthClass="max-w-2xl"
       >
         {resultConfirmation && (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team A</p>
-                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
                   {resultConfirmation.match.teamA.players.map((player) => player.name).join(" / ")}
                 </p>
                 <p className="mt-2 text-sm text-[var(--text)]">Score: <strong className="text-[var(--text-h)]">{resultConfirmation.teamAScore}</strong></p>
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team B</p>
-                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
                   {resultConfirmation.match.teamB.players.map((player) => player.name).join(" / ")}
                 </p>
                 <p className="mt-2 text-sm text-[var(--text)]">Score: <strong className="text-[var(--text-h)]">{resultConfirmation.teamBScore}</strong></p>
@@ -851,14 +852,14 @@ export default function Tournament() {
             </div>
             <div className="rounded-xl border border-[var(--success)]/40 bg-[var(--success-light)]/40 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--success)]">Automatic Winner</p>
-              <p className="mt-1 font-semibold text-[var(--text-h)]">
+              <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
                 {resultConfirmation.winnerTeam.players.map((player) => player.name).join(" / ")}
               </p>
             </div>
             <p className="text-xs text-[var(--text)]">
               Confirming saves this one-set score and finishes the match. Corrections are available only while this Tournament remains ongoing.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-3">
               <button
                 type="button"
                 disabled={Boolean(finishingMatchId)}
@@ -884,13 +885,14 @@ export default function Tournament() {
         open={Boolean(resultUpdateConfirmation)}
         title="Confirm Result Update"
         onClose={() => !updatingResultMatchId && setResultUpdateConfirmation(null)}
+        maxWidthClass="max-w-2xl"
       >
         {resultUpdateConfirmation && (
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team A</p>
-                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
                   {resultUpdateConfirmation.match.teamA.players.map((player) => player.name).join(" / ")}
                 </p>
                 <p className="mt-2 text-xs text-[var(--text)]">
@@ -906,7 +908,7 @@ export default function Tournament() {
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team B</p>
-                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
                   {resultUpdateConfirmation.match.teamB.players.map((player) => player.name).join(" / ")}
                 </p>
                 <p className="mt-2 text-xs text-[var(--text)]">
@@ -923,14 +925,14 @@ export default function Tournament() {
             </div>
             <div className="rounded-xl border border-[var(--success)]/40 bg-[var(--success-light)]/40 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--success)]">New Winner</p>
-              <p className="mt-1 font-semibold text-[var(--text-h)]">
+              <p className="mt-1 break-words font-semibold text-[var(--text-h)]">
                 {resultUpdateConfirmation.winnerTeam.players.map((player) => player.name).join(" / ")}
               </p>
             </div>
             <p className="text-xs text-[var(--text)]">
               This updates the stored result without reopening the match or changing its Court. Lifetime wins and losses are corrected only if the winner changes.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-3">
               <button
                 type="button"
                 disabled={Boolean(updatingResultMatchId)}

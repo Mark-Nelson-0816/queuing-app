@@ -491,31 +491,31 @@ export default function Queue() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-5">
       {/* Rotation action feedback */}
       {error && (
-        <div className="rounded-xl bg-[var(--danger-light)] border border-[var(--danger)]/30 p-4 text-[var(--danger)] flex justify-between gap-3">
-          <p>{error}</p>
-          <button type="button" onClick={() => setError("")} className="font-bold">X</button>
+        <div className="flex min-w-0 justify-between gap-3 rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-light)] p-3 text-[var(--danger)] sm:p-4">
+          <p className="min-w-0">{error}</p>
+          <button type="button" onClick={() => setError("")} aria-label="Dismiss error" className="shrink-0 font-bold">×</button>
         </div>
       )}
       {notice && (
-        <div className={`rounded-xl border p-4 flex justify-between gap-3 ${noticeTone === "warning" ? "border-[var(--warning)]/30 bg-[var(--warning-light)] text-[var(--warning)]" : "border-[var(--success)]/30 bg-[var(--success-light)] text-[var(--success)]"}`}>
-          <p>{notice}</p>
-          <button type="button" onClick={() => setNotice("")} className="font-bold">X</button>
+        <div className={`flex min-w-0 justify-between gap-3 rounded-xl border p-3 sm:p-4 ${noticeTone === "warning" ? "border-[var(--warning)]/30 bg-[var(--warning-light)] text-[var(--warning)]" : "border-[var(--success)]/30 bg-[var(--success-light)] text-[var(--success)]"}`}>
+          <p className="min-w-0">{notice}</p>
+          <button type="button" onClick={() => setNotice("")} aria-label="Dismiss message" className="shrink-0 font-bold">×</button>
         </div>
       )}
 
       {/* Rotation status summary */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           [availablePlayerCount, "Available Players"],
           [summary.waiting + summary.incomplete, "Waiting"],
           [summary.playing, "Playing"],
           [summary.finished, "Finished"],
         ].map(([value, label]) => (
-          <div key={label} className="rounded-2xl shadow-[var(--shadow)] border border-[var(--border)] bg-[var(--surface)] p-4 text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text)]">{label}</p>
+          <div key={label} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-center shadow-[var(--shadow)] sm:p-4">
+            <p className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-[var(--text)] xl:text-xs">{label}</p>
             <p className={`mt-1 text-2xl font-bold text-[var(--text-h)]`}>{value}</p>
           </div>
         ))}
@@ -543,7 +543,7 @@ export default function Queue() {
 
       {/* Generation warnings and unmatched players */}
       {(warnings.length > 0 || unmatchedPlayers.length > 0) && (
-        <section className="rounded-xl border border-[var(--warning)]/30 bg-[var(--warning-light)] px-4 py-3 space-y-2">
+        <section className="space-y-2 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning-light)] px-4 py-3">
           <h2 className="text-sm font-bold text-[var(--text-h)]">Generation Notes</h2>
           {uniqueWarnings.map((warning) => <p key={warning} className="text-sm text-[var(--warning)]">{warning}</p>)}
           {unmatchedPlayerGroups.map((group) => (
@@ -551,7 +551,7 @@ export default function Queue() {
               <p className="text-xs text-[var(--text)]">{group.reason}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {group.players.map((player) => (
-                  <span key={player.id} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}>
+                  <span key={player.id} className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}>
                     {player.name} — {getLevelLabel(player.level)}
                   </span>
                 ))}
@@ -603,8 +603,8 @@ export default function Queue() {
           <p className="text-sm text-[var(--text)]">
             Remove them from selection and apply the new configuration?
           </p>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setConfigurationChange(null)} className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text-h)]">Cancel</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => setConfigurationChange(null)} className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text-h)]">Cancel</button>
             <button
               type="button"
               onClick={() => {
@@ -615,7 +615,7 @@ export default function Queue() {
                 );
                 setConfigurationChange(null);
               }}
-              className="rounded-xl bg-[var(--danger)] px-4 py-2 text-sm font-semibold text-white"
+              className="whitespace-nowrap rounded-xl bg-[var(--danger)] px-4 py-2 text-sm font-semibold text-white"
             >
               Remove and Continue
             </button>
@@ -647,7 +647,7 @@ export default function Queue() {
                         {editorPlayers.map((player) => <PlayerOption key={player.id} player={player} />)}
                       </select>
                       {selectedPlayer && (
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(selectedPlayer.level)}`}>
+                        <span title={`${selectedPlayer.name} - ${getLevelLabel(selectedPlayer.level)}`} className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(selectedPlayer.level)}`}>
                           {selectedPlayer.name} - {getLevelLabel(selectedPlayer.level)}
                         </span>
                       )}
@@ -663,16 +663,16 @@ export default function Queue() {
               setEditTeamA(editTeamB);
               setEditTeamB(editTeamA);
             }}
-            className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)]"
+            className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)]"
           >
             Swap Teams
           </button>
           <p className="text-xs text-[var(--text)]">
             Empty slots save the match as incomplete. Active teammate locks are revalidated when saved.
           </p>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setEditTarget(null)} className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Cancel</button>
-            <button type="button" disabled={busyAction !== null} onClick={saveEdit} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Save Match</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => setEditTarget(null)} className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Cancel</button>
+            <button type="button" disabled={busyAction !== null} onClick={saveEdit} className="whitespace-nowrap rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Save Match</button>
           </div>
         </div>
       </Modal>
@@ -693,9 +693,9 @@ export default function Queue() {
             </select>
           )}
           {courtError && <p className="rounded-xl bg-[var(--danger-light)] p-3 text-sm text-[var(--danger)]">{courtError}</p>}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setStartTarget(null)} className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Cancel</button>
-            <button type="button" disabled={!selectedCourtId || busyAction !== null || isLoadingCourts} onClick={confirmStart} className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Confirm Start</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => setStartTarget(null)} className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Cancel</button>
+            <button type="button" disabled={!selectedCourtId || busyAction !== null || isLoadingCourts} onClick={confirmStart} className="whitespace-nowrap rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Confirm Start</button>
           </div>
         </div>
       </Modal>
@@ -710,9 +710,9 @@ export default function Queue() {
           </p>
           <div>
             <p className="text-sm font-semibold text-[var(--text-h)] mb-2">Mark players done for today</p>
-            <div className="space-y-2">
+            <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
               {finishTarget?.players.map((player) => (
-                <label key={player.id} className="flex items-center gap-2 text-sm text-[var(--text)]">
+                <label key={player.id} className="flex min-w-0 items-center gap-2 text-sm text-[var(--text)]">
                   <input
                     type="checkbox"
                     checked={donePlayerIds.includes(player.id)}
@@ -722,15 +722,15 @@ export default function Queue() {
                         : current.filter((id) => id !== player.id)
                     ))}
                   />
-                  {player.name}
+                  <span title={player.name} className="truncate">{player.name}</span>
                 </label>
               ))}
             </div>
             <p className="text-xs text-[var(--text)] mt-2">Unchecked players return to rotation behind players who have waited longer.</p>
           </div>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => setFinishTarget(null)} className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Cancel</button>
-            <button type="button" disabled={busyAction !== null} onClick={confirmFinish} className="rounded-xl bg-[var(--success)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Finish Match</button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={() => setFinishTarget(null)} className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm">Cancel</button>
+            <button type="button" disabled={busyAction !== null} onClick={confirmFinish} className="whitespace-nowrap rounded-xl bg-[var(--success)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">Finish Match</button>
           </div>
         </div>
       </Modal>

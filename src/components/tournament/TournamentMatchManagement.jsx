@@ -21,7 +21,7 @@ function MatchTeam({
   playingPlayerById,
 }) {
   return (
-    <div className={`rounded-xl border p-3 ${winner ? "border-[var(--success)] bg-[var(--success-light)]/40" : "border-[var(--border)] bg-[var(--surface-hover)]/60"}`}>
+    <div className={`min-w-0 rounded-xl border p-3 ${winner ? "border-[var(--success)] bg-[var(--success-light)]/40" : "border-[var(--border)] bg-[var(--surface-hover)]/60"}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
@@ -40,8 +40,8 @@ function MatchTeam({
                 : "";
 
               return (
-                <div key={player.participantId || player.playerId} className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-[var(--text-h)]">{player.name}</span>
+                <div key={player.participantId || player.playerId} className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 truncate font-semibold text-[var(--text-h)]" title={player.name}>{player.name}</span>
                   {activeMatch && (
                     <span
                       title={statusDetails}
@@ -58,7 +58,7 @@ function MatchTeam({
           </div>
         </div>
         {winner && (
-          <span className="rounded-full bg-[var(--success)] px-2 py-1 text-[10px] font-semibold text-white">
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-[var(--success)] px-2 py-1 text-[10px] font-semibold text-white">
             Winner
           </span>
         )}
@@ -103,7 +103,7 @@ function TournamentMatchCard({
     && scoreValidation.teamBScore === match.teamBScore;
 
   return (
-    <article className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+    <article className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-[var(--primary-light)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">
@@ -130,7 +130,7 @@ function TournamentMatchCard({
         </p>
       )}
 
-      <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+      <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] xl:items-center">
         <MatchTeam
           team={match.teamA}
           side="Team A"
@@ -194,7 +194,7 @@ function TournamentMatchCard({
               type="button"
               disabled={!scoreValidation.valid || finishing}
               onClick={() => onReviewResult(match, scoreValidation)}
-              className="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 whitespace-nowrap rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {finishing ? "Saving Result..." : "Review Result"}
             </button>
@@ -208,7 +208,7 @@ function TournamentMatchCard({
             type="button"
             disabled={updating}
             onClick={() => onBeginEditResult(match)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+            className="whitespace-nowrap rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
           >
             Edit Result
           </button>
@@ -252,12 +252,12 @@ function TournamentMatchCard({
             <p className={`text-xs font-semibold ${scoreValidation.valid && !scoreIsUnchanged ? "text-[var(--success)]" : "text-[var(--warning)]"}`}>
               {scoreIsUnchanged ? "No score changes to review." : scoreValidation.message}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 disabled={updating}
                 onClick={onCancelEditResult}
-                className="rounded-xl bg-[var(--surface-hover)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+                className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -265,7 +265,7 @@ function TournamentMatchCard({
                 type="button"
                 disabled={!scoreValidation.valid || scoreIsUnchanged || updating}
                 onClick={() => onReviewResultUpdate(match, scoreValidation)}
-                className="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                className="whitespace-nowrap rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {updating ? "Updating Result..." : "Review Update"}
               </button>
@@ -292,7 +292,7 @@ function TournamentMatchCard({
             type="button"
             disabled={!courtId || starting}
             onClick={() => onStart(match.id, Number(courtId))}
-            className="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            className="shrink-0 whitespace-nowrap rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {starting ? "Starting..." : "Start Match"}
           </button>
@@ -393,10 +393,10 @@ export default function TournamentMatchManagement({
   };
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
       <div className="border-b border-[var(--border)] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Swords className="h-5 w-5 text-[var(--primary)]" />
               <h2 className="text-lg font-semibold text-[var(--text-h)]">Tournament Matches</h2>
@@ -406,14 +406,14 @@ export default function TournamentMatchManagement({
             </p>
           </div>
           {configuration.division === "adult" && (
-            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getLevelClasses(configuration.level)}`}>
+            <span className={`shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getLevelClasses(configuration.level)}`}>
               {LEVEL_LABELS[configuration.level]}
             </span>
           )}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--text)]">
-          <span className="rounded-lg bg-[var(--surface-hover)] px-2.5 py-1.5 font-semibold text-[var(--text-h)]">
+          <span className="max-w-full truncate rounded-lg bg-[var(--surface-hover)] px-2.5 py-1.5 font-semibold text-[var(--text-h)]" title={tournament.name}>
             {tournament.name}
           </span>
           <span className="rounded-lg bg-[var(--surface-hover)] px-2.5 py-1.5">{DIVISION_LABELS[configuration.division]}</span>
@@ -421,7 +421,7 @@ export default function TournamentMatchManagement({
           <span className="rounded-lg bg-[var(--surface-hover)] px-2.5 py-1.5">{CATEGORY_LABELS[configuration.category]}</span>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-center">
+        <div className="mt-4 grid gap-3 xl:grid-cols-[13rem_minmax(0,1fr)] xl:items-center">
           <select
             value={groupFilter}
             onChange={(event) => updateGroupFilter(event.target.value)}
@@ -443,7 +443,7 @@ export default function TournamentMatchManagement({
                   key={status}
                   type="button"
                   onClick={() => updateStatusFilter(status)}
-                  className={`rounded-lg px-2 py-2 text-xs font-semibold capitalize ${statusFilter === status ? "bg-[var(--surface)] text-[var(--text-h)] shadow-sm" : "text-[var(--text)]"}`}
+                  className={`whitespace-nowrap rounded-lg px-2 py-2 text-xs font-semibold capitalize ${statusFilter === status ? "bg-[var(--surface)] text-[var(--text-h)] shadow-sm" : "text-[var(--text)]"}`}
                 >
                   {status} ({count})
                 </button>

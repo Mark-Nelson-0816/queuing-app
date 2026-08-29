@@ -50,9 +50,9 @@ const statusClasses = {
 function TeamPlayers({ players }) {
   if (players.length === 0) return <p className="mt-1 text-xs text-[var(--danger)]">Empty player slot</p>;
   return (
-    <div className="mt-1 flex flex-wrap gap-1.5">
+    <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
       {players.map((player) => (
-        <span key={player.id} title={getLevelLabel(player.level)} className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}>
+        <span key={player.id} title={`${player.name} — ${getLevelLabel(player.level)}`} className={`inline-flex max-w-full items-center truncate whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}>
           {player.name}
         </span>
       ))}
@@ -81,7 +81,7 @@ function RotationMatchCard({
   const singles = match.matchType === "singles";
 
   return (
-    <article className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+    <article className="min-w-0 space-y-3 rounded-xl border border-[var(--border)] p-3 sm:p-4">
       {/* Queue position and match status */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -91,13 +91,13 @@ function RotationMatchCard({
       </div>
 
       {/* Match teams */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-3">
-        <div className={`${match.winnerTeam === 1 ? "border border-[var(--success)]/30 bg-[var(--success-light)]" : "bg-[var(--primary-light)]/50"} rounded-xl p-3`}>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-stretch gap-3">
+        <div className={`${match.winnerTeam === 1 ? "border border-[var(--success)]/30 bg-[var(--success-light)]" : "bg-[var(--primary-light)]/50"} min-w-0 rounded-xl p-3`}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--primary)]">{singles ? "Player A" : "Team A"}</p>
           <TeamPlayers players={match.teamA} />
         </div>
         <span className="self-center text-xs font-bold text-[var(--text)] opacity-50">VS</span>
-        <div className={`${match.winnerTeam === 2 ? "border border-[var(--success)]/30 bg-[var(--success-light)]" : "bg-[var(--warning-light)]/50"} rounded-xl p-3`}>
+        <div className={`${match.winnerTeam === 2 ? "border border-[var(--success)]/30 bg-[var(--success-light)]" : "bg-[var(--warning-light)]/50"} min-w-0 rounded-xl p-3`}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--warning)]">{singles ? "Player B" : "Team B"}</p>
           <TeamPlayers players={match.teamB} />
         </div>
@@ -108,17 +108,17 @@ function RotationMatchCard({
 
       {editable && (
         <div className="space-y-2">
-          <div className="flex gap-2">
-            {match.status === "incomplete" && <button type="button" disabled={actionIsBusy} onClick={() => onEdit(match)} className="flex-1 rounded-xl bg-[var(--primary)] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Edit3 className="mr-1 inline h-4 w-4" /> Edit Match</button>}
-            {match.status === "waiting" && <button type="button" disabled={actionIsBusy} onClick={() => onStart(match)} className="flex-1 rounded-xl bg-[var(--primary)] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"><Play className="mr-1 inline h-4 w-4" /> Start Match</button>}
-            <button type="button" onClick={onToggleDetails} className="rounded-xl border border-[var(--border)] px-3 py-2.5 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button>
+          <div className="flex flex-wrap gap-2">
+            {match.status === "incomplete" && <button type="button" disabled={actionIsBusy} onClick={() => onEdit(match)} className="flex-1 whitespace-nowrap rounded-xl bg-[var(--primary)] px-3 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Edit3 className="mr-1 inline h-4 w-4" /> Edit Match</button>}
+            {match.status === "waiting" && <button type="button" disabled={actionIsBusy} onClick={() => onStart(match)} className="flex-1 whitespace-nowrap rounded-xl bg-[var(--primary)] px-3 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"><Play className="mr-1 inline h-4 w-4" /> Start Match</button>}
+            <button type="button" onClick={onToggleDetails} className="whitespace-nowrap rounded-xl border border-[var(--border)] px-3 py-2.5 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button>
           </div>
         </div>
       )}
 
-      {match.status === "playing" && <><div className="grid grid-cols-2 gap-2"><button type="button" disabled={actionIsBusy} onClick={() => onFinish(match, 1)} className="rounded-xl bg-[var(--primary)] px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{singles ? `${match.teamA[0]?.name || "Player A"} Won` : "Team A Won"}</button><button type="button" disabled={actionIsBusy} onClick={() => onFinish(match, 2)} className="rounded-xl bg-[var(--warning)] px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{singles ? `${match.teamB[0]?.name || "Player B"} Won` : "Team B Won"}</button></div><button type="button" onClick={onToggleDetails} className="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button></>}
+      {match.status === "playing" && <><div className="grid grid-cols-2 gap-2"><button type="button" disabled={actionIsBusy} onClick={() => onFinish(match, 1)} title={singles ? `${match.teamA[0]?.name || "Player A"} Won` : "Team A Won"} className="min-w-0 truncate whitespace-nowrap rounded-xl bg-[var(--primary)] px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{singles ? `${match.teamA[0]?.name || "Player A"} Won` : "Team A Won"}</button><button type="button" disabled={actionIsBusy} onClick={() => onFinish(match, 2)} title={singles ? `${match.teamB[0]?.name || "Player B"} Won` : "Team B Won"} className="min-w-0 truncate whitespace-nowrap rounded-xl bg-[var(--warning)] px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50">{singles ? `${match.teamB[0]?.name || "Player B"} Won` : "Team B Won"}</button></div><button type="button" onClick={onToggleDetails} className="w-full whitespace-nowrap rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button></>}
       {match.status === "finished" && <div className="rounded-xl bg-[var(--success-light)] px-3 py-2 text-center text-sm font-semibold text-[var(--success)]">Winner: {singles ? (match.winnerTeam === 1 ? match.teamA[0]?.name : match.teamB[0]?.name) : `Team ${match.winnerTeam === 1 ? "A" : "B"}`}</div>}
-      {match.status === "finished" && <button type="button" onClick={onToggleDetails} className="w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button>}
+      {match.status === "finished" && <button type="button" onClick={onToggleDetails} className="w-full whitespace-nowrap rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)]">{detailsOpen ? <ChevronDown className="mr-1 inline h-4 w-4" /> : <ChevronRight className="mr-1 inline h-4 w-4" />} Details</button>}
 
       {/* Optional match details and management actions */}
       {detailsOpen && <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-hover)]/40 p-3">
@@ -128,10 +128,10 @@ function RotationMatchCard({
         {editable && <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3">
           <button type="button" title={queueSortActive ? "Move up" : "Return to queue sorting to reorder"} disabled={actionIsBusy || !queueSortActive} onClick={() => onReorder(match.id, "up")} className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-h)] disabled:opacity-40"><ArrowUp size={14} /></button>
           <button type="button" title={queueSortActive ? "Move down" : "Return to queue sorting to reorder"} disabled={actionIsBusy || !queueSortActive} onClick={() => onReorder(match.id, "down")} className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-h)] disabled:opacity-40"><ArrowDown size={14} /></button>
-          <button type="button" disabled={actionIsBusy} onClick={() => onEdit(match)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] disabled:opacity-40"><Edit3 size={13} /> Edit</button>
-          <button type="button" disabled={actionIsBusy || match.players.length === 0} onClick={() => onRebalance(match.id)} className="inline-flex items-center gap-1 rounded-lg bg-blue-100 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-40"><Scale size={13} /> Rebalance</button>
-          {lockIds.map((lockId) => <button key={lockId} type="button" disabled={actionIsBusy} onClick={() => onUnlock(lockId)} className="inline-flex items-center gap-1 rounded-lg bg-purple-100 px-3 py-2 text-xs font-semibold text-purple-800 disabled:opacity-40"><Unlock size={13} /> Unlock</button>)}
-          <button type="button" disabled={actionIsBusy} onClick={() => onCancel(match)} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-[var(--danger-light)] px-3 py-2 text-xs font-semibold text-[var(--danger)] disabled:opacity-40"><Trash2 size={13} /> Cancel</button>
+          <button type="button" disabled={actionIsBusy} onClick={() => onEdit(match)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] disabled:opacity-40"><Edit3 size={13} /> Edit</button>
+          <button type="button" disabled={actionIsBusy || match.players.length === 0} onClick={() => onRebalance(match.id)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-blue-100 px-3 py-2 text-xs font-semibold text-blue-800 disabled:opacity-40"><Scale size={13} /> Rebalance</button>
+          {lockIds.map((lockId) => <button key={lockId} type="button" disabled={actionIsBusy} onClick={() => onUnlock(lockId)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-purple-100 px-3 py-2 text-xs font-semibold text-purple-800 disabled:opacity-40"><Unlock size={13} /> Unlock</button>)}
+          <button type="button" disabled={actionIsBusy} onClick={() => onCancel(match)} className="ml-0 inline-flex items-center gap-1 whitespace-nowrap rounded-lg bg-[var(--danger-light)] px-3 py-2 text-xs font-semibold text-[var(--danger)] disabled:opacity-40 sm:ml-auto"><Trash2 size={13} /> Cancel</button>
         </div>}
       </div>}
     </article>
@@ -169,27 +169,27 @@ export default function RotationMatches({ matches, isLoading, busyAction, onEdit
   const renderMatchCard = (match, sortActive = true) => <RotationMatchCard key={match.id} match={match} queueSortActive={sortActive} detailsOpen={detailMatchIds.includes(match.id)} onToggleDetails={() => setDetailMatchIds((current) => current.includes(match.id) ? current.filter((id) => id !== match.id) : [...current, match.id])} {...cardProps} />;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-4 sm:space-y-5">
       {/* Waiting matches */}
-      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex flex-col justify-between gap-4 border-b border-[var(--border)] p-5 lg:flex-row lg:items-center">
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex flex-col justify-between gap-3 border-b border-[var(--border)] p-4 lg:flex-row lg:items-center">
           <div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold text-[var(--text-h)]">Generated Waiting Matches</h2><span className="rounded-full bg-[var(--warning-light)] px-2.5 py-1 text-xs font-semibold text-[var(--warning)]">{waitingMatches.length} Waiting</span></div><p className="mt-1 text-sm text-[var(--text)]">Review teams, adjust queue order, then assign an available court.</p></div>
-          <div className="flex min-w-0 flex-1 gap-2 lg:max-w-xl"><label className="relative min-w-0 flex-1"><span className="sr-only">Search waiting matches</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" /><input value={waitingSearch} onChange={(event) => { setWaitingSearch(event.target.value); setWaitingPage(1); }} placeholder="Search player..." className="w-full rounded-xl border border-[var(--border)] py-2 pl-9 pr-3 text-sm" /></label><select value={waitingSort} onChange={(event) => { setWaitingSort(event.target.value); setWaitingPage(1); }} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"><option value="queue">Queue Order</option><option value="status">Status</option><option value="created">Newest</option></select></div>
+          <div className="flex w-full min-w-0 flex-wrap gap-2 lg:w-auto lg:max-w-xl"><label className="relative min-w-[12rem] flex-1"><span className="sr-only">Search waiting matches</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" /><input value={waitingSearch} onChange={(event) => { setWaitingSearch(event.target.value); setWaitingPage(1); }} placeholder="Search player..." className="w-full rounded-xl border border-[var(--border)] py-2 pl-9 pr-3 text-sm" /></label><select value={waitingSort} onChange={(event) => { setWaitingSort(event.target.value); setWaitingPage(1); }} className="shrink-0 whitespace-nowrap rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm"><option value="queue">Queue Order</option><option value="status">Status</option><option value="created">Newest</option></select></div>
         </div>
-        <div className="p-5">
+        <div className="p-4">
           {isLoading ? <p className="py-10 text-center text-[var(--text)]">Loading waiting matches...</p> : waitingMatches.length === 0 ? <div className="py-10 text-center text-[var(--text)]"><p className="font-semibold text-[var(--text-h)]">No waiting matches</p><p className="mt-1 text-sm">Generate a match above to add it to the queue.</p></div> : <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{pagedWaiting.map((match) => renderMatchCard(match, queueSortActive))}</div>}
         </div>
         {!isLoading && waitingMatches.length > 0 && <PaginationControls page={waitingPagination.currentPage} pageSize={waitingPageSize} totalRecords={waitingMatches.length} itemLabel="matches" onPageChange={setWaitingPage} onPageSizeChange={(size) => { setWaitingPageSize(size); setWaitingPage(1); }} />}
       </section>
 
       {/* Playing matches */}
-      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-5"><div><div className="flex items-center gap-2"><h2 className="text-lg font-semibold text-[var(--text-h)]">Playing Matches</h2><span className="rounded-full bg-[var(--primary-light)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">{playingMatches.length} Playing</span></div><p className="mt-1 text-sm text-[var(--text)]">Select the winning team when play is complete.</p></div></div>
-        <div className="p-5">{isLoading ? <p className="py-8 text-center text-[var(--text)]">Loading playing matches...</p> : playingMatches.length === 0 ? <div className="py-8 text-center text-[var(--text)]"><p className="font-semibold text-[var(--text-h)]">No matches currently playing</p><p className="mt-1 text-sm">Start a waiting match after selecting a court.</p></div> : <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{playingMatches.map((match) => renderMatchCard(match))}</div>}</div>
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] p-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="whitespace-nowrap text-lg font-semibold text-[var(--text-h)]">Playing Matches</h2><span className="whitespace-nowrap rounded-full bg-[var(--primary-light)] px-2.5 py-1 text-xs font-semibold text-[var(--primary)]">{playingMatches.length} Playing</span></div><p className="mt-1 text-sm text-[var(--text)]">Select the winning team when play is complete.</p></div></div>
+        <div className="p-4">{isLoading ? <p className="py-8 text-center text-[var(--text)]">Loading playing matches...</p> : playingMatches.length === 0 ? <div className="py-8 text-center text-[var(--text)]"><p className="font-semibold text-[var(--text-h)]">No matches currently playing</p><p className="mt-1 text-sm">Start a waiting match after selecting a court.</p></div> : <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{playingMatches.map((match) => renderMatchCard(match))}</div>}</div>
       </section>
 
       {/* Finished match history */}
-      <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
         <button type="button" onClick={() => setFinishedOpen((current) => !current)} className="flex w-full items-center justify-between gap-3 p-5 text-left hover:bg-[var(--surface-hover)]/50"><div className="flex items-center gap-3"><span className="rounded-xl bg-[var(--success-light)] p-2 text-[var(--success)]"><History size={18} /></span><div><h2 className="font-semibold text-[var(--text-h)]">Finished Matches</h2><p className="mt-1 text-sm text-[var(--text)]">Open saved match history when needed.</p></div></div><div className="flex items-center gap-2"><span className="rounded-full bg-[var(--success-light)] px-2.5 py-1 text-xs font-semibold text-[var(--success)]">{finishedMatches.length} Finished</span>{finishedOpen ? <ChevronDown className="text-[var(--text)]" /> : <ChevronRight className="text-[var(--text)]" />}</div></button>
         {finishedOpen && <><div className="border-t border-[var(--border)] p-5">{finishedMatches.length === 0 ? <p className="py-8 text-center text-[var(--text)]">Finished match history will appear here.</p> : <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{pagedFinished.map((match) => renderMatchCard(match))}</div>}</div>{finishedMatches.length > 0 && <PaginationControls page={finishedPagination.currentPage} pageSize={finishedPageSize} totalRecords={finishedMatches.length} itemLabel="matches" onPageChange={setFinishedPage} onPageSizeChange={(size) => { setFinishedPageSize(size); setFinishedPage(1); }} />}</>}
       </section>

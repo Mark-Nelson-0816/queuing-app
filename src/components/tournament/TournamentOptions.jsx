@@ -40,7 +40,7 @@ export default function TournamentOptions({
   return (
     <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold text-[var(--text-h)]">
             Configuration
           </h2>
@@ -51,13 +51,13 @@ export default function TournamentOptions({
           </p>
         </div>
         {existingConfiguration && (
-          <span className="rounded-full bg-[var(--success-light)] px-3 py-1 text-xs font-semibold text-[var(--success)]">
+          <span className="shrink-0 whitespace-nowrap rounded-full bg-[var(--success-light)] px-3 py-1 text-xs font-semibold text-[var(--success)]">
             Already Generated
           </span>
         )}
       </div>
 
-      <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${division === "adult" ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+      <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${division === "adult" ? "2xl:grid-cols-4" : "2xl:grid-cols-3"}`}>
         <label className="space-y-1.5 text-sm font-medium text-[var(--text-h)]">
           <span>Division</span>
           <select
