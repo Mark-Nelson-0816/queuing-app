@@ -171,7 +171,7 @@ export default function PublicDisplay({
                             formatDivision(match.division),
                             formatLabel(match.matchType),
                             formatLabel(match.category),
-                            formatLabel(match.level),
+                            match.division === "adult" ? formatLabel(match.level) : null,
                             match.groupName,
                             `Round ${match.roundNumber}`,
                           ].filter(Boolean).join(" · ")

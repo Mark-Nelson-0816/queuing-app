@@ -5,6 +5,7 @@ import {
   TOURNAMENT_LEVELS,
   TOURNAMENT_MATCH_TYPES,
   generateTournamentConfiguration as generatePureTournamentConfiguration,
+  normalizeTournamentConfiguration,
 } from "./tournamentGenerationLogic.js";
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -180,6 +181,8 @@ const getMatchRowsStatement = db.prepare(`
     tournament_matches.team_a_id,
     tournament_matches.team_b_id,
     tournament_matches.winner_team_id,
+    tournament_matches.team_a_score,
+    tournament_matches.team_b_score,
     tournament_matches.court_id,
     tournament_matches.status,
     tournament_matches.created_at,
@@ -230,6 +233,17 @@ const insertConfigurationStatement = db.prepare(`
     category,
     level
   ) VALUES (?, ?, ?, ?, ?)
+`);
+
+const getExistingConfigurationStatement = db.prepare(`
+  SELECT id
+  FROM tournament_configurations
+  WHERE tournament_id = ?
+    AND division = ?
+    AND match_type = ?
+    AND category = ?
+    AND (division <> 'adult' OR level = ?)
+  LIMIT 1
 `);
 
 const insertParticipantStatement = db.prepare(`
@@ -292,6 +306,8 @@ const getRevisedMatchLifecycleStatement = db.prepare(`
     tournament_matches.team_a_id,
     tournament_matches.team_b_id,
     tournament_matches.winner_team_id,
+    tournament_matches.team_a_score,
+    tournament_matches.team_b_score,
     tournament_matches.court_id,
     tournament_matches.status,
     tournaments.status AS tournament_status,
@@ -408,6 +424,22 @@ const updateLoserStatsStatement = db.prepare(`
   WHERE id = ?
 `);
 
+const changePreviousWinnerToLoserStatement = db.prepare(`
+  UPDATE players
+  SET
+    total_wins = total_wins - 1,
+    total_losses = total_losses + 1
+  WHERE id = ? AND total_wins >= 1
+`);
+
+const changePreviousLoserToWinnerStatement = db.prepare(`
+  UPDATE players
+  SET
+    total_losses = total_losses - 1,
+    total_wins = total_wins + 1
+  WHERE id = ? AND total_losses >= 1
+`);
+
 // Converts internal failures into the consistent Tournament result contract.
 function failure(error, fallbackMessage) {
   return {
@@ -423,6 +455,26 @@ function parseId(value, message) {
   const id = Number(value);
   if (!Number.isInteger(id) || id <= 0) throw new Error(message);
   return id;
+}
+
+// Accepts only explicit non-negative whole-number Tournament scores.
+function parseTournamentScore(value, teamLabel) {
+  if (value === null || value === undefined || String(value).trim() === "") {
+    throw new Error(`${teamLabel} score is required.`);
+  }
+
+  if (
+    (typeof value === "string" && !/^\d+$/.test(value.trim()))
+    || (typeof value !== "string" && (!Number.isInteger(value) || value < 0))
+  ) {
+    throw new Error(`${teamLabel} score must be a non-negative whole integer.`);
+  }
+
+  const score = Number(value);
+  if (!Number.isSafeInteger(score) || score < 0) {
+    throw new Error(`${teamLabel} score must be a non-negative whole integer.`);
+  }
+  return score;
 }
 
 // Accepts only real calendar dates in the database's YYYY-MM-DD format.
@@ -604,6 +656,8 @@ function loadTournamentEvent(tournamentId) {
       teamAId: Number(row.team_a_id),
       teamBId: Number(row.team_b_id),
       winnerTeamId,
+      teamAScore: row.team_a_score === null ? null : Number(row.team_a_score),
+      teamBScore: row.team_b_score === null ? null : Number(row.team_b_score),
       status: row.status,
       courtId: row.court_id === null ? null : Number(row.court_id),
       court: row.court_id === null ? null : {
@@ -880,19 +934,31 @@ const generateConfigurationTransaction = db.transaction((
     throw new Error("Finished Tournaments are read-only.");
   }
 
+  const normalizedConfiguration = normalizeTournamentConfiguration(configuration);
+  const existingConfiguration = getExistingConfigurationStatement.get(
+    tournamentId,
+    normalizedConfiguration.division,
+    normalizedConfiguration.matchType,
+    normalizedConfiguration.category,
+    normalizedConfiguration.level,
+  );
+  if (existingConfiguration) {
+    throw new Error("This exact Tournament configuration already exists.");
+  }
+
   const players = resolveCanonicalPlayers(selectedPlayers);
   const generated = generatePureTournamentConfiguration(
     players,
-    configuration,
+    normalizedConfiguration,
     random,
   );
 
   const configurationResult = insertConfigurationStatement.run(
     tournamentId,
-    configuration.division,
-    configuration.matchType,
-    configuration.category,
-    configuration.level,
+    normalizedConfiguration.division,
+    normalizedConfiguration.matchType,
+    normalizedConfiguration.category,
+    normalizedConfiguration.level,
   );
   const configurationId = Number(configurationResult.lastInsertRowid);
 
@@ -962,7 +1028,7 @@ const generateConfigurationTransaction = db.transaction((
   return configurationId;
 });
 
-// Generates and stores one exact division/type/category/level configuration.
+// Generates one Adult exact-level or minor level-independent configuration.
 export function generateTournamentEventConfiguration(
   tournamentId,
   selectedPlayers,
@@ -991,7 +1057,7 @@ export function generateTournamentEventConfiguration(
       },
     };
   } catch (error) {
-    const message = error instanceof Error && /UNIQUE constraint failed: tournament_configurations/i.test(error.message)
+    const message = error instanceof Error && /(UNIQUE constraint failed: tournament_configurations|exact Tournament configuration already exists)/i.test(error.message)
       ? "This exact Tournament configuration already exists."
       : undefined;
     return failure(message ? new Error(message) : error, "Failed to generate Tournament configuration.");
@@ -1083,7 +1149,7 @@ export function startTournamentEventMatch(matchId, courtId) {
 }
 
 // Finishes one playing match, awards lifetime stats once, and releases its court.
-const finishEventMatchTransaction = db.transaction((matchId, winnerTeamId) => {
+const finishEventMatchTransaction = db.transaction((matchId, teamAScore, teamBScore) => {
   const match = getRevisedMatchLifecycleStatement.get(matchId);
   if (!match) throw new Error("Tournament match not found.");
   if (match.tournament_status === "finished") {
@@ -1093,23 +1159,28 @@ const finishEventMatchTransaction = db.transaction((matchId, winnerTeamId) => {
     throw new Error("This Tournament match has already been completed.");
   }
   if (match.status !== "playing") {
-    throw new Error("This Tournament match must be started before selecting a winner.");
+    throw new Error("This Tournament match must be started before entering a result.");
   }
   if (match.court_id === null) {
     throw new Error("This Tournament match does not have an assigned court.");
   }
-  if (
-    winnerTeamId !== Number(match.team_a_id)
-    && winnerTeamId !== Number(match.team_b_id)
-  ) {
-    throw new Error("The selected winner is not part of this Tournament match.");
+  if (teamAScore === teamBScore) {
+    throw new Error("Tournament match scores cannot be equal.");
   }
+  const winnerTeamId = teamAScore > teamBScore
+    ? Number(match.team_a_id)
+    : Number(match.team_b_id);
 
   const update = db.prepare(`
     UPDATE tournament_matches
-    SET winner_team_id = ?, status = 'finished'
+    SET
+      team_a_score = ?,
+      team_b_score = ?,
+      winner_team_id = ?,
+      status = 'finished'
     WHERE id = ? AND status = 'playing'
-  `).run(winnerTeamId, matchId);
+      AND configuration_id IS NOT NULL
+  `).run(teamAScore, teamBScore, winnerTeamId, matchId);
   if (update.changes !== 1) {
     throw new Error("This Tournament match could not be completed.");
   }
@@ -1141,21 +1212,112 @@ const finishEventMatchTransaction = db.transaction((matchId, winnerTeamId) => {
   return Number(match.tournament_id);
 });
 
-// Validates the winner and finishes a revised Tournament match atomically.
-export function finishTournamentEventMatch(matchId, winnerTeamId) {
+// Validates scores, derives the winner, and finishes a revised match atomically.
+export function finishTournamentEventMatch(matchId, teamAScore, teamBScore) {
   try {
     const numericMatchId = parseId(matchId, "Tournament match not found.");
-    const numericWinnerTeamId = parseId(
-      winnerTeamId,
-      "The selected winner is not part of this Tournament match.",
-    );
+    const numericTeamAScore = parseTournamentScore(teamAScore, "Team A");
+    const numericTeamBScore = parseTournamentScore(teamBScore, "Team B");
     const tournamentId = finishEventMatchTransaction(
       numericMatchId,
-      numericWinnerTeamId,
+      numericTeamAScore,
+      numericTeamBScore,
     );
     return { success: true, data: loadTournamentEvent(tournamentId) };
   } catch (error) {
     return failure(error, "Failed to finish Tournament match.");
+  }
+}
+
+// Corrects a finished revised result without reopening the match or touching its court.
+const updateEventMatchResultTransaction = db.transaction((matchId, teamAScore, teamBScore) => {
+  const match = getRevisedMatchLifecycleStatement.get(matchId);
+  if (!match) throw new Error("Tournament match not found.");
+  if (match.tournament_status !== "ongoing") {
+    throw new Error("Tournament results can only be edited while the Tournament is ongoing.");
+  }
+  if (match.status !== "finished") {
+    throw new Error("Only a finished Tournament match result can be edited.");
+  }
+
+  const previousWinnerTeamId = Number(match.winner_team_id);
+  if (![Number(match.team_a_id), Number(match.team_b_id)].includes(previousWinnerTeamId)) {
+    throw new Error("The stored Tournament winner is not part of this match.");
+  }
+  if (teamAScore === teamBScore) {
+    throw new Error("Tournament match scores cannot be equal.");
+  }
+
+  const correctedWinnerTeamId = teamAScore > teamBScore
+    ? Number(match.team_a_id)
+    : Number(match.team_b_id);
+  const scoresUnchanged = Number(match.team_a_score) === teamAScore
+    && Number(match.team_b_score) === teamBScore
+    && match.team_a_score !== null
+    && match.team_b_score !== null;
+  if (scoresUnchanged && correctedWinnerTeamId === previousWinnerTeamId) {
+    return Number(match.tournament_id);
+  }
+
+  const teamPlayerIds = getCompleteMatchPlayerIds(match);
+  if (correctedWinnerTeamId !== previousWinnerTeamId) {
+    const previousWinnerPlayerIds = new Set(
+      getTeamPlayerIdsStatement.all(previousWinnerTeamId, previousWinnerTeamId)
+        .map((row) => Number(row.player_id)),
+    );
+    const expectedWinningCount = match.match_type === "singles" ? 1 : 2;
+    if (previousWinnerPlayerIds.size !== expectedWinningCount) {
+      throw new Error("Tournament previous winning team participants are incomplete.");
+    }
+
+    for (const playerId of teamPlayerIds) {
+      const statement = previousWinnerPlayerIds.has(playerId)
+        ? changePreviousWinnerToLoserStatement
+        : changePreviousLoserToWinnerStatement;
+      if (statement.run(playerId).changes !== 1) {
+        throw new Error("Tournament player statistics cannot safely reverse the previous result.");
+      }
+    }
+  }
+
+  const update = db.prepare(`
+    UPDATE tournament_matches
+    SET
+      team_a_score = ?,
+      team_b_score = ?,
+      winner_team_id = ?
+    WHERE id = ?
+      AND configuration_id IS NOT NULL
+      AND status = 'finished'
+      AND winner_team_id = ?
+  `).run(
+    teamAScore,
+    teamBScore,
+    correctedWinnerTeamId,
+    matchId,
+    previousWinnerTeamId,
+  );
+  if (update.changes !== 1) {
+    throw new Error("This Tournament result could not be updated.");
+  }
+
+  return Number(match.tournament_id);
+});
+
+// Validates corrected scores and returns the refreshed event graph after an atomic update.
+export function updateTournamentEventMatchResult(matchId, teamAScore, teamBScore) {
+  try {
+    const numericMatchId = parseId(matchId, "Tournament match not found.");
+    const numericTeamAScore = parseTournamentScore(teamAScore, "Team A");
+    const numericTeamBScore = parseTournamentScore(teamBScore, "Team B");
+    const tournamentId = updateEventMatchResultTransaction(
+      numericMatchId,
+      numericTeamAScore,
+      numericTeamBScore,
+    );
+    return { success: true, data: loadTournamentEvent(tournamentId) };
+  } catch (error) {
+    return failure(error, "Failed to update Tournament match result.");
   }
 }
 

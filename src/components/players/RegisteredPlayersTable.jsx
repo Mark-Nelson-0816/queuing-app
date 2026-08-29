@@ -11,11 +11,11 @@ function SortHeader({ label, field, sort, onSort, align = "left" }) {
   const active = sort.field === field;
   const alignmentClass = align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
   return (
-    <th className={`px-3 py-2.5 ${alignmentClass}`} aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
+    <th className={`whitespace-nowrap px-3 py-2.5 ${alignmentClass}`} aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
       <button
         type="button"
         onClick={() => onSort(field)}
-        className={`inline-flex items-center gap-1 font-semibold ${align === "right" ? "ml-auto" : ""}`}
+        className={`inline-flex items-center gap-1 whitespace-nowrap font-semibold ${align === "right" ? "ml-auto" : ""}`}
       >
         {label}<ArrowUpDown className={`h-3.5 w-3.5 ${active ? "text-[var(--primary)]" : "opacity-40"}`} />
       </button>
@@ -84,46 +84,46 @@ export default function RegisteredPlayersTable({
   };
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--primary)]/30 bg-[var(--surface)] shadow-[var(--shadow)]">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--primary)]/30 bg-[var(--surface)] shadow-[var(--shadow)]">
       {/* Daily-player heading and filters */}
       <div className="border-b border-[var(--border)] bg-[var(--primary-light)]/20 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2"><h2 className="text-xl font-bold text-[var(--text-h)]">Players Today</h2><span className="rounded-full bg-[var(--primary-light)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--primary)]">Today&apos;s Session</span></div>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2"><h2 className="whitespace-nowrap text-xl font-bold text-[var(--text-h)]">Players Today</h2><span className="whitespace-nowrap rounded-full bg-[var(--primary-light)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--primary)]">Today&apos;s Session</span></div>
             <p className="mt-0.5 text-xs text-[var(--text)]">Daily availability, active matches, teammate locks, and results.</p>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">
+            <span className="whitespace-nowrap rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">
               {dailyCounts.active} active · {dailyCounts.done} done
             </span>
             <button
               type="button"
               onClick={onMarkAllDone}
               disabled={isMarkingAllDone || dailyCounts.active === 0}
-              className="rounded-lg bg-green-500 px-3 py-2 text-xs font-semibold text-white
+              className="whitespace-nowrap rounded-lg bg-green-500 px-3 py-2 text-xs font-semibold text-white
                         hover:bg-green-600
                         disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-green-500"
           >
               <UserCheck className="mr-1 inline h-3.5 w-3.5" />
               {isMarkingAllDone ? "Working..." : "Mark All Done"}
           </button>
-            <button type="button" onClick={onOpenRegister} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"> <Users className="mr-1 inline h-3.5 w-3.5" /> Register Existing</button>
+            <button type="button" onClick={onOpenRegister} className="whitespace-nowrap rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"> <Users className="mr-1 inline h-3.5 w-3.5" /> Register Existing</button>
           </div>
         </div>
 
         <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(13rem,1fr)_11rem_9rem_9rem]">
-          <label className="relative">
+          <label className="relative min-w-0">
             <span className="sr-only">Search today&apos;s players</span>
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" />
             <input value={search} onChange={updateFilter(setSearch)} placeholder="Search today's players..." className="h-9 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-9 pr-3 text-sm" />
           </label>
-          <select value={levelFilter} onChange={updateFilter(setLevelFilter)} aria-label="Filter today's players by level" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm">
+          <select value={levelFilter} onChange={updateFilter(setLevelFilter)} aria-label="Filter today's players by level" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm">
             <option value="all">All levels</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="upper_intermediate">Upper Intermediate</option><option value="advanced">Advanced</option>
           </select>
-          <select value={genderFilter} onChange={updateFilter(setGenderFilter)} aria-label="Filter today's players by gender" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm">
+          <select value={genderFilter} onChange={updateFilter(setGenderFilter)} aria-label="Filter today's players by gender" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm">
             <option value="all">All genders</option><option value="male">Male</option><option value="female">Female</option>
           </select>
-          <select value={statusFilter} onChange={updateFilter(setStatusFilter)} aria-label="Filter today's players by status" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm">
+          <select value={statusFilter} onChange={updateFilter(setStatusFilter)} aria-label="Filter today's players by status" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm">
             <option value="all">All statuses</option><option value="available">Available</option><option value="assigned">Assigned</option><option value="playing">Playing</option><option value="done">Done</option>
           </select>
         </div>
@@ -151,15 +151,15 @@ export default function RegisteredPlayersTable({
         <>
           {/* Registered players table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] table-fixed border-collapse text-sm">
+            <table className="w-full min-w-[1000px] table-fixed border-collapse text-sm">
               <colgroup>
-                <col className="w-[22%]" />
-                <col className="w-[14%]" />
-                <col className="w-[13%]" />
-                <col className="w-[10%]" />
-                <col className="w-[10%]" />
-                <col className="w-[18%]" />
-                <col className="w-[13%]" />
+                <col className="w-[13.5rem]" />
+                <col className="w-[9rem]" />
+                <col className="w-[8rem]" />
+                <col className="w-[6.5rem]" />
+                <col className="w-[5.5rem]" />
+                <col className="w-[12rem]" />
+                <col className="w-[8rem]" />
               </colgroup>
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
                 <tr className="text-left text-xs uppercase tracking-wide text-[var(--text)] shadow-[0_1px_0_var(--border)]">
@@ -179,17 +179,17 @@ export default function RegisteredPlayersTable({
                   const cannotMarkDone = ["assigned", "playing"].includes(player.status);
                   return (
                     <tr key={player.registrationId} className="border-t border-[var(--border)] hover:bg-[var(--primary-light)]/35">
-                      <td className="px-3 py-2"><p className="truncate font-semibold text-[var(--text-h)]">{player.name}</p><p className="text-xs text-[var(--text)]">{genderLabel(player.gender)}</p></td>
+                      <td className="px-3 py-2"><p title={player.name} className="truncate font-semibold text-[var(--text-h)]">{player.name}</p><p className="whitespace-nowrap text-xs text-[var(--text)]">{genderLabel(player.gender)}</p></td>
                       <td className="px-3 py-2"><PlayerLevelBadge level={player.level} /></td>
                       <td className="px-3 py-2"><PlayerStatusBadge status={player.status} /></td>
                       <td className="px-3 py-2 text-center font-semibold text-[var(--text-h)]">{player.matchesToday}</td>
                       <td className="px-3 py-2 text-center"><span className="font-semibold text-[var(--success)]">{player.winsToday}</span><span className="px-1 text-[var(--text)]">/</span><span className="font-semibold text-[var(--danger)]">{player.lossesToday}</span></td>
-                      <td className="px-3 py-2">{player.lockedTeammate ? <span className="block truncate font-medium text-[var(--text-h)]">{player.lockedTeammate.name}</span> : <span className="text-[var(--text)]">—</span>}</td>
+                      <td className="px-3 py-2">{player.lockedTeammate ? <span title={player.lockedTeammate.name} className="block truncate font-medium text-[var(--text-h)]">{player.lockedTeammate.name}</span> : <span className="text-[var(--text)]">—</span>}</td>
                       <td className="w-px whitespace-nowrap px-3 py-2 text-right">
                         {player.isDoneToday ? (
-                          <button type="button" onClick={() => onReactivate(player)} disabled={actionsDisabled} className="rounded-lg bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">{isBusy ? "Working..." : "Reactivate"}</button>
+                          <button type="button" onClick={() => onReactivate(player)} disabled={actionsDisabled} className="whitespace-nowrap rounded-lg bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">{isBusy ? "Working..." : "Reactivate"}</button>
                         ) : (
-                          <button type="button" onClick={() => onMarkDone(player)} disabled={actionsDisabled || cannotMarkDone} title={cannotMarkDone ? `This player is currently ${player.status}.` : "Mark this player done for today"} className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40">{isBusy ? "Working..." : "Mark Done"}</button>
+                          <button type="button" onClick={() => onMarkDone(player)} disabled={actionsDisabled || cannotMarkDone} title={cannotMarkDone ? `This player is currently ${player.status}.` : "Mark this player done for today"} className="whitespace-nowrap rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:border-blue-600 disabled:cursor-not-allowed disabled:opacity-40">{isBusy ? "Working..." : "Mark Done"}</button>
                         )}
                       </td>
                     </tr>

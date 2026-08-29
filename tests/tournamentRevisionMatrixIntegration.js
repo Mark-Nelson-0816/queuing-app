@@ -5,6 +5,7 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { app } from "electron";
 import {
+  TOURNAMENT_ALL_LEVELS,
   TOURNAMENT_DIVISIONS,
   TOURNAMENT_LEVELS,
 } from "../database/tournamentGenerationLogic.js";
@@ -37,7 +38,7 @@ try {
     for (const level of TOURNAMENT_LEVELS) {
       const players = { male: [], female: [] };
       for (const gender of ["male", "female"]) {
-        for (let index = 0; index < 4; index += 1) {
+        for (let index = 0; index < 8; index += 1) {
           players[gender].push(Number(insertPlayer.run(
             `${level}-${gender}-${index + 1}`,
             level,
@@ -60,18 +61,35 @@ try {
     .run().lastInsertRowid);
 
   const configurations = [];
+  const minorMalePlayers = TOURNAMENT_LEVELS.flatMap(
+    (level) => playersByLevel.get(level).male.slice(0, 2),
+  );
+  const minorFemalePlayers = TOURNAMENT_LEVELS.flatMap(
+    (level) => playersByLevel.get(level).female.slice(0, 2),
+  );
   const matrixStartedAt = performance.now();
   for (const division of TOURNAMENT_DIVISIONS) {
-    for (const level of TOURNAMENT_LEVELS) {
-      const levelPlayers = playersByLevel.get(level);
-      const fixtures = [
-        ["singles", "mens", levelPlayers.male.slice(0, 2)],
-        ["singles", "womens", levelPlayers.female.slice(0, 2)],
-        ["singles", "no_gender", [levelPlayers.male[0], levelPlayers.female[0]]],
+    const configurationLevels = division === "adult"
+      ? TOURNAMENT_LEVELS
+      : [TOURNAMENT_ALL_LEVELS];
+    for (const level of configurationLevels) {
+      const levelPlayers = division === "adult" ? playersByLevel.get(level) : null;
+      const fixtures = division === "adult" ? [
+        ["singles", "mens", levelPlayers.male.slice(0, 4)],
+        ["singles", "womens", levelPlayers.female.slice(0, 4)],
+        ["singles", "no_gender", [...levelPlayers.male.slice(0, 2), ...levelPlayers.female.slice(0, 2)]],
         ["doubles", "mens", levelPlayers.male],
         ["doubles", "womens", levelPlayers.female],
-        ["doubles", "mixed", [...levelPlayers.male.slice(0, 2), ...levelPlayers.female.slice(0, 2)]],
-        ["doubles", "no_gender", [...levelPlayers.male.slice(0, 2), ...levelPlayers.female.slice(0, 2)]],
+        ["doubles", "mixed", [...levelPlayers.male.slice(0, 4), ...levelPlayers.female.slice(0, 4)]],
+        ["doubles", "no_gender", [...levelPlayers.male.slice(0, 4), ...levelPlayers.female.slice(0, 4)]],
+      ] : [
+        ["singles", "mens", minorMalePlayers.slice(0, 4)],
+        ["singles", "womens", minorFemalePlayers.slice(0, 4)],
+        ["singles", "no_gender", [...minorMalePlayers.slice(0, 2), ...minorFemalePlayers.slice(2, 4)]],
+        ["doubles", "mens", minorMalePlayers],
+        ["doubles", "womens", minorFemalePlayers],
+        ["doubles", "mixed", [...minorMalePlayers.slice(0, 4), ...minorFemalePlayers.slice(0, 4)]],
+        ["doubles", "no_gender", [...minorMalePlayers.slice(0, 4), ...minorFemalePlayers.slice(0, 4)]],
       ];
 
       for (const [matchType, category, playerIds] of fixtures) {
@@ -87,8 +105,8 @@ try {
         assert.equal(generated.success, true, generated.message);
         assert.equal(generated.data.configuration.groups.length, 1);
         assert.equal(generated.data.configuration.groups[0].name, "Group A");
-        assert.equal(generated.data.configuration.summary.totalTeams, 2);
-        assert.equal(generated.data.configuration.summary.totalMatches, 1);
+        assert.equal(generated.data.configuration.summary.totalTeams, 4);
+        assert.equal(generated.data.configuration.summary.totalMatches, 6);
         configurations.push(generated.data.configuration);
 
         // Starting and finishing the first matrix match makes later generation ongoing-safe.
@@ -97,7 +115,7 @@ try {
           const started = startTournamentEventMatch(match.id, courtId);
           assert.equal(started.success, true, started.message);
           assert.equal(started.data.tournament.status, "ongoing");
-          const finished = finishTournamentEventMatch(match.id, match.teamAId);
+          const finished = finishTournamentEventMatch(match.id, 21, 18);
           assert.equal(finished.success, true, finished.message);
         }
       }
@@ -105,24 +123,43 @@ try {
   }
   const matrixMs = performance.now() - matrixStartedAt;
 
-  assert.equal(configurations.length, 168);
+  assert.equal(configurations.length, 63);
   const persisted = getTournamentEvent(tournamentId);
   assert.equal(persisted.success, true, persisted.message);
   assert.equal(persisted.data.tournament.status, "ongoing");
-  assert.equal(persisted.data.configurations.length, 168);
-  assert.equal(persisted.data.summary.totalMatches, 168);
+  assert.equal(persisted.data.configurations.length, 63);
+  assert.equal(persisted.data.summary.totalMatches, 378);
   assert.equal(persisted.data.summary.finishedMatches, 1);
-  assert.equal(persisted.data.summary.waitingMatches, 167);
+  assert.equal(persisted.data.summary.waitingMatches, 377);
   assert.equal(new Set(persisted.data.configurations.map((configuration) => [
       configuration.division,
       configuration.matchType,
       configuration.category,
       configuration.level,
-    ].join(":"))).size, 168);
+    ].join(":"))).size, 63);
+
+  const minorConfiguration = persisted.data.configurations.find(
+    (configuration) => configuration.division === "u17" && configuration.matchType === "singles",
+  );
+  assert.equal(minorConfiguration.level, TOURNAMENT_ALL_LEVELS);
+  assert.ok(new Set(minorConfiguration.participants.map(
+    (participant) => participant.levelSnapshot,
+  )).size > 1);
+
+  const duplicateMinor = generateTournamentEventConfiguration(
+    tournamentId,
+    minorMalePlayers.slice(0, 4),
+    "u17",
+    "singles",
+    "mens",
+    "advanced",
+  );
+  assert.equal(duplicateMinor.success, false);
+  assert.match(duplicateMinor.message, /exact Tournament configuration already exists/i);
 
   const mixedSingles = generateTournamentEventConfiguration(
     tournamentId,
-    playersByLevel.get("beginner").male.slice(0, 2),
+    playersByLevel.get("beginner").male.slice(0, 4),
     "adult",
     "singles",
     "mixed",
@@ -130,20 +167,20 @@ try {
   );
   assert.equal(mixedSingles.success, false);
   assert.match(mixedSingles.message, /only available for Doubles/i);
-  assert.equal(getTournamentEvent(tournamentId).data.configurations.length, 168);
+  assert.equal(getTournamentEvent(tournamentId).data.configurations.length, 63);
 
   const listStartedAt = performance.now();
   const listed = listTournamentEvents();
   const listMs = performance.now() - listStartedAt;
   const summary = listed.data.find((item) => item.id === tournamentId);
-  assert.equal(summary.configurationCount, 168);
-  assert.equal(summary.matchCount, 168);
+  assert.equal(summary.configurationCount, 63);
+  assert.equal(summary.matchCount, 378);
   assert.equal(summary.finishedMatchCount, 1);
   assert.ok(matrixMs < 15000, `Persisted configuration matrix took ${matrixMs.toFixed(2)} ms`);
   assert.ok(listMs < 1000, `Matrix event listing took ${listMs.toFixed(2)} ms`);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
 
-  console.log(`Persisted all 168 legal Tournament configurations in ${matrixMs.toFixed(2)} ms.`);
+  console.log(`Persisted all 63 legal Tournament configurations in ${matrixMs.toFixed(2)} ms.`);
   console.log(`Listed the complete matrix event in ${listMs.toFixed(2)} ms.`);
   console.log("Tournament persisted configuration matrix checks passed.");
 } catch (error) {

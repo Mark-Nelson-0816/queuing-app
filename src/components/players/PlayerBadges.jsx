@@ -22,7 +22,7 @@ const STATUS_DETAILS = {
 // Displays a player's normalized skill-level badge.
 export function PlayerLevelBadge({ level }) {
   return (
-    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(level)}`}>
+    <span className={`inline-flex whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(level)}`}>
       {getLevelLabel(level)}
     </span>
   );
@@ -39,7 +39,7 @@ export function PlayerStatusBadge({ status }) {
   };
 
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${details.classes}`}>
+    <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${details.classes}`}>
       {details.label}
     </span>
   );

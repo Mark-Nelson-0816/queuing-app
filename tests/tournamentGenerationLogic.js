@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import {
   TOURNAMENT_CATEGORIES,
+  TOURNAMENT_ALL_LEVELS,
   TOURNAMENT_DIVISIONS,
   TOURNAMENT_LEVELS,
   assignTournamentTeamsToGroups,
@@ -12,18 +13,16 @@ import {
   getTournamentGroupSizes,
   validateTournamentConfiguration,
   validateTournamentConfigurationPlayers,
+  validateTournamentTeamCount,
 } from "../database/tournamentGenerationLogic.js";
 
 const REQUIRED_TEAM_COUNTS = [
-  2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+  4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 ];
 const REQUIRED_GROUP_SIZES = new Map([
-  [2, [2]],
-  [3, [3]],
   [4, [4]],
-  [5, [3, 2]],
-  [6, [3, 3]],
-  [7, [4, 3]],
+  [5, [5]],
+  [6, [6]],
   [8, [4, 4]],
   [9, [5, 4]],
   [10, [5, 5]],
@@ -54,7 +53,9 @@ function makePlayers(playerCount, configuration, startId = 1) {
     return {
       id: startId + index,
       name: `Player ${startId + index}`,
-      level: configuration.level,
+      level: configuration.division === "adult"
+        ? configuration.level
+        : TOURNAMENT_LEVELS[index % TOURNAMENT_LEVELS.length],
       gender,
       // Revised Tournament generation deliberately ignores Rotation preferences.
       preferMens: false,
@@ -131,7 +132,10 @@ function assertValidGeneration(players, configuration, generated, teamCount) {
     for (const member of team.members) {
       generatedPlayerIds.push(member.playerId);
       assert.equal(selectedPlayerIds.has(member.playerId), true);
-      assert.equal(member.levelSnapshot, configuration.level);
+      assert.equal(
+        member.levelSnapshot,
+        players.find((player) => player.id === member.playerId).level,
+      );
       assert.equal(member.slot >= 1 && member.slot <= 2, true);
     }
 
@@ -163,12 +167,25 @@ function assertValidGeneration(players, configuration, generated, teamCount) {
   }
 }
 
-// Confirms the exact 2-16 table and the bounded rule for every larger size.
+// Confirms the revised small-team rules and unchanged 8+ grouping behavior.
 for (const [teamCount, sizes] of REQUIRED_GROUP_SIZES) {
   assert.deepEqual(getTournamentGroupSizes(teamCount), sizes);
 }
-assert.throws(() => getTournamentGroupSizes(1), /at least two teams/i);
-assert.throws(() => getTournamentGroupSizes(2.5), /at least two teams/i);
+for (const teamCount of [1, 2, 3]) {
+  assert.throws(
+    () => getTournamentGroupSizes(teamCount),
+    /requires at least 4 teams/i,
+  );
+}
+assert.throws(
+  () => getTournamentGroupSizes(7),
+  /exactly 7 teams are not supported/i,
+);
+assert.throws(
+  () => getTournamentGroupSizes(2.5),
+  /non-negative integer/i,
+);
+assert.equal(validateTournamentTeamCount(4), true);
 
 for (let teamCount = 17; teamCount <= 500; teamCount += 1) {
   const sizes = getTournamentGroupSizes(teamCount);
@@ -187,9 +204,12 @@ assert.equal(getTournamentGroupLabel(702), "AAA");
 
 let generatedFixtureCount = 0;
 
-// Exercises every division, level, legal Singles category, and required size.
+// Exercises every Adult level and every level-independent minor Singles identity.
 for (const division of TOURNAMENT_DIVISIONS) {
-  for (const level of TOURNAMENT_LEVELS) {
+  const configurationLevels = division === "adult"
+    ? TOURNAMENT_LEVELS
+    : [TOURNAMENT_ALL_LEVELS];
+  for (const level of configurationLevels) {
     for (const category of ["mens", "womens", "no_gender"]) {
       for (const teamCount of REQUIRED_TEAM_COUNTS) {
         const configuration = {
@@ -211,9 +231,12 @@ for (const division of TOURNAMENT_DIVISIONS) {
   }
 }
 
-// Exercises every division, level, legal Doubles category, and equivalent size.
+// Exercises every Adult level and every level-independent minor Doubles identity.
 for (const division of TOURNAMENT_DIVISIONS) {
-  for (const level of TOURNAMENT_LEVELS) {
+  const configurationLevels = division === "adult"
+    ? TOURNAMENT_LEVELS
+    : [TOURNAMENT_ALL_LEVELS];
+  for (const level of configurationLevels) {
     for (const category of TOURNAMENT_CATEGORIES) {
       for (const teamCount of REQUIRED_TEAM_COUNTS) {
         const configuration = {
@@ -262,7 +285,7 @@ for (const group of crossGroupResult.groups) {
   }
 }
 
-// Invalid configuration and participant cases must fail before generation.
+// Invalid configuration and participant cases must fail before persistence.
 const baseConfiguration = {
   division: "adult",
   matchType: "singles",
@@ -278,6 +301,15 @@ assert.throws(
   () => validateTournamentConfiguration({ ...baseConfiguration, level: "elite" }),
   /level/i,
 );
+assert.equal(validateTournamentConfiguration({
+  ...baseConfiguration,
+  division: "u17",
+  level: TOURNAMENT_ALL_LEVELS,
+}), true);
+assert.throws(
+  () => validateTournamentConfiguration({ ...baseConfiguration, division: "u17" }),
+  /all player levels/i,
+);
 assert.throws(
   () => validateTournamentConfiguration({ ...baseConfiguration, matchType: "teams" }),
   /match type/i,
@@ -286,25 +318,35 @@ assert.throws(
   () => validateTournamentConfiguration({ ...baseConfiguration, category: "mixed" }),
   /only available for Doubles/i,
 );
-assert.throws(
-  () => validateTournamentConfigurationPlayers(
-    makePlayers(1, baseConfiguration),
-    baseConfiguration,
-  ),
-  /at least two players/i,
-);
+for (const teamCount of [1, 2, 3, 7]) {
+  assert.throws(
+    () => generateTournamentConfiguration(
+      makePlayers(teamCount, baseConfiguration),
+      baseConfiguration,
+      createSeededRandom(teamCount),
+    ),
+    teamCount === 7
+      ? /exactly 7 teams are not supported/i
+      : /requires at least 4 teams/i,
+  );
+}
 
 const doublesConfiguration = {
   ...baseConfiguration,
   matchType: "doubles",
 };
-assert.throws(
-  () => validateTournamentConfigurationPlayers(
-    makePlayers(2, doublesConfiguration),
-    doublesConfiguration,
-  ),
-  /at least four players/i,
-);
+for (const playerCount of [2, 4, 6, 14]) {
+  assert.throws(
+    () => generateTournamentConfiguration(
+      makePlayers(playerCount, doublesConfiguration),
+      doublesConfiguration,
+      createSeededRandom(playerCount + 100),
+    ),
+    playerCount === 14
+      ? /exactly 7 teams are not supported/i
+      : /requires at least 4 teams/i,
+  );
+}
 assert.throws(
   () => validateTournamentConfigurationPlayers(
     makePlayers(5, doublesConfiguration),
@@ -383,6 +425,77 @@ assert.throws(
   /2 more male players/i,
 );
 
+// Minor divisions ignore level but continue enforcing every category constraint.
+const minorMensConfiguration = {
+  division: "u15",
+  matchType: "doubles",
+  category: "mens",
+  level: TOURNAMENT_ALL_LEVELS,
+};
+const invalidMinorMens = makePlayers(8, minorMensConfiguration);
+invalidMinorMens[0] = { ...invalidMinorMens[0], gender: "female" };
+assert.throws(
+  () => validateTournamentConfigurationPlayers(invalidMinorMens, minorMensConfiguration),
+  /only include male players/i,
+);
+const minorWomensConfiguration = { ...minorMensConfiguration, category: "womens" };
+const invalidMinorWomens = makePlayers(8, minorWomensConfiguration);
+invalidMinorWomens[0] = { ...invalidMinorWomens[0], gender: "male" };
+assert.throws(
+  () => validateTournamentConfigurationPlayers(invalidMinorWomens, minorWomensConfiguration),
+  /only include female players/i,
+);
+const invalidMinorOdd = makePlayers(9, {
+  ...minorMensConfiguration,
+  category: "no_gender",
+});
+assert.throws(
+  () => validateTournamentConfigurationPlayers(
+    invalidMinorOdd,
+    { ...minorMensConfiguration, category: "no_gender" },
+  ),
+  /even number/i,
+);
+const invalidMinorMixed = makePlayers(8, {
+  ...minorMensConfiguration,
+  category: "mixed",
+}).map((player, index) => ({ ...player, gender: index < 5 ? "male" : "female" }));
+assert.throws(
+  () => validateTournamentConfigurationPlayers(
+    invalidMinorMixed,
+    { ...minorMensConfiguration, category: "mixed" },
+  ),
+  /2 more female players/i,
+);
+assert.throws(
+  () => generateTournamentConfiguration(
+    makePlayers(4, { ...minorMensConfiguration, matchType: "singles", category: "mixed" }),
+    { ...minorMensConfiguration, matchType: "singles", category: "mixed" },
+  ),
+  /only available for Doubles/i,
+);
+const duplicateMinorPlayers = makePlayers(8, minorMensConfiguration);
+duplicateMinorPlayers[1] = { ...duplicateMinorPlayers[1], id: duplicateMinorPlayers[0].id };
+assert.throws(
+  () => validateTournamentConfigurationPlayers(duplicateMinorPlayers, minorMensConfiguration),
+  /only appear once/i,
+);
+
+// Small valid configurations use one group and the existing circle method.
+for (const [teamCount, expectedMatches] of [[4, 6], [5, 10], [6, 15]]) {
+  const generated = generateTournamentConfiguration(
+    makePlayers(teamCount, baseConfiguration),
+    baseConfiguration,
+    createSeededRandom(teamCount + 200),
+  );
+  assert.deepEqual(generated.groups.map((group) => group.teams.length), [teamCount]);
+  assert.equal(
+    generated.groups[0].rounds.reduce((sum, round) => sum + round.matches.length, 0),
+    expectedMatches,
+  );
+  assertValidGroupSchedule(generated.groups[0]);
+}
+
 // Direct helpers also reject duplicate teams and preserve one-member Singles.
 const validSinglesPlayers = makePlayers(4, baseConfiguration);
 const validSinglesTeams = buildTournamentConfigurationTeams(
@@ -413,7 +526,7 @@ for (const playerCount of [80, 160, 640]) {
     division: "u17",
     matchType: "doubles",
     category: "mixed",
-    level: "intermediate",
+    level: TOURNAMENT_ALL_LEVELS,
   };
   const players = makePlayers(playerCount, configuration, playerCount * 10);
   const startedAt = performance.now();

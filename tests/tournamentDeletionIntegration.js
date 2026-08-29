@@ -101,7 +101,7 @@ try {
   const survivingId = survivingDraft.data.tournament.id;
   assert.equal(generateTournamentEventConfiguration(
     survivingId,
-    [playerIds[3], playerIds[4]],
+    playerIds.slice(1, 5),
     "adult",
     "singles",
     "mens",
@@ -117,7 +117,7 @@ try {
   const draftId = draftToDelete.data.tournament.id;
   assert.equal(generateTournamentEventConfiguration(
     draftId,
-    [playerIds[0], playerIds[1]],
+    playerIds.slice(0, 4),
     "adult",
     "singles",
     "mens",
@@ -146,7 +146,7 @@ try {
   const ongoingId = ongoing.data.tournament.id;
   const ongoingConfiguration = generateTournamentEventConfiguration(
     ongoingId,
-    playerIds.slice(0, 3),
+    playerIds.slice(0, 4),
     "adult",
     "singles",
     "mens",
@@ -158,7 +158,8 @@ try {
   assert.equal(startTournamentEventMatch(ongoingMatches[0].id, courtIds[0]).success, true);
   assert.equal(finishTournamentEventMatch(
     ongoingMatches[0].id,
-    ongoingMatches[0].teamAId,
+    21,
+    18,
   ).success, true);
   assert.equal(startTournamentEventMatch(ongoingMatches[1].id, courtIds[0]).success, true);
   const lifetimeBeforeDelete = db.prepare(`
@@ -199,19 +200,22 @@ try {
   const finishedId = finished.data.tournament.id;
   const finishedConfiguration = generateTournamentEventConfiguration(
     finishedId,
-    [playerIds[0], playerIds[1]],
+    playerIds.slice(0, 4),
     "adult",
     "singles",
     "mens",
     "beginner",
     () => 0.5,
   );
-  const finishedMatch = getMatches(finishedConfiguration.data.configuration)[0];
-  assert.equal(startTournamentEventMatch(finishedMatch.id, courtIds[1]).success, true);
-  assert.equal(finishTournamentEventMatch(
-    finishedMatch.id,
-    finishedMatch.teamBId,
-  ).success, true);
+  const finishedMatches = getMatches(finishedConfiguration.data.configuration);
+  for (const finishedMatch of finishedMatches) {
+    assert.equal(startTournamentEventMatch(finishedMatch.id, courtIds[1]).success, true);
+    assert.equal(finishTournamentEventMatch(
+      finishedMatch.id,
+      18,
+      21,
+    ).success, true);
+  }
   assert.equal(finishTournamentEvent(finishedId).success, true);
   assert.equal(getTournamentEventHistory().data.some((event) => event.id === finishedId), true);
   const lifetimeAfterFinishedMatch = db.prepare(`

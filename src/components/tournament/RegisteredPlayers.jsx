@@ -56,11 +56,12 @@ const TournamentProfileRow = memo(function TournamentProfileRow({
   );
 });
 
-// Filters and selects permanent profiles for one exact configuration.
+// Filters permanent profiles by Adult level or minor category-only eligibility.
 export default function RegisteredPlayers({
   players,
   selectedIds,
   setSelectedIds,
+  division,
   level,
   category,
   matchType,
@@ -73,8 +74,8 @@ export default function RegisteredPlayers({
   const [pageSize, setPageSize] = useState(10);
 
   const eligiblePlayers = useMemo(
-    () => getEligibleTournamentProfiles(players, level, category),
-    [category, level, players],
+    () => getEligibleTournamentProfiles(players, division, level, category),
+    [category, division, level, players],
   );
 
   const filteredPlayers = useMemo(() => {
@@ -129,7 +130,9 @@ export default function RegisteredPlayers({
           <div>
             <h2 className="font-semibold text-[var(--text-h)]">Permanent Player Profiles</h2>
             <p className="mt-1 text-sm text-[var(--text)]">
-              Only profiles matching this category and exact level are shown.
+              {division === "adult"
+                ? "Only profiles matching this category and exact level are shown."
+                : "Profiles from every level matching this category are shown."}
             </p>
           </div>
           <span className="rounded-full bg-[var(--primary-light)] px-3 py-1 text-xs font-semibold text-[var(--primary)]">
@@ -199,7 +202,9 @@ export default function RegisteredPlayers({
             <Users className="mx-auto h-7 w-7 text-[var(--text)]" />
             <p className="mt-2 font-medium text-[var(--text-h)]">No eligible profiles</p>
             <p className="mt-1 text-xs text-[var(--text)]">
-              No permanent profile matches this category and level.
+              {division === "adult"
+                ? "No permanent profile matches this category and level."
+                : "No permanent profile matches this category."}
             </p>
           </div>
         ) : filteredPlayers.length === 0 ? (

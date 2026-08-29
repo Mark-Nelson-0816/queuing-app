@@ -22,6 +22,7 @@ import {
   listTournamentEvents,
   resetTournamentEventConfiguration,
   startTournamentMatch,
+  updateTournamentMatchResult,
 } from "../database/tournamentQueries.js";
 
 import { getAvailableCourts, getCourts } from "../database/courtQueries.js";
@@ -188,9 +189,14 @@ ipcMain.handle('start-tournament-match', (event, matchId, courtId) => {
   return startTournamentMatch(matchId, courtId);
 });
 
-// Finishes either model by explicitly inspecting the match's configuration link.
-ipcMain.handle('finish-tournament-match', (event, matchId, winnerTeamId) => {
-  return finishTournamentMatch(matchId, winnerTeamId);
+// Finishes revised matches from scores while preserving legacy facade dispatch.
+ipcMain.handle('finish-tournament-match', (event, matchId, teamAScore, teamBScore) => {
+  return finishTournamentMatch(matchId, teamAScore, teamBScore);
+});
+
+// Corrects a finished revised result without routing through first-time finish logic.
+ipcMain.handle('update-tournament-match-result', (event, matchId, teamAScore, teamBScore) => {
+  return updateTournamentMatchResult(matchId, teamAScore, teamBScore);
 });
 
 // Manually finishes a revised Tournament after every generated match is finished.

@@ -21,7 +21,7 @@ const LEVEL_LABELS = {
   advanced: "Advanced",
 };
 
-// Displays compact selectors for one exact Tournament configuration.
+// Displays compact Adult selectors and hides level entirely for minor divisions.
 export default function TournamentOptions({
   division,
   matchType,
@@ -45,7 +45,9 @@ export default function TournamentOptions({
             Configuration
           </h2>
           <p className="mt-1 text-sm text-[var(--text)]">
-            Choose one division, format, category, and exact player level.
+            {division === "adult"
+              ? "Choose one division, format, category, and exact player level."
+              : "Choose one minor division, format, and category. All player levels are eligible."}
           </p>
         </div>
         {existingConfiguration && (
@@ -55,7 +57,7 @@ export default function TournamentOptions({
         )}
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`mt-5 grid gap-4 sm:grid-cols-2 ${division === "adult" ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
         <label className="space-y-1.5 text-sm font-medium text-[var(--text-h)]">
           <span>Division</span>
           <select
@@ -109,19 +111,21 @@ export default function TournamentOptions({
           )}
         </label>
 
-        <label className="space-y-1.5 text-sm font-medium text-[var(--text-h)]">
-          <span>Level</span>
-          <select
-            value={level}
-            disabled={disabled}
-            onChange={(event) => onLevelChange(event.target.value)}
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {options.levels.map((value) => (
-              <option key={value} value={value}>{LEVEL_LABELS[value] || value}</option>
-            ))}
-          </select>
-        </label>
+        {division === "adult" && (
+          <label className="space-y-1.5 text-sm font-medium text-[var(--text-h)]">
+            <span>Level</span>
+            <select
+              value={level}
+              disabled={disabled}
+              onChange={(event) => onLevelChange(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {options.levels.map((value) => (
+                <option key={value} value={value}>{LEVEL_LABELS[value] || value}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
     </section>
   );

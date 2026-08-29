@@ -30,7 +30,7 @@ a badminton club session. It manages:
 - players registered for the current local calendar day;
 - Rotation Queue Singles and Doubles matchmaking;
 - Rotation teammate locks, rank preferences, queue order, and match lifecycle;
-- multi-day Tournament events, exact configurations, groups, round robins,
+- multi-day Tournament events, division-aware configurations, groups, round robins,
   results, and history;
 - physical Courts shared by Rotation, Tournament, and legacy normal matches;
 - a read-only Public Display for active Courts and Rotation Next Up;
@@ -681,12 +681,17 @@ zero generated matches can currently be marked finished.
 Deletion is a separate explicit action and is allowed for draft, ongoing, and
 finished revised events after confirmation.
 
-9.3 Exact configuration matrix
-------------------------------
+9.3 Division-aware configuration matrix
+----------------------------------------
 
-One exact configuration is uniquely identified by:
+Adult and minor divisions intentionally use different configuration identities:
 
-Tournament + division + match type + category + level
+- Adult: Tournament + division + match type + category + exact level
+- Minor: Tournament + division + match type + category
+
+New minor configurations store the internal level sentinel `all`. This sentinel
+is an identity/storage detail and is not shown as a Tournament level in the UI,
+History, match management, or Public Display.
 
 Divisions:
 
@@ -714,13 +719,17 @@ Doubles categories:
 - No Gender
 
 Mixed Singles is invalid in pure logic, UI options, SQL CHECK constraints, and
-tests. Tournament levels are the same four displayed profile levels, but matching
-is exact only. Tournament has no adjacent-level rule.
+tests. Adult uses the four profile levels and matches the selected level exactly.
+Minor divisions have no configuration-level distinction: Beginner,
+Intermediate, Upper Intermediate, and Advanced profiles may participate together.
+Tournament has no adjacent-level fallback or level balancing.
 
-Six divisions times 28 legal type/category/level combinations per division gives
-168 possible configurations. An event creates only the configurations the
-administrator chooses. Duplicate exact configurations inside one event are
-prevented by both backend handling and a database UNIQUE constraint.
+Adult has 28 legal type/category/level configurations. Each of the five minor
+divisions has seven legal type/category configurations, for 63 legal logical
+configurations across the application. An event creates only the configurations
+the administrator chooses. Duplicate Adult exact configurations and duplicate
+minor logical configurations are prevented by backend checks, indexes, and
+database triggers.
 
 9.4 Participant source and snapshots
 ------------------------------------
@@ -734,7 +743,8 @@ in one bulk query. It does not require Registered Today and ignores:
 - Rotation queue order;
 - Rotation teammate locks.
 
-Eligibility is exact current profile level plus category gender:
+Eligibility always applies category gender. Adult additionally requires the
+exact selected current profile level; minor divisions accept all four levels:
 
 - Men's: male only
 - Women's: female only
@@ -743,9 +753,10 @@ Eligibility is exact current profile level plus category gender:
 
 The same player may participate in multiple different configurations, including
 multiple categories in one event. The same player may appear only once inside
-one exact configuration.
+one generated configuration.
 
-`tournament_participants` stores `level_snapshot` and `gender_snapshot`. Later
+`tournament_participants` stores each profile's actual `level_snapshot` and
+`gender_snapshot`, including for level-independent minor configurations. Later
 profile level/gender edits do not change historical configuration eligibility.
 Name is intentionally not snapshotted: displays and History use the current
 profile name. Permanent profile deletion is blocked while any Tournament
@@ -760,13 +771,13 @@ fields.
 Singles:
 
 - one selected player becomes one team;
-- minimum two players/teams;
+- at least four selected players/teams are required;
 - team order is randomized before grouping.
 
 Doubles:
 
 - two players per team;
-- minimum four selected players;
+- at least eight selected players/four generated teams are required;
 - total count must be even;
 - Men's uses random male pairs;
 - Women's uses random female pairs;
@@ -775,20 +786,23 @@ Doubles:
   female; counts must be equal.
 
 There is no Tournament teammate locking, manual partner editing, Rotation rank
-balancing, or adjacent-level fallback.
+balancing, or adjacent-level fallback. Adult pairing starts from one exact level;
+minor pairing may combine any profile levels and does not balance by level.
 
 9.6 Group sizing and labels
 ---------------------------
 
-The pure generator uses this exact fixed table:
+Team-count validation runs after valid Singles/Doubles teams are built and before
+grouping or persistence. The pure generator and database transaction are
+authoritative; frontend validation provides the same early feedback.
 
-- 1 team -> reject
-- 2 -> [2]
-- 3 -> [3]
+Current rules:
+
+- 1-3 teams -> reject; a configuration requires at least 4 teams
 - 4 -> [4]
-- 5 -> [3,2]
-- 6 -> [3,3]
-- 7 -> [4,3]
+- 5 -> [5]
+- 6 -> [6]
+- 7 -> reject; the operator must add or remove participants
 - 8 -> [4,4]
 - 9 -> [5,4]
 - 10 -> [5,5]
@@ -799,12 +813,18 @@ The pure generator uses this exact fixed table:
 - 15 -> [5,5,5]
 - 16 -> [4,4,4,4]
 
+Thus Singles accepts 4-6 players, rejects exactly 7, and uses the unchanged 8+
+rules. Doubles accepts 8/10/12 players for 4/5/6 teams, rejects 14 players for
+exactly 7 teams, and uses the unchanged 16+ participant behavior. Existing
+gender, Adult exact-level, even-count, and Mixed equality checks still run before
+grouping. Existing saved configurations are not retroactively regrouped.
+
 Above 16 teams, the current formula creates `floor(teamCount / 4)` groups and
 distributes teams evenly. This produces balanced four- or five-team groups for
 current inputs. Teams are shuffled before assignment.
 
 Groups are named Group A, Group B, ... Group Z, Group AA, and beyond. Labels
-restart independently for each exact configuration.
+restart independently for each generated configuration.
 
 9.7 Group round robin
 ---------------------
@@ -819,8 +839,9 @@ Each group independently uses the circle method:
   match;
 - matches per group equal `n * (n - 1) / 2`.
 
-There are no automatic semifinals, finals, seeds, championship brackets, scores,
-sets, or cross-group scheduling.
+There are no automatic semifinals, finals, seeds, championship brackets, or
+cross-group scheduling. Each played match records one final set score per team;
+there are no per-set collections or multi-set match rules.
 
 Confirmed current large Mixed Doubles example:
 
@@ -839,13 +860,13 @@ It is not a 780-match global round robin.
 
 Configuration generation:
 
-- verifies event editability and exact uniqueness;
+- verifies event editability and division-aware uniqueness;
 - bulk-loads canonical profiles through SQLite `json_each`;
 - runs the pure generator;
 - inserts configuration, participant snapshots, groups, teams, normalized team
   members, rounds, and waiting matches in one transaction;
 - uses actual inserted database IDs for every foreign key;
-- rolls back the entire exact configuration on failure;
+- rolls back the entire configuration on failure;
 - leaves all other configurations untouched.
 
 Event retrieval uses a fixed set of bulk queries for configurations,
@@ -892,12 +913,51 @@ Finish Match requires:
 - event not finished;
 - match status playing;
 - assigned Court;
-- winner exactly Team A or Team B.
+- a required Team A and Team B score, each a non-negative whole integer;
+- unequal scores, because an individual match cannot tie.
 
-There is no score, set, individual-match tie, or result editing. One transaction
-conditionally stores the winner, changes status to finished, increments lifetime
-profile statistics once, and safely releases the Court. Duplicate finish attempts
-cannot increment statistics twice.
+The operator enters one final score per team and reviews a custom confirmation
+modal containing both teams, both scores, and the automatically calculated winner.
+Going back preserves the editable score draft where practical and writes nothing.
+Confirm submits the two scores once. The renderer never supplies a revised-match
+winner ID: the backend derives Team A or Team B from the score comparison.
+
+There is no maximum score and no enforced 21-point or win-by-two rule, so results
+such as 5-0, 30-29, and 100-99 are valid. Blank, negative, decimal, nonnumeric,
+and equal scores (including 0-0) are rejected. One transaction stores both scores
+and the derived winner, changes status to finished, increments lifetime profile
+statistics once, and safely releases the Court. Any failure rolls everything back.
+Duplicate finish attempts cannot increment statistics twice. Finished-result
+reopening is not implemented.
+
+While a revised event remains `ongoing`, a finished revised match exposes Edit
+Result. The operator edits the same Team A/Team B one-set scores, reviews a second
+confirmation modal showing the old values, corrected values, and automatically
+calculated new winner preview; the backend independently derives the authoritative
+winner again on save. Draft events, finished events, Tournament History,
+waiting matches, playing matches, format-1 matches, and Rotation matches cannot use
+this correction operation. The match remains `finished`; it is never reopened.
+
+Result correction uses a separate `finished -> corrected finished` transaction.
+If only the score changes and the winner stays the same, lifetime statistics are
+untouched. If the winner flips, each previous winner loses one lifetime win and
+gains one loss, while each previous loser loses one loss and gains one win.
+`total_matches_played` never changes during correction. Conditional updates reject
+and roll back if corrupt aggregates cannot safely reverse the old contribution.
+Singles corrects both players and Doubles corrects all four atomically. The
+transaction does not reserve, release, or update any Court, including the Court ID
+retained as historical match context.
+
+Pre-score finished revised matches with a stored winner and NULL scores can receive
+their first explicit scores during an ongoing event. The stored previous winner is
+enough to decide whether statistics stay unchanged or require the same safe
+winner-flip correction. Submitting identical already-saved scores is a harmless
+backend no-op, and the UI disables reviewing an unchanged score pair.
+
+Newly scored finished matches display the final Team A-Team B score in match
+management and group result/history views. Historical winner-only Tournament
+matches remain readable with both score fields NULL; the UI omits the score instead
+of showing NULL, undefined, or a fabricated 0-0.
 
 Tournament never changes `registered_players_today.match_count`, wins, losses,
 or daily status.
@@ -918,7 +978,7 @@ When every match in a group is finished:
 - multiple teams sharing highest wins -> Tie listing every leader.
 
 There is no head-to-head, point difference, set difference, score difference,
-or manual tiebreaker.
+or manual tiebreaker. Saved match scores do not affect standings or break ties.
 
 9.11 Lifetime statistics
 ------------------------
@@ -932,16 +992,21 @@ players.
 Tournament reset and deletion intentionally do not reverse lifetime statistics
 already awarded by finished matches.
 
+Editing an ongoing Tournament's finished result is different: it never changes
+`total_matches_played`, but it atomically transfers exactly one win/loss contribution
+when the corrected scores change the winner. Daily Rotation statistics remain
+untouched.
+
 9.12 Reset Configuration
 ------------------------
 
 Reset is available only for draft/ongoing events after confirmation. It deletes
-one exact configuration and all of its participant snapshots, team members,
+one selected configuration and all of its participant snapshots, team members,
 teams, groups, rounds, waiting/playing/finished matches, winners, and results.
 Other configurations remain untouched. Courts used by that configuration's
 playing matches are collected and safely released.
 
-Lifetime profile statistics remain. The exact configuration can be generated
+Lifetime profile statistics remain. The configuration can be generated
 again afterward. Finished events cannot reset.
 
 9.13 Delete Tournament and History
@@ -961,7 +1026,7 @@ start. Deleting a finished event removes it from History. Duplicate deletion
 returns Tournament not found.
 
 History lists finished revised events and reloads their complete read-only graph:
-event dates, exact configurations, participants/snapshots, teams, groups, rounds,
+event dates, configurations, participants/snapshots, teams, groups, rounds,
 matches, Courts, winners, standings, and group winner/tie results. Events persist
 across local days and application restarts.
 
@@ -1055,8 +1120,9 @@ Currently Playing:
 - excludes available Courts and finished matches;
 - supports explicit `normal`, `rotation`, and `tournament` sources;
 - displays correct Singles/Doubles team membership and current profile names;
-- Tournament cards include event name, division, type, category, level, group,
-  round, Court, and player names.
+- Tournament cards include event name, division, type, category, group, round,
+  Court, and player names. Adult cards also show the exact configuration level;
+  minor cards omit configuration level while player rows retain actual levels.
 
 Next Up:
 
@@ -1253,8 +1319,9 @@ Revised Tournament tables
   `tournament_format_version = 2`; legacy type/category fields remain.
 
 `tournament_configurations`
-  Event FK with cascade; division/type/category/level CHECKs and exact UNIQUE
-  configuration key.
+  Event FK with cascade; division/type/category/level CHECKs. Adult rows store an
+  exact profile level. New minor rows store `all`, with logical uniqueness that
+  excludes level.
 
 `tournament_participants`
   Configuration FK with cascade, Player FK with RESTRICT, level/gender snapshots,
@@ -1276,10 +1343,13 @@ Revised Tournament tables
   unique per group.
 
 `tournament_matches`
-  Event/configuration/group/round, Team A/B, optional winner/Court, status, and
-  creation timestamp. Revised matches use waiting/playing/finished. Triggers
-  validate ownership, distinct teams, status/Court/winner lifecycle, and winner
-  membership. Unordered team pair is unique inside a revised group.
+  Event/configuration/group/round, Team A/B, optional winner/Court, nullable
+  `team_a_score` and `team_b_score`, status, and creation timestamp. Revised
+  matches use waiting/playing/finished. Triggers validate ownership, distinct
+  teams, status/Court/result lifecycle, non-negative integer scores, unequal saved
+  scores, winner membership, and agreement between scores and winner. New finished
+  revised matches require both scores. Pre-score finished rows may retain their
+  winner with NULL scores. Unordered team pair is unique inside a revised group.
 
 Legacy compatibility tables
 ---------------------------
@@ -1316,8 +1386,8 @@ Important database protections
 - unique waiting/incomplete Rotation queue positions;
 - one ongoing Tournament when existing installed data permits creating the
   partial index;
-- exact Tournament configuration uniqueness;
-- Tournament relationship/status/winner triggers;
+- Adult exact and minor level-independent Tournament configuration uniqueness;
+- Tournament relationship/status/result triggers, including score/winner agreement;
 - Tournament-participating profile deletion trigger;
 - participant/team-slot uniqueness;
 - active teammate-lock overlap protection;
@@ -1356,7 +1426,12 @@ Revised Tournament:
   matchType, category, level)`
 - `resetTournamentConfiguration(configurationId)`
 - `startTournamentMatch(matchId, courtId)`
-- `finishTournamentMatch(matchId, winnerTeamId)`
+- `finishTournamentMatch(matchId, teamAScore, teamBScore)` for revised matches;
+  the compatibility facade retains the legacy winner-team-ID behavior only for
+  format-version-1 matches
+- `updateTournamentMatchResult(matchId, teamAScore, teamBScore)` for correcting a
+  finished revised result while its event is ongoing; it never routes to legacy or
+  Rotation result handling
 - `finishTournament(tournamentId)`
 
 Courts:
@@ -1472,7 +1547,8 @@ area is optimized later.
 - Rotation winner must be Team 1 or Team 2.
 - Tournament winner must be Team A or Team B.
 - Waiting/incomplete matches cannot be started until complete and valid.
-- Revised Tournament exact configurations and group pairings are unique.
+- Revised Tournament Adult exact/minor logical configurations and group pairings
+  are unique.
 - Tournament participant level/gender snapshots remain stable after profile edit.
 - Tournament current display name follows the current Player Profile name.
 - Profile deletion cannot orphan protected match/Tournament/lock history.
@@ -1522,16 +1598,27 @@ and waiting -> playing -> finished behavior.
 Tournament guarantees
 ---------------------
 
-Pure and integration suites cover all six divisions, four levels, every legal
-Singles/Doubles category, Mixed Singles rejection, all 168 persisted legal exact
-configurations, fixed group sizes 2-16, larger balanced grouping, unique
-round-robin pairs/math, wrong gender/level/duplicates, odd Doubles, unequal Mixed,
+Pure and integration suites cover Adult exact levels, mixed-level eligibility in
+all five minor divisions, every legal Singles/Doubles category, Mixed Singles
+rejection, all 63 persisted legal logical configurations, rejected 1-3 and
+7-team generation, one-group 4/5/6-team
+schedules, unchanged 8-16 and larger balanced grouping, unique round-robin
+pairs/math, wrong gender/level/duplicates, odd Doubles, unequal Mixed,
 multiple drafts, one ongoing event, automatic draft -> ongoing, lifecycle,
-winner validation, duplicate clicks, standings/ties, snapshots/current names,
+one-set score validation and backend-derived winners, duplicate finish protection,
+ongoing-only result correction, repeated A -> B -> A winner flips, same-winner
+edits, NULL-score history correction, safe aggregate reversal, transaction
+rollback, corrected derived standings, snapshots/current names,
 configuration reset, event deletion, Court release/conflict, History, profile
 deletion protection, source isolation, Public Display context, Playing badges,
 80-player Mixed regression, and large generation/retrieval performance including
-80, 160, and larger synthetic selections.
+80, 160, and larger synthetic selections. Migration coverage verifies that adding
+nullable score columns is idempotent, preserves revised and legacy winner-only
+history without invented scores, and leaves foreign keys/integrity valid. UI
+contract coverage verifies score entry, confirmation, and scoreless-history guards.
+Result-edit UI contract coverage verifies ongoing/finished visibility, score
+prefill, old/new comparison, backend-derived corrected winner, confirmation, and
+the separate IPC route.
 
 Courts guarantees
 -----------------
@@ -1546,7 +1633,8 @@ Public Display guarantees
 -------------------------
 
 Tests cover empty state, read-only API use, Rotation/Tournament/legacy source
-mapping, Singles/Doubles teams, every Tournament division/category/level context,
+mapping, Singles/Doubles teams, every Tournament division/category, Adult level
+context, minor level omission,
 Playing-only Courts, current profile names, Rotation-only Next Up, six-item UI
 limit, immediate/10-second polling contracts, overlap guard, stale-state clearing,
 independent source failures, cleanup on unmount, restart persistence, reset/delete
@@ -1586,11 +1674,24 @@ Legacy compatibility retained:
   preload; the revised renderer uses explicit event APIs.
 - finished legacy format-1 events are not listed by the revised History navigator.
 
-Startup migration is intentionally additive. It does not blindly drop old
-Tournament tables or delete incompatible historical rows. If an installed
-database already has multiple ongoing rows, startup preserves them and avoids
-creating the one-ongoing partial unique index until data is valid; triggers still
-prevent creating another ongoing row.
+Startup migration does not delete or rewrite historical Tournament records. To
+allow the new `all` sentinel, an installed pre-revision configuration table is
+rebuilt transactionally with the expanded CHECK constraint while preserving IDs,
+rows, timestamps, and child foreign keys; `foreign_key_check` verifies the result.
+Revision 3 adds `team_a_score` and `team_b_score` with idempotent additive column
+checks. Both are nullable specifically so pre-score revised and legacy finished
+rows keep their real winner without invented historical values. Repeated startup,
+SQLite integrity, and foreign-key checks are covered by migration tests.
+Historical minor configurations keep their stored old exact-level value and
+remain readable, but occupy the same logical minor identity so a duplicate
+level-independent configuration cannot be generated. If history contains several
+old level variants of the same minor identity, the Tournament navigator tracks
+the opened database configuration ID so each retained record can still be viewed.
+Repeated startup is idempotent.
+
+If an installed database already has multiple ongoing rows, startup preserves
+them and avoids creating the one-ongoing partial unique index until data is valid;
+triggers still prevent creating another ongoing row.
 
 Do not remove legacy code/tables merely because their names look obsolete.
 Check Court/Public/player-history compatibility and migration tests first.
@@ -1610,9 +1711,13 @@ Do not automatically "fix" these without an explicit product change:
 - Tournament uses permanent profiles, not Registered Today;
 - Tournament ignores Rotation preferences, status, queue fairness, and locks;
 - Tournament has no teammate locks or manual partner editing;
-- Tournament matching is exact-level-only;
+- Adult Tournament matching is exact-level-only; minor divisions intentionally
+  have no level distinction and may mix all four profile levels;
 - Tournament is grouped round robin, not one global round robin;
-- no automatic Tournament finals/brackets, scores, or sets;
+- no automatic Tournament finals/brackets or multi-set scoring; Tournament records
+  one final score per team and does not enforce a point cap or win-by-two rule;
+- finished matches may be corrected only while their revised event is ongoing;
+  finished Tournament History is read-only, and matches are never reopened;
 - Tournament-versus-Rotation player conflict is not checked by Tournament start;
 - Tournament waiting matches are not a queue and never appear in Next Up;
 - Public Display lists playing Courts only, not available Courts;

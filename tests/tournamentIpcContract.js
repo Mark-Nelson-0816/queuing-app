@@ -65,7 +65,8 @@ for (const snippet of [
   "getTournamentConfigurationData: ()",
   "resetTournamentConfiguration: (configurationId)",
   "startTournamentMatch: (matchId, courtId)",
-  "finishTournamentMatch: (matchId, winnerTeamId)",
+  "finishTournamentMatch: (matchId, teamAScore, teamBScore)",
+  "updateTournamentMatchResult: (matchId, teamAScore, teamBScore)",
   "finishTournament: (tournamentId)",
 ]) {
   assert.equal(preloadSource.includes(snippet), true, `${snippet} is missing`);
@@ -117,7 +118,7 @@ try {
     INSERT INTO players (name, level, gender, prefer_no_gender)
     VALUES (?, 'beginner', 'male', 0)
   `);
-  const playerIds = ["IPC Aaron", "IPC Ben"].map((name) => Number(
+  const playerIds = ["IPC Aaron", "IPC Ben", "IPC Carlo", "IPC Daniel"].map((name) => Number(
     insertPlayer.run(name).lastInsertRowid,
   ));
   const courtId = Number(db.prepare(`
@@ -174,13 +175,46 @@ try {
 
   const finished = tournamentQueries.finishTournamentMatch(
     match.id,
-    match.teamAId,
+    21,
+    18,
   );
   assert.equal(finished.success, true, finished.message);
   assert.equal(
     finished.data.configurations[0].groups[0].rounds[0].matches[0].status,
     "finished",
   );
+  assert.equal(
+    finished.data.configurations[0].groups[0].rounds[0].matches[0].winnerTeamId,
+    match.teamAId,
+  );
+  const corrected = tournamentQueries.updateTournamentMatchResult(match.id, 18, 21);
+  assert.equal(corrected.success, true, corrected.message);
+  const correctedMatch = corrected.data.configurations
+    .flatMap((configuration) => configuration.groups)
+    .flatMap((group) => group.rounds)
+    .flatMap((round) => round.matches)
+    .find((candidate) => candidate.id === match.id);
+  assert.equal(correctedMatch.teamAScore, 18);
+  assert.equal(correctedMatch.teamBScore, 21);
+  assert.equal(correctedMatch.winnerTeamId, match.teamBId);
+
+  const remainingMatches = generated.data.configuration.groups.flatMap((group) => (
+    group.rounds.flatMap((round) => round.matches)
+  )).filter((candidate) => candidate.id !== match.id);
+  for (const remainingMatch of remainingMatches) {
+    assert.equal(
+      tournamentQueries.startTournamentMatch(remainingMatch.id, courtId).success,
+      true,
+    );
+    assert.equal(
+      tournamentQueries.finishTournamentMatch(
+        remainingMatch.id,
+        21,
+        18,
+      ).success,
+      true,
+    );
+  }
 
   assert.equal(tournamentQueries.finishTournamentEvent(tournamentId).success, true);
   assert.equal(tournamentQueries.getTournamentEventHistory().data.length, 1);

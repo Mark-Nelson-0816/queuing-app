@@ -179,20 +179,24 @@ const tournamentProfiles = [
   { id: 103, name: "Mens Intermediate", level: "intermediate", gender: "male" },
 ];
 assert.deepEqual(
-  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "mens").map((player) => player.id),
+  getEligibleTournamentProfiles(tournamentProfiles, "adult", "beginner", "mens").map((player) => player.id),
   [101],
 );
 assert.deepEqual(
-  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "womens").map((player) => player.id),
+  getEligibleTournamentProfiles(tournamentProfiles, "adult", "beginner", "womens").map((player) => player.id),
   [102],
 );
 assert.deepEqual(
-  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "no_gender").map((player) => player.id),
+  getEligibleTournamentProfiles(tournamentProfiles, "adult", "beginner", "no_gender").map((player) => player.id),
   [101, 102],
 );
 assert.deepEqual(
-  getEligibleTournamentProfiles(tournamentProfiles, "beginner", "mixed").map((player) => player.id),
+  getEligibleTournamentProfiles(tournamentProfiles, "adult", "beginner", "mixed").map((player) => player.id),
   [101, 102],
+);
+assert.deepEqual(
+  getEligibleTournamentProfiles(tournamentProfiles, "u17", "beginner", "no_gender").map((player) => player.id),
+  [101, 102, 103],
 );
 const tournamentSelection = getTournamentSelectionDetails(
   [101, 102],
@@ -200,17 +204,37 @@ const tournamentSelection = getTournamentSelectionDetails(
 );
 assert.equal(tournamentSelection.selectedIdSet.has(101), true);
 assert.deepEqual(tournamentSelection.genderCounts, { male: 1, female: 1 });
+const mixedTournamentProfiles = Array.from({ length: 8 }, (_, index) => ({
+  id: 201 + index,
+  gender: index < 4 ? "male" : "female",
+}));
+const mixedTournamentProfileMap = new Map(
+  mixedTournamentProfiles.map((player) => [player.id, player]),
+);
 assert.equal(validateTournamentSelection(
-  [101, 102, 103, 104],
-  new Map([
-    [101, tournamentProfiles[0]],
-    [102, tournamentProfiles[1]],
-    [103, tournamentProfiles[2]],
-    [104, { id: 104, gender: "female" }],
-  ]),
+  mixedTournamentProfiles.map((player) => player.id),
+  mixedTournamentProfileMap,
   "doubles",
   "mixed",
 ).ready, true);
+assert.match(validateTournamentSelection(
+  [201, 202, 205, 206],
+  mixedTournamentProfileMap,
+  "doubles",
+  "mixed",
+).message, /requires at least 4 teams/i);
+assert.match(validateTournamentSelection(
+  Array.from({ length: 7 }, (_, index) => index + 1),
+  new Map(),
+  "singles",
+  "mens",
+).message, /exactly 7 teams are not supported/i);
+assert.match(validateTournamentSelection(
+  Array.from({ length: 14 }, (_, index) => index + 1),
+  new Map(),
+  "doubles",
+  "mens",
+).message, /exactly 7 teams are not supported/i);
 
 const fallbackPreviewPlayers = [
   ...players.slice(0, 3).map((player) => ({

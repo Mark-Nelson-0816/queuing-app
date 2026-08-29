@@ -10,8 +10,8 @@ import { formatPlayerPreferences, genderLabel, rankPreferenceLabel } from "./pla
 function SortHeader({ label, field, sort, onSort, centered = false }) {
   const active = sort.field === field;
   return (
-    <th className={`px-3 py-2.5 ${centered ? "text-center" : "text-left"}`} aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
-      <button type="button" onClick={() => onSort(field)} className={`inline-flex items-center gap-1 font-semibold ${centered ? "justify-center" : ""}`}>
+    <th className={`whitespace-nowrap px-3 py-2.5 ${centered ? "text-center" : "text-left"}`} aria-sort={active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => onSort(field)} className={`inline-flex items-center gap-1 whitespace-nowrap font-semibold ${centered ? "justify-center" : ""}`}>
         {label}<ArrowUpDown className={`h-3.5 w-3.5 ${active ? "text-[var(--primary)]" : "opacity-40"}`} />
       </button>
     </th>
@@ -55,28 +55,28 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
   };
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
       {/* Profile heading and filters */}
       <div className="border-b border-[var(--border)] p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-[var(--text-h)]">All Player Profiles</h2>
             <p className="mt-0.5 text-xs text-[var(--text)]">Permanent details, preferences, and lifetime Rotation records.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">{profiles.length} profiles</span>
-            <button type="button" onClick={onOpenAdd} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"><UserPlus className="mr-1 inline h-3.5 w-3.5" /> Add Profile</button>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <span className="whitespace-nowrap rounded-full bg-[var(--surface-hover)] px-3 py-1 text-sm font-semibold text-[var(--text-h)]">{profiles.length} profiles</span>
+            <button type="button" onClick={onOpenAdd} className="whitespace-nowrap rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"><UserPlus className="mr-1 inline h-3.5 w-3.5" /> Add Profile</button>
           </div>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(13rem,1fr)_10rem_9rem_11rem_11rem]">
-          <label className="relative">
+          <label className="relative min-w-0">
             <span className="sr-only">Search all player profiles</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" />
             <input value={search} onChange={updateFilter(setSearch)} placeholder="Search name or contact..." className="h-9 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-9 pr-3 text-sm" />
           </label>
-          <select value={levelFilter} onChange={updateFilter(setLevelFilter)} aria-label="Filter profiles by level" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All levels</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="upper_intermediate">Upper Intermediate</option><option value="advanced">Advanced</option></select>
-          <select value={genderFilter} onChange={updateFilter(setGenderFilter)} aria-label="Filter profiles by gender" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
-          <select value={rankFilter} onChange={updateFilter(setRankFilter)} aria-label="Filter profiles by rank preference" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All rank preferences</option><option value="same_rank">Same rank only</option><option value="adjacent_rank">Adjacent allowed</option></select>
-          <select value={categoryFilter} onChange={updateFilter(setCategoryFilter)} aria-label="Filter profiles by match category" className="h-9 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All categories</option><option value="mens">Men&apos;s</option><option value="womens">Women&apos;s</option><option value="mixed">Mixed</option><option value="no_gender">No Gender</option></select>
+          <select value={levelFilter} onChange={updateFilter(setLevelFilter)} aria-label="Filter profiles by level" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All levels</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="upper_intermediate">Upper Intermediate</option><option value="advanced">Advanced</option></select>
+          <select value={genderFilter} onChange={updateFilter(setGenderFilter)} aria-label="Filter profiles by gender" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All genders</option><option value="male">Male</option><option value="female">Female</option></select>
+          <select value={rankFilter} onChange={updateFilter(setRankFilter)} aria-label="Filter profiles by rank preference" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All rank preferences</option><option value="same_rank">Same rank only</option><option value="adjacent_rank">Adjacent allowed</option></select>
+          <select value={categoryFilter} onChange={updateFilter(setCategoryFilter)} aria-label="Filter profiles by match category" className="h-9 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"><option value="all">All categories</option><option value="mens">Men&apos;s</option><option value="womens">Women&apos;s</option><option value="mixed">Mixed</option><option value="no_gender">No Gender</option></select>
         </div>
       </div>
 
@@ -96,14 +96,14 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
         <>
           {/* Player profile table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] table-fixed border-collapse text-sm">
+            <table className="w-full min-w-[1080px] table-fixed border-collapse text-sm">
               <colgroup>
-                <col className="w-[22%]" />
-                <col className="w-[14%]" />
-                <col className="w-[27%]" />
-                <col className="w-[11%]" />
-                <col className="w-[10%]" />
-                <col className="w-[16%]" />
+                <col className="w-[13.5rem]" />
+                <col className="w-[9rem]" />
+                <col className="w-[15rem]" />
+                <col className="w-[7.5rem]" />
+                <col className="w-[6rem]" />
+                <col className="w-[13.5rem]" />
               </colgroup>
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
                 <tr className="text-xs uppercase tracking-wide text-[var(--text)] shadow-[0_1px_0_var(--border)]">
@@ -123,15 +123,15 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
                   const activeToday = player.todayRegistration && !player.todayRegistration.isDone;
                   return (
                     <tr key={player.id} className="border-t border-[var(--border)] hover:bg-[var(--primary-light)]/35">
-                      <td className="px-3 py-2"><p className="truncate font-semibold text-[var(--text-h)]">{player.name}</p><p className="truncate text-xs text-[var(--text)]">{genderLabel(player.gender)} · {player.contactNumber || "No contact"}</p></td>
+                      <td className="px-3 py-2"><p title={player.name} className="truncate font-semibold text-[var(--text-h)]">{player.name}</p><p title={`${genderLabel(player.gender)} · ${player.contactNumber || "No contact"}`} className="truncate text-xs text-[var(--text)]">{genderLabel(player.gender)} · {player.contactNumber || "No contact"}</p></td>
                       <td className="px-3 py-2"><PlayerLevelBadge level={player.level} /></td>
-                      <td className="px-3 py-2"><p className="truncate font-medium text-[var(--text-h)]">{preferences.join(" · ") || "None"}</p><p className="mt-0.5 truncate text-xs text-[var(--text)]">{rankPreferenceLabel(player.rankPreference)}</p></td>
+                      <td className="px-3 py-2"><p title={preferences.join(" · ") || "None"} className="truncate font-medium text-[var(--text-h)]">{preferences.join(" · ") || "None"}</p><p title={rankPreferenceLabel(player.rankPreference)} className="mt-0.5 truncate text-xs text-[var(--text)]">{rankPreferenceLabel(player.rankPreference)}</p></td>
                       <td className="px-3 py-2 text-center font-semibold text-[var(--text-h)]">{player.lifetimeMatches}</td>
                       <td className="px-3 py-2 text-center"><span className="font-semibold text-[var(--success)]">{player.lifetimeWins}</span><span className="px-1 text-[var(--text)]">/</span><span className="font-semibold text-[var(--danger)]">{player.lifetimeLosses}</span></td>
-                      <td className="w-px whitespace-nowrap px-3 py-2"><div className="flex items-center justify-end gap-1.5">
-                        {activeToday ? <span className="rounded-lg bg-[var(--success-light)] px-2 py-1 text-xs font-semibold text-[var(--success)]">Registered</span> : <button type="button" onClick={() => onRegister(player)} disabled={actionsDisabled} className="rounded-lg bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">{isBusy ? "Working..." : player.todayRegistration?.isDone ? "Reactivate" : "Register"}</button>}
-                        <button type="button" onClick={() => onEdit(player)} disabled={actionsDisabled} className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50">Edit</button>
-                        <button type="button" onClick={() => onDelete(player)} disabled={actionsDisabled || activeToday} title={activeToday ? "Mark this player done before deleting their profile." : "Delete player profile"} className="rounded-lg border border-[var(--danger)]/40 px-2.5 py-1 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:cursor-not-allowed disabled:opacity-40">Delete</button>
+                      <td className="whitespace-nowrap px-3 py-2"><div className="flex flex-nowrap items-center justify-end gap-1.5">
+                        {activeToday ? <span className="whitespace-nowrap rounded-lg bg-[var(--success-light)] px-2 py-1 text-xs font-semibold text-[var(--success)]">Registered</span> : <button type="button" onClick={() => onRegister(player)} disabled={actionsDisabled} className="whitespace-nowrap rounded-lg bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">{isBusy ? "Working..." : player.todayRegistration?.isDone ? "Reactivate" : "Register"}</button>}
+                        <button type="button" onClick={() => onEdit(player)} disabled={actionsDisabled} className="whitespace-nowrap rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50">Edit</button>
+                        <button type="button" onClick={() => onDelete(player)} disabled={actionsDisabled || activeToday} title={activeToday ? "Mark this player done before deleting their profile." : "Delete player profile"} className="whitespace-nowrap rounded-lg border border-[var(--danger)]/40 px-2.5 py-1 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:cursor-not-allowed disabled:opacity-40">Delete</button>
                       </div></td>
                     </tr>
                   );

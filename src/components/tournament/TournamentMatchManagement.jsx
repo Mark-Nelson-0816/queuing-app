@@ -3,6 +3,7 @@ import { MapPin, Swords, Trophy } from "lucide-react";
 import PaginationControls from "../PaginationControls";
 import { getPagination } from "../../utils/pagination";
 import { getLevelClasses } from "../../utils/playerLevel";
+import { validateTournamentScoreInput } from "../../utils/tournamentScore";
 import {
   CATEGORY_LABELS,
   DIVISION_LABELS,
@@ -16,11 +17,8 @@ function MatchTeam({
   team,
   side,
   winner,
-  playing,
   showPlayingIndicators,
   playingPlayerById,
-  onSelectWinner,
-  disabled,
 }) {
   return (
     <div className={`rounded-xl border p-3 ${winner ? "border-[var(--success)] bg-[var(--success-light)]/40" : "border-[var(--border)] bg-[var(--surface-hover)]/60"}`}>
@@ -65,16 +63,6 @@ function MatchTeam({
           </span>
         )}
       </div>
-      {playing && (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onSelectWinner(team)}
-          className="mt-3 w-full rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Choose as Winner
-        </button>
-      )}
     </div>
   );
 }
@@ -87,14 +75,32 @@ function TournamentMatchCard({
   readOnly,
   starting,
   finishing,
+  updating,
+  editingResult,
+  canEditResult,
   playingPlayerById,
+  scoreValues,
   onCourtChange,
+  onScoreChange,
   onStart,
-  onSelectWinner,
+  onReviewResult,
+  onBeginEditResult,
+  onCancelEditResult,
+  onReviewResultUpdate,
 }) {
   const { match, group, round } = item;
   const isPlaying = match.status === "playing";
   const isFinished = match.status === "finished";
+  const scoreValidation = validateTournamentScoreInput(
+    scoreValues.teamA,
+    scoreValues.teamB,
+  );
+  const hasSavedScore = Number.isInteger(match.teamAScore)
+    && Number.isInteger(match.teamBScore);
+  const scoreIsUnchanged = hasSavedScore
+    && scoreValidation.valid
+    && scoreValidation.teamAScore === match.teamAScore
+    && scoreValidation.teamBScore === match.teamBScore;
 
   return (
     <article className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
@@ -129,24 +135,144 @@ function TournamentMatchCard({
           team={match.teamA}
           side="Team A"
           winner={isFinished && match.winnerTeamId === match.teamAId}
-          playing={isPlaying && !readOnly}
           showPlayingIndicators={match.status === "waiting"}
           playingPlayerById={playingPlayerById}
-          disabled={finishing}
-          onSelectWinner={(team) => onSelectWinner(match, team)}
         />
-        <span className="text-center text-xs font-bold text-[var(--text)]">VS</span>
+        <div className="text-center">
+          {isFinished && hasSavedScore ? (
+            <p className="text-base font-bold text-[var(--text-h)]">
+              {match.teamAScore} - {match.teamBScore}
+            </p>
+          ) : (
+            <span className="text-xs font-bold text-[var(--text)]">VS</span>
+          )}
+        </div>
         <MatchTeam
           team={match.teamB}
           side="Team B"
           winner={isFinished && match.winnerTeamId === match.teamBId}
-          playing={isPlaying && !readOnly}
           showPlayingIndicators={match.status === "waiting"}
           playingPlayerById={playingPlayerById}
-          disabled={finishing}
-          onSelectWinner={(team) => onSelectWinner(match, team)}
         />
       </div>
+
+      {isPlaying && !readOnly && (
+        <div className="mt-4 border-t border-[var(--border)] pt-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5 text-xs font-semibold text-[var(--text-h)]">
+              <span>Team A Score</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={scoreValues.teamA}
+                disabled={finishing}
+                onChange={(event) => onScoreChange(match.id, "teamA", event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm disabled:opacity-50"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-semibold text-[var(--text-h)]">
+              <span>Team B Score</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={scoreValues.teamB}
+                disabled={finishing}
+                onChange={(event) => onScoreChange(match.id, "teamB", event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm disabled:opacity-50"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className={`text-xs font-semibold ${scoreValidation.valid ? "text-[var(--success)]" : "text-[var(--warning)]"}`}>
+              {scoreValidation.message}
+            </p>
+            <button
+              type="button"
+              disabled={!scoreValidation.valid || finishing}
+              onClick={() => onReviewResult(match, scoreValidation)}
+              className="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {finishing ? "Saving Result..." : "Review Result"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isFinished && canEditResult && !editingResult && (
+        <div className="mt-4 flex justify-end border-t border-[var(--border)] pt-4">
+          <button
+            type="button"
+            disabled={updating}
+            onClick={() => onBeginEditResult(match)}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50"
+          >
+            Edit Result
+          </button>
+        </div>
+      )}
+
+      {isFinished && canEditResult && editingResult && (
+        <div className="mt-4 border-t border-[var(--border)] pt-4">
+          <p className="mb-3 text-xs font-semibold text-[var(--text-h)]">
+            Correct the saved result. The match remains finished and its Court will not change.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1.5 text-xs font-semibold text-[var(--text-h)]">
+              <span>Team A Score</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={scoreValues.teamA}
+                disabled={updating}
+                onChange={(event) => onScoreChange(match.id, "teamA", event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm disabled:opacity-50"
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-semibold text-[var(--text-h)]">
+              <span>Team B Score</span>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                inputMode="numeric"
+                value={scoreValues.teamB}
+                disabled={updating}
+                onChange={(event) => onScoreChange(match.id, "teamB", event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm disabled:opacity-50"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className={`text-xs font-semibold ${scoreValidation.valid && !scoreIsUnchanged ? "text-[var(--success)]" : "text-[var(--warning)]"}`}>
+              {scoreIsUnchanged ? "No score changes to review." : scoreValidation.message}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={updating}
+                onClick={onCancelEditResult}
+                className="rounded-xl bg-[var(--surface-hover)] px-4 py-2.5 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!scoreValidation.valid || scoreIsUnchanged || updating}
+                onClick={() => onReviewResultUpdate(match, scoreValidation)}
+                className="rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {updating ? "Updating Result..." : "Review Update"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {match.status === "waiting" && !readOnly && (
         <div className="mt-4 flex flex-col gap-2 border-t border-[var(--border)] pt-4 sm:flex-row">
@@ -183,15 +309,19 @@ export default function TournamentMatchManagement({
   readOnly,
   startingMatchId,
   finishingMatchId,
+  updatingResultMatchId,
   playingPlayerById,
   onStartMatch,
-  onSelectWinner,
+  onReviewResult,
+  onReviewResultUpdate,
 }) {
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState(readOnly ? "all" : "waiting");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [courtByMatchId, setCourtByMatchId] = useState({});
+  const [scoreByMatchId, setScoreByMatchId] = useState({});
+  const [editingResultMatchId, setEditingResultMatchId] = useState(null);
   const [availableCourts, setAvailableCourts] = useState([]);
   const [courtError, setCourtError] = useState("");
 
@@ -251,6 +381,17 @@ export default function TournamentMatchManagement({
     setPage(1);
   };
 
+  const beginResultEdit = (match) => {
+    setEditingResultMatchId(match.id);
+    setScoreByMatchId((current) => ({
+      ...current,
+      [match.id]: {
+        teamA: Number.isInteger(match.teamAScore) ? String(match.teamAScore) : "",
+        teamB: Number.isInteger(match.teamBScore) ? String(match.teamBScore) : "",
+      },
+    }));
+  };
+
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
       <div className="border-b border-[var(--border)] p-5">
@@ -264,9 +405,11 @@ export default function TournamentMatchManagement({
               Waiting matches have no queue position. Choose any eligible match and available court.
             </p>
           </div>
-          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getLevelClasses(configuration.level)}`}>
-            {LEVEL_LABELS[configuration.level]}
-          </span>
+          {configuration.division === "adult" && (
+            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getLevelClasses(configuration.level)}`}>
+              {LEVEL_LABELS[configuration.level]}
+            </span>
+          )}
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-[var(--text)]">
@@ -332,13 +475,27 @@ export default function TournamentMatchManagement({
             readOnly={readOnly}
             starting={Number(startingMatchId) === Number(item.match.id)}
             finishing={Number(finishingMatchId) === Number(item.match.id)}
+            updating={Number(updatingResultMatchId) === Number(item.match.id)}
+            editingResult={Number(editingResultMatchId) === Number(item.match.id)}
+            canEditResult={!readOnly && tournament.status === "ongoing"}
             playingPlayerById={playingPlayerById}
+            scoreValues={scoreByMatchId[item.match.id] || { teamA: "", teamB: "" }}
             onCourtChange={(matchId, value) => setCourtByMatchId((current) => ({
               ...current,
               [matchId]: value,
             }))}
+            onScoreChange={(matchId, side, value) => setScoreByMatchId((current) => ({
+              ...current,
+              [matchId]: {
+                ...(current[matchId] || { teamA: "", teamB: "" }),
+                [side]: value,
+              },
+            }))}
             onStart={onStartMatch}
-            onSelectWinner={onSelectWinner}
+            onReviewResult={onReviewResult}
+            onBeginEditResult={beginResultEdit}
+            onCancelEditResult={() => setEditingResultMatchId(null)}
+            onReviewResultUpdate={onReviewResultUpdate}
           />
         ))}
       </div>

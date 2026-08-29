@@ -211,7 +211,7 @@ try {
   const tournamentPlayerInsert = db.prepare(`
     INSERT INTO players (name, level, gender) VALUES (?, 'beginner', 'male')
   `);
-  const tournamentPlayerIds = ["Tournament A", "Tournament B"]
+  const tournamentPlayerIds = ["Tournament A", "Tournament B", "Tournament C", "Tournament D"]
     .map((name) => Number(tournamentPlayerInsert.run(name).lastInsertRowid));
   const firstEvent = createTournamentEvent("Court Integration Event", "2026-08-20", "2026-08-21");
   assert.equal(firstEvent.success, true, firstEvent.message);
@@ -240,14 +240,19 @@ try {
   assert.equal(getCourts().find((court) => court.id === courtA).status, "available");
   assert.equal(getCourts().find((court) => court.id === courtB).status, "playing");
   assert.equal(
-    finishTournamentEventMatch(firstTournamentMatch.id, firstTournamentMatch.teamAId).success,
+    finishTournamentEventMatch(firstTournamentMatch.id, 21, 18).success,
     true,
   );
   assert.equal(getCourts().find((court) => court.id === courtB).status, "available");
+  for (const remainingMatch of getTournamentMatches(firstConfiguration.data.configuration)
+    .filter((match) => match.id !== firstTournamentMatch.id)) {
+    assert.equal(startTournamentEventMatch(remainingMatch.id, courtB).success, true);
+    assert.equal(finishTournamentEventMatch(remainingMatch.id, 21, 18).success, true);
+  }
   assert.equal(finishTournamentEvent(firstEvent.data.tournament.id).success, true);
 
   // One revised event cannot double-book a court, and deletion releases a court.
-  const extraTournamentPlayers = ["Tournament C", "Tournament D", "Tournament E"]
+  const extraTournamentPlayers = ["Tournament E", "Tournament F", "Tournament G", "Tournament H"]
     .map((name) => Number(tournamentPlayerInsert.run(name).lastInsertRowid));
   const secondEvent = createTournamentEvent("Court Delete Event", "2026-08-22", "2026-08-23");
   assert.equal(secondEvent.success, true, secondEvent.message);

@@ -46,7 +46,7 @@ try {
   `);
   const players = ["Lifecycle A", "Lifecycle B", "Lifecycle C", "Lifecycle D"]
     .map((name) => ({ id: Number(insertPlayer.run(name).lastInsertRowid), name }));
-  const [playerA, playerB, playerC, playerD] = players;
+  const [playerA] = players;
 
   const registerToday = db.prepare(`
     INSERT INTO registered_players_today (
@@ -86,7 +86,7 @@ try {
 
   const firstConfiguration = generateTournamentEventConfiguration(
     firstEventId,
-    [playerA.id, playerB.id, playerC.id],
+    players.map((player) => player.id),
     "adult",
     "singles",
     "mens",
@@ -96,12 +96,12 @@ try {
   assert.equal(firstConfiguration.success, true, firstConfiguration.message);
   const firstConfigurationId = firstConfiguration.data.configuration.id;
   const firstMatches = getMatches(firstConfiguration.data.configuration);
-  assert.equal(firstMatches.length, 3);
+  assert.equal(firstMatches.length, 6);
   assert.equal(firstMatches.filter((match) => (
     [match.teamA, match.teamB].some((team) => (
       team.players.some((player) => player.playerId === playerA.id)
     ))
-  )).length, 2, "one player should retain several waiting round-robin matches");
+  )).length, 3, "one player should retain several waiting round-robin matches");
 
   const activeMatch = firstMatches.find((match) => (
     [match.teamA, match.teamB].some((team) => (
@@ -116,7 +116,7 @@ try {
   // New configurations remain legal while this event is already ongoing.
   const ongoingConfiguration = generateTournamentEventConfiguration(
     firstEventId,
-    [playerA.id, playerB.id],
+    players.map((player) => player.id),
     "u17",
     "singles",
     "mens",
@@ -125,7 +125,10 @@ try {
   );
   assert.equal(ongoingConfiguration.success, true, ongoingConfiguration.message);
   const ongoingConfigurationId = ongoingConfiguration.data.configuration.id;
-  const overlappingWaitingMatch = getMatches(ongoingConfiguration.data.configuration)[0];
+  const overlappingWaitingMatch = getMatches(ongoingConfiguration.data.configuration)
+    .find((match) => [match.teamA, match.teamB].some((team) => (
+      team.players.some((player) => player.playerId === playerA.id)
+    )));
   assertFailure(
     startTournamentEventMatch(overlappingWaitingMatch.id, courtIds[1]),
     /already playing another Tournament match on Lifecycle Court 1/i,
@@ -140,7 +143,7 @@ try {
     activeMatch.teamA.players[0].playerId,
     activeMatch.teamB.players[0].playerId,
   );
-  const finished = finishTournamentEventMatch(activeMatch.id, activeMatch.teamAId);
+  const finished = finishTournamentEventMatch(activeMatch.id, 21, 18);
   assert.equal(finished.success, true, finished.message);
   const lifetimeAfterFinish = db.prepare(`
     SELECT id, total_matches_played, total_wins, total_losses
@@ -153,7 +156,7 @@ try {
   );
   assert.notDeepEqual(lifetimeAfterFinish, lifetimeBeforeFinish);
   assertFailure(
-    finishTournamentEventMatch(activeMatch.id, activeMatch.teamAId),
+    finishTournamentEventMatch(activeMatch.id, 21, 18),
     /already been completed/i,
   );
   assert.deepEqual(db.prepare(`
@@ -198,7 +201,7 @@ try {
 
   const regenerated = generateTournamentEventConfiguration(
     firstEventId,
-    [playerC.id, playerD.id],
+    players.map((player) => player.id),
     "adult",
     "singles",
     "mens",
@@ -216,8 +219,16 @@ try {
   assertFailure(finishTournamentEvent(firstEventId), /waiting and playing/i);
   assert.equal(finishTournamentEventMatch(
     overlappingWaitingMatch.id,
-    overlappingWaitingMatch.teamBId,
+    18,
+    21,
   ).success, true);
+
+  // Complete the other matches in this four-team configuration before finishing.
+  for (const match of getMatches(ongoingConfiguration.data.configuration)) {
+    if (match.id === overlappingWaitingMatch.id) continue;
+    assert.equal(startTournamentEventMatch(match.id, courtIds[0]).success, true);
+    assert.equal(finishTournamentEventMatch(match.id, 21, 18).success, true);
+  }
 
   // History keeps snapshots but resolves the corrected current profile name.
   db.prepare(`
@@ -246,7 +257,7 @@ try {
   assertFailure(resetTournamentEventConfiguration(ongoingConfigurationId), /read-only/i);
   assertFailure(generateTournamentEventConfiguration(
     firstEventId,
-    [playerC.id, playerD.id],
+    players.map((player) => player.id),
     "u9",
     "singles",
     "mens",

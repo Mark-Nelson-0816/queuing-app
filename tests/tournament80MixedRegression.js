@@ -48,6 +48,7 @@ try {
   assert.equal(profiles.length, 200);
   const intermediateProfiles = getEligibleTournamentProfiles(
     profiles,
+    "adult",
     "intermediate",
     "mixed",
   );

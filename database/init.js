@@ -9,6 +9,84 @@ function addColumnIfMissing(tableName, columnName, columnDefinition) {
     }
 }
 
+const TOURNAMENT_CONFIGURATIONS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS tournament_configurations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tournament_id INTEGER NOT NULL
+        REFERENCES tournaments(id) ON DELETE CASCADE,
+    division TEXT NOT NULL,
+    match_type TEXT NOT NULL,
+    category TEXT NOT NULL,
+    level TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CHECK (division IN ('adult', 'u17', 'u15', 'u13', 'u11', 'u9')),
+    CHECK (match_type IN ('singles', 'doubles')),
+    CHECK (category IN ('mens', 'womens', 'mixed', 'no_gender')),
+    CHECK (level IN (
+        'beginner',
+        'intermediate',
+        'upper_intermediate',
+        'advanced',
+        'all'
+    )),
+    CHECK (NOT (match_type = 'singles' AND category = 'mixed')),
+    UNIQUE(tournament_id, division, match_type, category, level)
+)`;
+
+// Rebuilds only the configuration table when an installed database predates the minor-level sentinel.
+function migrateTournamentConfigurationLevelConstraint() {
+    const table = db.prepare(`
+        SELECT sql
+        FROM sqlite_master
+        WHERE type = 'table' AND name = 'tournament_configurations'
+    `).get();
+    if (!table || /['"]all['"]/i.test(table.sql || "")) return;
+
+    const foreignKeysEnabled = Number(db.pragma("foreign_keys", { simple: true })) === 1;
+    const legacyAlterTableEnabled = Number(db.pragma("legacy_alter_table", { simple: true })) === 1;
+
+    try {
+        db.pragma("foreign_keys = OFF");
+        db.pragma("legacy_alter_table = ON");
+        db.transaction(() => {
+            db.exec(`
+                ALTER TABLE tournament_configurations
+                    RENAME TO tournament_configurations_legacy_level;
+                ${TOURNAMENT_CONFIGURATIONS_TABLE_SQL};
+                INSERT INTO tournament_configurations (
+                    id,
+                    tournament_id,
+                    division,
+                    match_type,
+                    category,
+                    level,
+                    created_at
+                )
+                SELECT
+                    id,
+                    tournament_id,
+                    division,
+                    match_type,
+                    category,
+                    level,
+                    created_at
+                FROM tournament_configurations_legacy_level;
+                DROP TABLE tournament_configurations_legacy_level;
+            `);
+        })();
+    } finally {
+        db.pragma(`legacy_alter_table = ${legacyAlterTableEnabled ? "ON" : "OFF"}`);
+        if (foreignKeysEnabled) db.pragma("foreign_keys = ON");
+    }
+
+    const foreignKeyViolations = db.pragma("foreign_key_check");
+    if (foreignKeyViolations.length > 0) {
+        throw new Error("Tournament configuration migration left invalid foreign keys.");
+    }
+}
+
+migrateTournamentConfigurationLevelConstraint();
+
 // Creates the schema and applies safe compatibility migrations atomically.
 export const initDatabase = db.transaction(() => {
 
@@ -86,27 +164,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS tournament_configurations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tournament_id INTEGER NOT NULL
-        REFERENCES tournaments(id) ON DELETE CASCADE,
-    division TEXT NOT NULL,
-    match_type TEXT NOT NULL,
-    category TEXT NOT NULL,
-    level TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CHECK (division IN ('adult', 'u17', 'u15', 'u13', 'u11', 'u9')),
-    CHECK (match_type IN ('singles', 'doubles')),
-    CHECK (category IN ('mens', 'womens', 'mixed', 'no_gender')),
-    CHECK (level IN (
-        'beginner',
-        'intermediate',
-        'upper_intermediate',
-        'advanced'
-    )),
-    CHECK (NOT (match_type = 'singles' AND category = 'mixed')),
-    UNIQUE(tournament_id, division, match_type, category, level)
-);
+${TOURNAMENT_CONFIGURATIONS_TABLE_SQL};
 
 CREATE TABLE IF NOT EXISTS tournament_participants (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,6 +259,11 @@ CREATE TABLE IF NOT EXISTS tournament_matches (
     team_b_id INTEGER NOT NULL REFERENCES tournament_teams(id),
 
     winner_team_id INTEGER REFERENCES tournament_teams(id),
+
+    team_a_score INTEGER DEFAULT NULL
+        CHECK (team_a_score IS NULL OR (TYPEOF(team_a_score) = 'integer' AND team_a_score >= 0)),
+    team_b_score INTEGER DEFAULT NULL
+        CHECK (team_b_score IS NULL OR (TYPEOF(team_b_score) = 'integer' AND team_b_score >= 0)),
 
     court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL,
 
@@ -424,6 +487,18 @@ addColumnIfMissing(
     "court_id",
     "court_id INTEGER REFERENCES courts(id) ON DELETE SET NULL",
 );
+addColumnIfMissing(
+    "tournament_matches",
+    "team_a_score",
+    `team_a_score INTEGER DEFAULT NULL
+        CHECK (team_a_score IS NULL OR (TYPEOF(team_a_score) = 'integer' AND team_a_score >= 0))`,
+);
+addColumnIfMissing(
+    "tournament_matches",
+    "team_b_score",
+    `team_b_score INTEGER DEFAULT NULL
+        CHECK (team_b_score IS NULL OR (TYPEOF(team_b_score) = 'integer' AND team_b_score >= 0))`,
+);
 
 // Adds rank preference support to player profiles created by older versions.
 const playerColumns = db.prepare(`PRAGMA table_info(players)`).all();
@@ -487,6 +562,10 @@ db.exec(`
 
     CREATE INDEX IF NOT EXISTS idx_tournament_configurations_tournament_id
         ON tournament_configurations(tournament_id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_tournament_minor_configuration
+        ON tournament_configurations(tournament_id, division, match_type, category)
+        WHERE division <> 'adult' AND level = 'all';
 
     CREATE INDEX IF NOT EXISTS idx_tournament_participants_configuration_id
         ON tournament_participants(configuration_id);
@@ -584,7 +663,12 @@ db.exec(`
 
 // Keeps revised configurations and participant snapshots in their proper scope.
 db.exec(`
-    CREATE TRIGGER IF NOT EXISTS validate_tournament_configuration_insert
+    DROP TRIGGER IF EXISTS validate_tournament_configuration_insert;
+    DROP TRIGGER IF EXISTS validate_tournament_configuration_update;
+    DROP TRIGGER IF EXISTS validate_tournament_participant_insert;
+    DROP TRIGGER IF EXISTS validate_tournament_participant_update;
+
+    CREATE TRIGGER validate_tournament_configuration_insert
     BEFORE INSERT ON tournament_configurations
     BEGIN
         SELECT CASE WHEN NOT EXISTS (
@@ -593,10 +677,23 @@ db.exec(`
             WHERE id = NEW.tournament_id
               AND tournament_format_version >= 2
         ) THEN RAISE(ABORT, 'Tournament configuration requires a revised Tournament event.') END;
+        SELECT CASE WHEN NEW.division = 'adult' AND NEW.level = 'all'
+            THEN RAISE(ABORT, 'Adult Tournament configurations require an exact level.') END;
+        SELECT CASE WHEN NEW.division <> 'adult' AND NEW.level <> 'all'
+            THEN RAISE(ABORT, 'Minor Tournament configurations must include all player levels.') END;
+        SELECT CASE WHEN NEW.division <> 'adult' AND EXISTS (
+            SELECT 1
+            FROM tournament_configurations
+            WHERE tournament_id = NEW.tournament_id
+              AND division = NEW.division
+              AND match_type = NEW.match_type
+              AND category = NEW.category
+        ) THEN RAISE(ABORT, 'This exact Tournament configuration already exists.') END;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS validate_tournament_configuration_update
-    BEFORE UPDATE OF tournament_id ON tournament_configurations
+    CREATE TRIGGER validate_tournament_configuration_update
+    BEFORE UPDATE OF tournament_id, division, match_type, category, level
+    ON tournament_configurations
     BEGIN
         SELECT CASE WHEN NOT EXISTS (
             SELECT 1
@@ -604,16 +701,29 @@ db.exec(`
             WHERE id = NEW.tournament_id
               AND tournament_format_version >= 2
         ) THEN RAISE(ABORT, 'Tournament configuration requires a revised Tournament event.') END;
+        SELECT CASE WHEN NEW.division = 'adult' AND NEW.level = 'all'
+            THEN RAISE(ABORT, 'Adult Tournament configurations require an exact level.') END;
+        SELECT CASE WHEN NEW.division <> 'adult' AND NEW.level <> 'all'
+            THEN RAISE(ABORT, 'Minor Tournament configurations must include all player levels.') END;
+        SELECT CASE WHEN NEW.division <> 'adult' AND EXISTS (
+            SELECT 1
+            FROM tournament_configurations
+            WHERE tournament_id = NEW.tournament_id
+              AND division = NEW.division
+              AND match_type = NEW.match_type
+              AND category = NEW.category
+              AND id <> OLD.id
+        ) THEN RAISE(ABORT, 'This exact Tournament configuration already exists.') END;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS validate_tournament_participant_insert
+    CREATE TRIGGER validate_tournament_participant_insert
     BEFORE INSERT ON tournament_participants
     BEGIN
         SELECT CASE WHEN NOT EXISTS (
             SELECT 1
             FROM tournament_configurations
             WHERE id = NEW.configuration_id
-              AND level = NEW.level_snapshot
+              AND (division <> 'adult' OR level = NEW.level_snapshot)
         ) THEN RAISE(ABORT, 'Tournament participant level must match its configuration.') END;
         SELECT CASE WHEN EXISTS (
             SELECT 1
@@ -631,7 +741,7 @@ db.exec(`
         ) THEN RAISE(ABORT, 'Women''s Tournament participants must be female.') END;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS validate_tournament_participant_update
+    CREATE TRIGGER validate_tournament_participant_update
     BEFORE UPDATE OF configuration_id, level_snapshot, gender_snapshot
     ON tournament_participants
     BEGIN
@@ -639,7 +749,7 @@ db.exec(`
             SELECT 1
             FROM tournament_configurations
             WHERE id = NEW.configuration_id
-              AND level = NEW.level_snapshot
+              AND (division <> 'adult' OR level = NEW.level_snapshot)
         ) THEN RAISE(ABORT, 'Tournament participant level must match its configuration.') END;
         SELECT CASE WHEN EXISTS (
             SELECT 1
@@ -786,7 +896,10 @@ db.exec(`
         ) THEN RAISE(ABORT, 'Tournament round does not belong to its event and group.') END;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS validate_revised_tournament_match_insert
+    DROP TRIGGER IF EXISTS validate_revised_tournament_match_insert;
+    DROP TRIGGER IF EXISTS validate_revised_tournament_match_update;
+
+    CREATE TRIGGER validate_revised_tournament_match_insert
     BEFORE INSERT ON tournament_matches
     WHEN NEW.configuration_id IS NOT NULL OR NEW.group_id IS NOT NULL
     BEGIN
@@ -800,13 +913,27 @@ db.exec(`
           AND NEW.winner_team_id NOT IN (NEW.team_a_id, NEW.team_b_id)
             THEN RAISE(ABORT, 'Tournament winner must belong to the match.') END;
         SELECT CASE WHEN NEW.status = 'waiting'
-          AND (NEW.court_id IS NOT NULL OR NEW.winner_team_id IS NOT NULL)
-            THEN RAISE(ABORT, 'Waiting Tournament matches cannot have a court or winner.') END;
+          AND (NEW.court_id IS NOT NULL OR NEW.winner_team_id IS NOT NULL
+            OR NEW.team_a_score IS NOT NULL OR NEW.team_b_score IS NOT NULL)
+            THEN RAISE(ABORT, 'Waiting Tournament matches cannot have a court, winner, or score.') END;
         SELECT CASE WHEN NEW.status = 'playing'
-          AND (NEW.court_id IS NULL OR NEW.winner_team_id IS NOT NULL)
-            THEN RAISE(ABORT, 'Playing Tournament matches require a court and no winner.') END;
+          AND (NEW.court_id IS NULL OR NEW.winner_team_id IS NOT NULL
+            OR NEW.team_a_score IS NOT NULL OR NEW.team_b_score IS NOT NULL)
+            THEN RAISE(ABORT, 'Playing Tournament matches require a court and no saved result.') END;
         SELECT CASE WHEN NEW.status = 'finished' AND NEW.winner_team_id IS NULL
             THEN RAISE(ABORT, 'Finished Tournament matches require a winner.') END;
+        SELECT CASE WHEN NEW.status = 'finished'
+          AND (NEW.team_a_score IS NULL OR NEW.team_b_score IS NULL)
+            THEN RAISE(ABORT, 'Newly finished Tournament matches require both scores.') END;
+        SELECT CASE WHEN NEW.team_a_score IS NOT NULL
+          AND NEW.team_b_score IS NOT NULL
+          AND NEW.team_a_score = NEW.team_b_score
+            THEN RAISE(ABORT, 'Tournament match scores cannot be equal.') END;
+        SELECT CASE WHEN NEW.team_a_score IS NOT NULL
+          AND NEW.team_b_score IS NOT NULL
+          AND ((NEW.team_a_score > NEW.team_b_score AND NEW.winner_team_id <> NEW.team_a_id)
+            OR (NEW.team_b_score > NEW.team_a_score AND NEW.winner_team_id <> NEW.team_b_id))
+            THEN RAISE(ABORT, 'Tournament winner must match the saved scores.') END;
         SELECT CASE WHEN NOT EXISTS (
             SELECT 1
             FROM tournament_configurations
@@ -830,9 +957,10 @@ db.exec(`
         ) THEN RAISE(ABORT, 'Tournament match relationships are inconsistent.') END;
     END;
 
-    CREATE TRIGGER IF NOT EXISTS validate_revised_tournament_match_update
+    CREATE TRIGGER validate_revised_tournament_match_update
     BEFORE UPDATE OF tournament_id, configuration_id, group_id, round_id,
-        team_a_id, team_b_id, winner_team_id, court_id, status
+        team_a_id, team_b_id, winner_team_id, team_a_score, team_b_score,
+        court_id, status
     ON tournament_matches
     WHEN NEW.configuration_id IS NOT NULL OR NEW.group_id IS NOT NULL
     BEGIN
@@ -846,13 +974,33 @@ db.exec(`
           AND NEW.winner_team_id NOT IN (NEW.team_a_id, NEW.team_b_id)
             THEN RAISE(ABORT, 'Tournament winner must belong to the match.') END;
         SELECT CASE WHEN NEW.status = 'waiting'
-          AND (NEW.court_id IS NOT NULL OR NEW.winner_team_id IS NOT NULL)
-            THEN RAISE(ABORT, 'Waiting Tournament matches cannot have a court or winner.') END;
+          AND (NEW.court_id IS NOT NULL OR NEW.winner_team_id IS NOT NULL
+            OR NEW.team_a_score IS NOT NULL OR NEW.team_b_score IS NOT NULL)
+            THEN RAISE(ABORT, 'Waiting Tournament matches cannot have a court, winner, or score.') END;
         SELECT CASE WHEN NEW.status = 'playing'
-          AND (NEW.court_id IS NULL OR NEW.winner_team_id IS NOT NULL)
-            THEN RAISE(ABORT, 'Playing Tournament matches require a court and no winner.') END;
+          AND (NEW.court_id IS NULL OR NEW.winner_team_id IS NOT NULL
+            OR NEW.team_a_score IS NOT NULL OR NEW.team_b_score IS NOT NULL)
+            THEN RAISE(ABORT, 'Playing Tournament matches require a court and no saved result.') END;
         SELECT CASE WHEN NEW.status = 'finished' AND NEW.winner_team_id IS NULL
             THEN RAISE(ABORT, 'Finished Tournament matches require a winner.') END;
+        SELECT CASE WHEN NEW.status = 'finished'
+          AND (NEW.team_a_score IS NULL OR NEW.team_b_score IS NULL)
+          AND NOT (
+            OLD.status = 'finished'
+            AND OLD.team_a_score IS NULL
+            AND OLD.team_b_score IS NULL
+            AND NEW.team_a_score IS NULL
+            AND NEW.team_b_score IS NULL
+          ) THEN RAISE(ABORT, 'Newly finished Tournament matches require both scores.') END;
+        SELECT CASE WHEN NEW.team_a_score IS NOT NULL
+          AND NEW.team_b_score IS NOT NULL
+          AND NEW.team_a_score = NEW.team_b_score
+            THEN RAISE(ABORT, 'Tournament match scores cannot be equal.') END;
+        SELECT CASE WHEN NEW.team_a_score IS NOT NULL
+          AND NEW.team_b_score IS NOT NULL
+          AND ((NEW.team_a_score > NEW.team_b_score AND NEW.winner_team_id <> NEW.team_a_id)
+            OR (NEW.team_b_score > NEW.team_a_score AND NEW.winner_team_id <> NEW.team_b_id))
+            THEN RAISE(ABORT, 'Tournament winner must match the saved scores.') END;
         SELECT CASE WHEN NOT EXISTS (
             SELECT 1
             FROM tournament_configurations

@@ -224,6 +224,43 @@ try {
     ),
     /CHECK constraint/i,
   );
+  assertDatabaseFailure(
+    () => insertConfiguration.run(
+      firstDraftId,
+      "adult",
+      "singles",
+      "womens",
+      "all",
+    ),
+    /exact level/i,
+  );
+  assertDatabaseFailure(
+    () => insertConfiguration.run(
+      firstDraftId,
+      "u17",
+      "singles",
+      "mens",
+      "beginner",
+    ),
+    /all player levels/i,
+  );
+  const minorConfigurationId = Number(insertConfiguration.run(
+    firstDraftId,
+    "u17",
+    "singles",
+    "mens",
+    "all",
+  ).lastInsertRowid);
+  assertDatabaseFailure(
+    () => insertConfiguration.run(
+      firstDraftId,
+      "u17",
+      "singles",
+      "mens",
+      "all",
+    ),
+    /already exists|UNIQUE constraint/i,
+  );
 
   const insertPlayer = db.prepare(`
     INSERT INTO players (name, level, gender, prefer_no_gender)
@@ -281,6 +318,13 @@ try {
     ),
     /FOREIGN KEY constraint/i,
   );
+  const minorParticipantId = Number(insertParticipant.run(
+    minorConfigurationId,
+    playerIds[2],
+    "advanced",
+    "male",
+  ).lastInsertRowid);
+  assert.ok(minorParticipantId > 0);
 
   db.prepare("UPDATE players SET level = 'advanced' WHERE id = ?").run(playerIds[0]);
   assert.equal(

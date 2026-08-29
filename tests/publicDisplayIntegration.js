@@ -221,8 +221,8 @@ try {
     );
   }
 
-  // A real revised Tournament event supplies Singles/Doubles, every category,
-  // all six divisions, and all four levels to the public Court mapping.
+  // A real revised Tournament event supplies every division/category and mixed
+  // profile levels for minor divisions to the public Court mapping.
   const insertTournamentPlayer = db.prepare(`
     INSERT INTO players (name, level, gender) VALUES (?, ?, ?)
   `);
@@ -233,13 +233,13 @@ try {
   assert.equal(event.success, true, event.message);
   const eventId = event.data.tournament.id;
   const tournamentScenarios = [
-    { division: "adult", type: "singles", category: "mens", level: "beginner", players: [{ gender: "male" }, { gender: "male" }] },
-    { division: "u17", type: "singles", category: "womens", level: "intermediate", players: [{ gender: "female" }, { gender: "female" }] },
-    { division: "u15", type: "singles", category: "no_gender", level: "upper_intermediate", players: [{ gender: "male" }, { gender: "female" }] },
-    { division: "u13", type: "doubles", category: "mens", level: "advanced", players: Array.from({ length: 4 }, () => ({ gender: "male" })) },
-    { division: "u11", type: "doubles", category: "womens", level: "beginner", players: Array.from({ length: 4 }, () => ({ gender: "female" })) },
-    { division: "u9", type: "doubles", category: "mixed", level: "intermediate", players: [{ gender: "male" }, { gender: "female" }, { gender: "male" }, { gender: "female" }] },
-    { division: "adult", type: "doubles", category: "no_gender", level: "upper_intermediate", players: [{ gender: "male" }, { gender: "female" }, { gender: "male" }, { gender: "female" }] },
+    { division: "adult", type: "singles", category: "mens", level: "beginner", players: Array.from({ length: 4 }, () => ({ gender: "male" })) },
+    { division: "u17", type: "singles", category: "womens", level: "intermediate", players: Array.from({ length: 4 }, () => ({ gender: "female" })) },
+    { division: "u15", type: "singles", category: "no_gender", level: "upper_intermediate", players: Array.from({ length: 4 }, (_, index) => ({ gender: index % 2 === 0 ? "male" : "female" })) },
+    { division: "u13", type: "doubles", category: "mens", level: "advanced", players: Array.from({ length: 8 }, () => ({ gender: "male" })) },
+    { division: "u11", type: "doubles", category: "womens", level: "beginner", players: Array.from({ length: 8 }, () => ({ gender: "female" })) },
+    { division: "u9", type: "doubles", category: "mixed", level: "intermediate", players: Array.from({ length: 8 }, (_, index) => ({ gender: index % 2 === 0 ? "male" : "female" })) },
+    { division: "adult", type: "doubles", category: "no_gender", level: "upper_intermediate", players: Array.from({ length: 8 }, (_, index) => ({ gender: index % 2 === 0 ? "male" : "female" })) },
   ];
   const activeTournamentScenarios = [];
   for (const [index, scenario] of tournamentScenarios.entries()) {
@@ -248,7 +248,9 @@ try {
       scenario.players.map((player, playerIndex) => ({
         ...player,
         name: `${player.gender}-${playerIndex + 1}`,
-        level: scenario.level,
+        level: scenario.division === "adult"
+          ? scenario.level
+          : ["beginner", "intermediate", "upper_intermediate", "advanced"][playerIndex % 4],
       })),
     );
     const generated = generateTournamentEventConfiguration(
@@ -278,12 +280,15 @@ try {
     );
     assert.equal(displayed.activeMatch.division, scenario.division);
     assert.equal(displayed.activeMatch.category, scenario.category);
-    assert.equal(displayed.activeMatch.level, scenario.level);
+    assert.equal(
+      displayed.activeMatch.level,
+      scenario.division === "adult" ? scenario.level : "all",
+    );
     assert.ok(displayed.activeMatch.groupName);
     assert.ok(Number.isInteger(displayed.activeMatch.roundNumber));
   }
   assert.match(displaySource, /formatDivision\(match\.division\)/);
-  assert.match(displaySource, /formatLabel\(match\.level\)/);
+  assert.match(displaySource, /match\.division === "adult" \? formatLabel\(match\.level\) : null/);
   assert.equal(getLevelTextClasses("beginner").includes("yellow"), true);
   assert.equal(getLevelTextClasses("intermediate").includes("green"), true);
   assert.equal(getLevelTextClasses("upper_intermediate").includes("blue"), true);

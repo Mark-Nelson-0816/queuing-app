@@ -43,6 +43,13 @@ function findMatchWithPlayer(configuration, playerId, status = "waiting") {
   ));
 }
 
+// Converts an expected winner into authoritative score inputs.
+function finishWithWinner(finishMatch, match, winnerTeamId) {
+  return winnerTeamId === match.teamAId
+    ? finishMatch(match.id, 21, 18)
+    : finishMatch(match.id, 18, 21);
+}
+
 try {
   await import("../database/init.js");
   db = (await import("../database/database.js")).default;
@@ -116,8 +123,11 @@ try {
     ["Anna Backend", "beginner", "female"],
     ["Bea Backend", "beginner", "female"],
     ["Chloe Backend", "beginner", "female"],
+    ["Faith Backend", "beginner", "female"],
     ["Diana Backend", "advanced", "female"],
     ["Ella Backend", "advanced", "female"],
+    ["Fiona Backend", "advanced", "female"],
+    ["Gina Backend", "advanced", "female"],
   ].map(([name, level, gender]) => {
     const result = insertPlayer.run(name, level, gender);
     return {
@@ -127,7 +137,21 @@ try {
       gender,
     };
   });
-  const [aaron, ben, carlo, daniel, ethan, anna, bea, chloe, diana, ella] = players;
+  const [
+    aaron,
+    ben,
+    carlo,
+    daniel,
+    ethan,
+    anna,
+    bea,
+    chloe,
+    faith,
+    diana,
+    ella,
+    fiona,
+    gina,
+  ] = players;
 
   const courtIds = ["Court 1", "Court 2", "Court 3"].map((name) => Number(
     db.prepare("INSERT INTO courts (name) VALUES (?)").run(name).lastInsertRowid,
@@ -187,6 +211,29 @@ try {
     "mens",
     "beginner",
   ), /only include male players/i);
+  assertFailure(generateTournamentEventConfiguration(
+    firstEventId,
+    [aaron.id, ben.id, carlo.id],
+    "u9",
+    "singles",
+    "mens",
+    "beginner",
+  ), /requires at least 4 teams/i);
+  assertFailure(generateTournamentEventConfiguration(
+    firstEventId,
+    [aaron.id, ben.id, carlo.id, daniel.id, ethan.id, anna.id, bea.id],
+    "u11",
+    "singles",
+    "no_gender",
+    "beginner",
+  ), /exactly 7 teams are not supported/i);
+  for (const [table, count] of Object.entries(baseCounts)) {
+    assert.equal(
+      db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count,
+      count,
+      `${table} changed after team-count validation`,
+    );
+  }
 
   const adultSinglesResult = generateTournamentEventConfiguration(
     firstEventId,
@@ -214,7 +261,7 @@ try {
   `).get();
   assertFailure(generateTournamentEventConfiguration(
     firstEventId,
-    [aaron.id, ben.id],
+    [aaron.id, ben.id, carlo.id, daniel.id],
     "adult",
     "singles",
     "mens",
@@ -229,7 +276,7 @@ try {
   // The same player may join an independent division configuration.
   const juniorSinglesResult = generateTournamentEventConfiguration(
     firstEventId,
-    [aaron.id, anna.id],
+    [aaron.id, ben.id, anna.id, bea.id],
     "u17",
     "singles",
     "no_gender",
@@ -238,11 +285,11 @@ try {
   );
   assert.equal(juniorSinglesResult.success, true, juniorSinglesResult.message);
   const juniorSinglesId = juniorSinglesResult.data.configuration.id;
-  assert.equal(juniorSinglesResult.data.configuration.teams.length, 2);
+  assert.equal(juniorSinglesResult.data.configuration.teams.length, 4);
 
   const mixedDoublesResult = generateTournamentEventConfiguration(
     firstEventId,
-    [ethan.id, carlo.id, bea.id, chloe.id],
+    [ben.id, carlo.id, daniel.id, ethan.id, anna.id, bea.id, chloe.id, faith.id],
     "adult",
     "doubles",
     "mixed",
@@ -251,14 +298,14 @@ try {
   );
   assert.equal(mixedDoublesResult.success, true, mixedDoublesResult.message);
   const mixedDoublesId = mixedDoublesResult.data.configuration.id;
-  assert.equal(mixedDoublesResult.data.configuration.teams.length, 2);
+  assert.equal(mixedDoublesResult.data.configuration.teams.length, 4);
   assert.ok(mixedDoublesResult.data.configuration.teams.every((team) => (
     new Set(team.players.map((player) => player.genderSnapshot)).size === 2
   )));
 
   const tiedGroupResult = generateTournamentEventConfiguration(
     firstEventId,
-    [ben.id, carlo.id, daniel.id],
+    [ben.id, carlo.id, daniel.id, ethan.id],
     "u13",
     "singles",
     "mens",
@@ -271,7 +318,7 @@ try {
   // A second draft gets valid matches but cannot become ongoing simultaneously.
   const secondEventConfiguration = generateTournamentEventConfiguration(
     secondEventId,
-    [diana.id, ella.id],
+    [diana.id, ella.id, fiona.id, gina.id],
     "u15",
     "singles",
     "womens",
@@ -285,7 +332,9 @@ try {
   );
   const secondEventMatch = getConfigurationMatches(
     secondEventConfiguration.data.configuration,
-  )[0];
+  ).find((match) => [match.teamA, match.teamB].some((team) => (
+    team.players.some((player) => player.playerId === diana.id)
+  )));
 
   // Names are current-profile data while level/gender remain Tournament snapshots.
   db.prepare(`
@@ -310,7 +359,7 @@ try {
   assert.ok(aaronAdultMatch);
 
   assertFailure(
-    finishTournamentEventMatch(aaronAdultMatch.id, aaronAdultMatch.teamAId),
+    finishTournamentEventMatch(aaronAdultMatch.id, 21, 18),
     /must be started/i,
   );
   const startedAdultMatch = startTournamentEventMatch(
@@ -378,11 +427,12 @@ try {
     WHERE id IN (${matchPlayerIds.map(() => "?").join(",")})
   `).all(...matchPlayerIds).map((row) => [Number(row.id), row]));
   assertFailure(
-    finishTournamentEventMatch(aaronAdultMatch.id, 999999),
-    /winner is not part/i,
+    finishTournamentEventMatch(aaronAdultMatch.id, 20, 20),
+    /scores cannot be equal/i,
   );
-  const finishedAdultMatch = finishTournamentEventMatch(
-    aaronAdultMatch.id,
+  const finishedAdultMatch = finishWithWinner(
+    finishTournamentEventMatch,
+    aaronAdultMatch,
     winnerTeamId,
   );
   assert.equal(finishedAdultMatch.success, true, finishedAdultMatch.message);
@@ -410,7 +460,7 @@ try {
     ORDER BY id
   `).all(...matchPlayerIds);
   assertFailure(
-    finishTournamentEventMatch(aaronAdultMatch.id, winnerTeamId),
+    finishTournamentEventMatch(aaronAdultMatch.id, 21, 18),
     /already been completed/i,
   );
   assert.deepEqual(db.prepare(`
@@ -425,23 +475,35 @@ try {
     /Only a waiting|already started/i,
   );
 
-  // Complete the two-team group and verify the derived winner standings.
+  // Complete the four-team group and verify the derived winner standings.
   assert.equal(startTournamentEventMatch(juniorMatch.id, courtIds[0]).success, true);
-  const juniorFinished = finishTournamentEventMatch(
-    juniorMatch.id,
-    juniorMatch.teamBId,
+  const juniorChampionId = juniorMatch.teamBId;
+  const juniorFinished = finishWithWinner(
+    finishTournamentEventMatch,
+    juniorMatch,
+    juniorChampionId,
   );
   assert.equal(juniorFinished.success, true, juniorFinished.message);
-  const completedJuniorGroup = juniorFinished.data.configurations
+  let juniorLifecycleData = juniorFinished.data;
+  for (const match of getConfigurationMatches(juniorSingles)) {
+    if (match.id === juniorMatch.id) continue;
+    assert.equal(startTournamentEventMatch(match.id, courtIds[0]).success, true);
+    const winnerTeamId = [match.teamAId, match.teamBId].includes(juniorChampionId)
+      ? juniorChampionId
+      : match.teamAId;
+    const completed = finishWithWinner(finishTournamentEventMatch, match, winnerTeamId);
+    assert.equal(completed.success, true, completed.message);
+    juniorLifecycleData = completed.data;
+  }
+  const completedJuniorGroup = juniorLifecycleData.configurations
     .find((configuration) => configuration.id === juniorSinglesId)
     .groups[0];
-  assert.equal(completedJuniorGroup.standings[0].wins, 1);
-  assert.equal(completedJuniorGroup.standings[1].losses, 1);
+  assert.equal(completedJuniorGroup.standings[0].wins, 3);
   assert.equal(completedJuniorGroup.result.type, "winner");
-  assert.equal(completedJuniorGroup.result.team.id, juniorMatch.teamBId);
+  assert.equal(completedJuniorGroup.result.team.id, juniorChampionId);
 
   // Complete Mixed Doubles and verify all four permanent profiles update once.
-  const mixedConfiguration = juniorFinished.data.configurations.find(
+  const mixedConfiguration = juniorLifecycleData.configurations.find(
     (configuration) => configuration.id === mixedDoublesId,
   );
   const mixedMatch = getConfigurationMatches(mixedConfiguration)[0];
@@ -453,8 +515,9 @@ try {
     WHERE id IN (${mixedPlayerIds.map(() => "?").join(",")})
   `).all(...mixedPlayerIds).map((row) => [Number(row.id), row]));
   assert.equal(startTournamentEventMatch(mixedMatch.id, courtIds[0]).success, true);
-  const mixedFinished = finishTournamentEventMatch(
-    mixedMatch.id,
+  const mixedFinished = finishWithWinner(
+    finishTournamentEventMatch,
+    mixedMatch,
     mixedMatch.teamAId,
   );
   assert.equal(mixedFinished.success, true, mixedFinished.message);
@@ -476,25 +539,38 @@ try {
     0,
   );
 
-  // A three-team win cycle produces a completed group tie with no tiebreaker.
-  let tiedConfiguration = mixedFinished.data.configurations.find(
+  let mixedLifecycleData = mixedFinished.data;
+  for (const match of getConfigurationMatches(mixedConfiguration)) {
+    if (match.id === mixedMatch.id) continue;
+    assert.equal(startTournamentEventMatch(match.id, courtIds[0]).success, true);
+    const completed = finishWithWinner(finishTournamentEventMatch, match, match.teamAId);
+    assert.equal(completed.success, true, completed.message);
+    mixedLifecycleData = completed.data;
+  }
+
+  // A four-team result can produce a completed shared lead with no tiebreaker.
+  let tiedConfiguration = mixedLifecycleData.configurations.find(
     (configuration) => configuration.id === tiedGroupConfigurationId,
   );
   const tiedTeamIds = tiedConfiguration.teams.map((team) => team.id);
-  const [firstTiedTeamId, secondTiedTeamId, thirdTiedTeamId] = tiedTeamIds;
+  const [firstTiedTeamId, secondTiedTeamId, thirdTiedTeamId, fourthTiedTeamId] = tiedTeamIds;
   const tieWinnerByPair = new Map([
-    [[firstTiedTeamId, secondTiedTeamId].sort((a, b) => a - b).join("-"), firstTiedTeamId],
-    [[firstTiedTeamId, thirdTiedTeamId].sort((a, b) => a - b).join("-"), thirdTiedTeamId],
+    [[firstTiedTeamId, secondTiedTeamId].sort((a, b) => a - b).join("-"), secondTiedTeamId],
+    [[firstTiedTeamId, thirdTiedTeamId].sort((a, b) => a - b).join("-"), firstTiedTeamId],
+    [[firstTiedTeamId, fourthTiedTeamId].sort((a, b) => a - b).join("-"), firstTiedTeamId],
     [[secondTiedTeamId, thirdTiedTeamId].sort((a, b) => a - b).join("-"), secondTiedTeamId],
+    [[secondTiedTeamId, fourthTiedTeamId].sort((a, b) => a - b).join("-"), fourthTiedTeamId],
+    [[thirdTiedTeamId, fourthTiedTeamId].sort((a, b) => a - b).join("-"), thirdTiedTeamId],
   ]);
-  let tieLifecycleData = mixedFinished.data;
+  let tieLifecycleData = mixedLifecycleData;
   for (const match of getConfigurationMatches(tiedConfiguration)) {
     assert.equal(startTournamentEventMatch(match.id, courtIds[0]).success, true);
     const pairKey = [match.teamAId, match.teamBId]
       .sort((a, b) => a - b)
       .join("-");
-    const finished = finishTournamentEventMatch(
-      match.id,
+    const finished = finishWithWinner(
+      finishTournamentEventMatch,
+      match,
       tieWinnerByPair.get(pairKey),
     );
     assert.equal(finished.success, true, finished.message);
@@ -504,11 +580,12 @@ try {
     (configuration) => configuration.id === tiedGroupConfigurationId,
   );
   assert.equal(tiedConfiguration.groups[0].result.type, "tie");
-  assert.equal(tiedConfiguration.groups[0].result.wins, 1);
-  assert.equal(tiedConfiguration.groups[0].result.teams.length, 3);
-  assert.ok(tiedConfiguration.groups[0].standings.every(
-    (standing) => standing.wins === 1 && standing.losses === 1,
-  ));
+  assert.equal(tiedConfiguration.groups[0].result.wins, 2);
+  assert.equal(tiedConfiguration.groups[0].result.teams.length, 2);
+  assert.deepEqual(
+    tiedConfiguration.groups[0].standings.map((standing) => standing.wins),
+    [2, 2, 1, 1],
+  );
 
   // Reset removes finished and playing data from one configuration only.
   firstEventData = tieLifecycleData;
@@ -590,7 +667,7 @@ try {
     /read-only/i,
   );
   assertFailure(
-    finishTournamentEventMatch(juniorMatch.id, juniorMatch.teamBId),
+    finishTournamentEventMatch(juniorMatch.id, 18, 21),
     /read-only/i,
   );
 

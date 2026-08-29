@@ -24,9 +24,9 @@ const EMPTY_DATA = {
 // Displays one Player Management summary statistic.
 function SummaryCard({ label, value }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow)]">
+    <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow)]">
       <div className="flex flex-col items-center justify-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text)]">{label}</p>
+          <p className="whitespace-nowrap text-center text-[11px] font-semibold uppercase tracking-wide text-[var(--text)] xl:text-xs">{label}</p>
           <p className="mt-1 text-2xl font-bold text-[var(--text-h)]">{value}</p>
       </div>
     </div>
@@ -176,7 +176,7 @@ export default function Players() {
   const summary = data.summary;
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-3 sm:space-y-4">
 
       {/* Primary actions */}
       {/* <div className="flex flex-wrap justify-end">
@@ -205,7 +205,7 @@ export default function Players() {
       )}
 
       {/* Player summary cards */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <SummaryCard label="Total Profiles" value={summary.totalProfiles} detail="Permanent player records" />
         <SummaryCard label="Registered Today" value={summary.registeredToday} detail={`${summary.activeToday} active · ${summary.doneToday} done`} tone="success" />
         <SummaryCard label="Available Today" value={summary.availableToday} detail={`${summary.assignedToday} assigned to waiting matches`} tone="warning" />

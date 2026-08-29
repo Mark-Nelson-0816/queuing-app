@@ -81,7 +81,7 @@ export default function RegisterPlayerToday({
 
         {/* Profile search and filters */}
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_11rem_9rem]">
-          <label className="relative">
+          <label className="relative min-w-0">
             <span className="sr-only">Search profiles</span>
             <Search className="absolute left-3 top-3 h-4 w-4 text-[var(--text)]" />
             <input
@@ -96,7 +96,7 @@ export default function RegisterPlayerToday({
             value={levelFilter}
             onChange={(event) => setLevelFilter(event.target.value)}
             aria-label="Filter profiles by level"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm"
+            className="min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm"
           >
             <option value="all">All levels</option>
             <option value="beginner">Beginner</option>
@@ -108,7 +108,7 @@ export default function RegisterPlayerToday({
             value={genderFilter}
             onChange={(event) => setGenderFilter(event.target.value)}
             aria-label="Filter profiles by gender"
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm"
+            className="min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm"
           >
             <option value="all">All genders</option>
             <option value="male">Male</option>
@@ -132,24 +132,24 @@ export default function RegisterPlayerToday({
                     : "border-[var(--border)] hover:bg-[var(--surface-hover)]"
                 }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
+                <div className="flex flex-nowrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-[var(--text-h)]">{player.name}</span>
+                      <span title={player.name} className="truncate font-semibold text-[var(--text-h)]">{player.name}</span>
                       {player.todayRegistration?.isDone && (
                         <span className="rounded-full bg-[var(--warning-light)] px-2 py-0.5 text-xs font-semibold text-[var(--warning)]">
                           Reactivate
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-[var(--text)]">
+                    <p className="mt-1 truncate text-xs text-[var(--text)]">
                       {genderLabel(player.gender)} · {rankPreferenceLabel(player.rankPreference)}
                     </p>
-                    <p className="mt-1 text-xs text-[var(--text)]">
+                    <p title={preferences.length ? preferences.join(" · ") : "No match preferences"} className="mt-1 truncate text-xs text-[var(--text)]">
                       {preferences.length ? preferences.join(" · ") : "No match preferences"}
                     </p>
                   </div>
-                  <PlayerLevelBadge level={player.level} />
+                  <span className="shrink-0"><PlayerLevelBadge level={player.level} /></span>
                 </div>
               </button>
             );
@@ -171,16 +171,16 @@ export default function RegisterPlayerToday({
         </div>
 
         {/* Registration actions */}
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
-          <p className="text-xs text-[var(--text)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4">
+          <p className="whitespace-nowrap text-xs text-[var(--text)]">
             {filteredProfiles.length} eligible profile{filteredProfiles.length === 1 ? "" : "s"}
           </p>
-          <div className="flex gap-2">
+          <div className="ml-auto flex shrink-0 gap-2">
             <button
               type="button"
               onClick={onClose}
               disabled={isRegistering}
-              className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+              className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
             >
               Cancel
             </button>
@@ -188,7 +188,7 @@ export default function RegisterPlayerToday({
               type="button"
               onClick={handleRegister}
               disabled={!selectedPlayer || isRegistering}
-              className="rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="whitespace-nowrap rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRegistering
                 ? "Registering..."

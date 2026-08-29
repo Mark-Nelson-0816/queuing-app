@@ -13,7 +13,6 @@ import {
   SlidersHorizontal,
   Sun,
   Trophy,
-  Trash2,
   UserCheck,
   Users,
 } from "lucide-react";

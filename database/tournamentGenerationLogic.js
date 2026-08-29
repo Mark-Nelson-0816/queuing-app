@@ -14,6 +14,9 @@ export const TOURNAMENT_LEVELS = Object.freeze([
   "advanced",
 ]);
 
+// Stores one level-independent identity for every new minor-division configuration.
+export const TOURNAMENT_ALL_LEVELS = "all";
+
 export const TOURNAMENT_MATCH_TYPES = Object.freeze([
   "singles",
   "doubles",
@@ -33,12 +36,9 @@ const VALID_CATEGORIES = new Set(TOURNAMENT_CATEGORIES);
 const VALID_GENDERS = new Set(["male", "female"]);
 
 const FIXED_GROUP_SIZES = new Map([
-  [2, [2]],
-  [3, [3]],
   [4, [4]],
-  [5, [3, 2]],
-  [6, [3, 3]],
-  [7, [4, 3]],
+  [5, [5]],
+  [6, [6]],
   [8, [4, 4]],
   [9, [5, 4]],
   [10, [5, 5]],
@@ -129,8 +129,12 @@ export function validateTournamentConfiguration(configuration) {
     throw new Error("Invalid Tournament category.");
   }
 
-  if (!VALID_LEVELS.has(level)) {
+  if (division === "adult" && !VALID_LEVELS.has(level)) {
     throw new Error("Invalid Tournament level.");
+  }
+
+  if (division !== "adult" && level !== TOURNAMENT_ALL_LEVELS) {
+    throw new Error("Minor Tournament configurations must include all player levels.");
   }
 
   if (matchType === "singles" && category === "mixed") {
@@ -140,9 +144,17 @@ export function validateTournamentConfiguration(configuration) {
   return true;
 }
 
-// Validates profile IDs, exact level, gender, and participant-count rules.
+// Converts stale minor-level input into the one canonical minor configuration identity.
+export function normalizeTournamentConfiguration(configuration) {
+  if (!configuration || typeof configuration !== "object") return configuration;
+  if (configuration.division === "adult") return { ...configuration };
+  return { ...configuration, level: TOURNAMENT_ALL_LEVELS };
+}
+
+// Validates profile IDs, exact level, gender, and Doubles pairing rules.
 export function validateTournamentConfigurationPlayers(players, configuration) {
-  validateTournamentConfiguration(configuration);
+  const normalizedConfiguration = normalizeTournamentConfiguration(configuration);
+  validateTournamentConfiguration(normalizedConfiguration);
 
   if (!Array.isArray(players)) {
     throw new Error("Please select Tournament players.");
@@ -162,23 +174,22 @@ export function validateTournamentConfigurationPlayers(players, configuration) {
       throw new Error(`${player.name || "A selected player"} has an invalid gender.`);
     }
 
-    if (player.level !== configuration.level) {
+    if (!VALID_LEVELS.has(player.level)) {
+      throw new Error(`${player.name || "A selected player"} has an invalid level.`);
+    }
+
+    if (
+      normalizedConfiguration.division === "adult"
+      && player.level !== normalizedConfiguration.level
+    ) {
       throw new Error(
         `${player.name || "A selected player"} does not match the configuration level.`,
       );
     }
   }
 
-  if (configuration.matchType === "singles") {
-    if (players.length < 2) {
-      throw new Error("Singles requires at least two players.");
-    }
-  } else {
-    if (players.length < 4) {
-      throw new Error("Doubles requires at least four players.");
-    }
-
-    if (configuration.category === "mixed") {
+  if (normalizedConfiguration.matchType === "doubles") {
+    if (normalizedConfiguration.category === "mixed") {
       let maleCount = 0;
       let femaleCount = 0;
 
@@ -198,17 +209,36 @@ export function validateTournamentConfigurationPlayers(players, configuration) {
   }
 
   if (
-    configuration.category === "mens"
+    normalizedConfiguration.category === "mens"
     && players.some((player) => player.gender !== "male")
   ) {
     throw new Error("Men's Tournament configurations may only include male players.");
   }
 
   if (
-    configuration.category === "womens"
+    normalizedConfiguration.category === "womens"
     && players.some((player) => player.gender !== "female")
   ) {
     throw new Error("Women's Tournament configurations may only include female players.");
+  }
+
+  return true;
+}
+
+// Enforces supported revised Tournament sizes after player pairing creates teams.
+export function validateTournamentTeamCount(teamCount) {
+  if (!Number.isInteger(teamCount) || teamCount < 0) {
+    throw new Error("Tournament team count must be a non-negative integer.");
+  }
+
+  if (teamCount < 4) {
+    throw new Error("This configuration requires at least 4 teams.");
+  }
+
+  if (teamCount === 7) {
+    throw new Error(
+      "Tournament configurations with exactly 7 teams are not supported. Please add or remove participants.",
+    );
   }
 
   return true;
@@ -221,15 +251,16 @@ export function buildTournamentConfigurationTeams(
   random = Math.random,
 ) {
   validateRandom(random);
-  validateTournamentConfigurationPlayers(players, configuration);
+  const normalizedConfiguration = normalizeTournamentConfiguration(configuration);
+  validateTournamentConfigurationPlayers(players, normalizedConfiguration);
 
-  if (configuration.matchType === "singles") {
-    return shuffle(players, random).map((player, index) => (
+  let teams;
+
+  if (normalizedConfiguration.matchType === "singles") {
+    teams = shuffle(players, random).map((player, index) => (
       createTeamDefinition(index + 1, [player])
     ));
-  }
-
-  if (configuration.category === "mixed") {
+  } else if (normalizedConfiguration.category === "mixed") {
     const malePlayers = shuffle(
       players.filter((player) => player.gender === "male"),
       random,
@@ -239,29 +270,28 @@ export function buildTournamentConfigurationTeams(
       random,
     );
 
-    return malePlayers.map((malePlayer, index) => (
+    teams = malePlayers.map((malePlayer, index) => (
       createTeamDefinition(index + 1, [malePlayer, femalePlayers[index]])
     ));
+  } else {
+    const shuffledPlayers = shuffle(players, random);
+    teams = [];
+
+    for (let index = 0; index < shuffledPlayers.length; index += 2) {
+      teams.push(createTeamDefinition(
+        teams.length + 1,
+        [shuffledPlayers[index], shuffledPlayers[index + 1]],
+      ));
+    }
   }
 
-  const shuffledPlayers = shuffle(players, random);
-  const teams = [];
-
-  for (let index = 0; index < shuffledPlayers.length; index += 2) {
-    teams.push(createTeamDefinition(
-      teams.length + 1,
-      [shuffledPlayers[index], shuffledPlayers[index + 1]],
-    ));
-  }
-
+  validateTournamentTeamCount(teams.length);
   return teams;
 }
 
 // Calculates deterministic group sizes using the required fixed table first.
 export function getTournamentGroupSizes(teamCount) {
-  if (!Number.isInteger(teamCount) || teamCount < 2) {
-    throw new Error("Tournament generation requires at least two teams.");
-  }
+  validateTournamentTeamCount(teamCount);
 
   const fixedSizes = FIXED_GROUP_SIZES.get(teamCount);
   if (fixedSizes) return [...fixedSizes];
@@ -387,9 +417,10 @@ export function generateTournamentConfiguration(
   configuration,
   random = Math.random,
 ) {
+  const normalizedConfiguration = normalizeTournamentConfiguration(configuration);
   const teams = buildTournamentConfigurationTeams(
     players,
-    configuration,
+    normalizedConfiguration,
     random,
   );
   const groups = assignTournamentTeamsToGroups(teams, random).map((group) => ({
@@ -400,9 +431,9 @@ export function generateTournamentConfiguration(
   return {
     configuration: {
       division: configuration.division,
-      matchType: configuration.matchType,
-      category: configuration.category,
-      level: configuration.level,
+      matchType: normalizedConfiguration.matchType,
+      category: normalizedConfiguration.category,
+      level: normalizedConfiguration.level,
     },
     teams,
     groups,

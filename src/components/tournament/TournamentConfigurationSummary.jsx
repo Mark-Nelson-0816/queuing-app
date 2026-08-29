@@ -136,6 +136,11 @@ function GroupCard({ group }) {
                     </span>
                     <div className="text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">
                       <p>{match.status}{match.court ? ` · ${match.court.name}` : ""}</p>
+                      {Number.isInteger(match.teamAScore) && Number.isInteger(match.teamBScore) && (
+                        <p className="mt-0.5 text-xs text-[var(--text-h)]">
+                          Final Score: {match.teamAScore} - {match.teamBScore}
+                        </p>
+                      )}
                       {match.winnerTeam && (
                         <p className="mt-0.5 text-[var(--success)]">Winner: <TeamName team={match.winnerTeam} /></p>
                       )}
@@ -164,9 +169,11 @@ export default function TournamentConfigurationSummary({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold text-[var(--text-h)]">Generated Configuration</h2>
-            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getLevelClasses(configuration.level)}`}>
-              {LEVEL_LABELS[configuration.level] || configuration.level}
-            </span>
+            {configuration.division === "adult" && (
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${getLevelClasses(configuration.level)}`}>
+                {LEVEL_LABELS[configuration.level] || configuration.level}
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-[var(--text)]">
             {DIVISION_LABELS[configuration.division]} · <span className="capitalize">{configuration.matchType}</span> · {CATEGORY_LABELS[configuration.category]}

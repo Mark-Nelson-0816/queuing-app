@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Trash2, Trophy } from "lucide-react";
+import { CalendarDays, Trophy } from "lucide-react";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Modal from "../components/Modal";
 import RegisteredPlayers from "../components/tournament/RegisteredPlayers";
@@ -34,7 +34,7 @@ function getErrorMessage(error, fallback) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-// Creates a stable key so each exact configuration keeps its own selection.
+// Creates a stable key using one canonical level-independent key for minors.
 function getSelectionKey(tournamentId, division, matchType, category, level) {
   return [tournamentId, division, matchType, category, level].join(":");
 }
@@ -55,6 +55,7 @@ export default function Tournament() {
   const [view, setView] = useState("current");
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
   const [tournamentData, setTournamentData] = useState(null);
+  const [openedConfigurationId, setOpenedConfigurationId] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [division, setDivision] = useState("adult");
@@ -70,7 +71,10 @@ export default function Tournament() {
   const [isResetting, setIsResetting] = useState(false);
   const [startingMatchId, setStartingMatchId] = useState(null);
   const [finishingMatchId, setFinishingMatchId] = useState(null);
-  const [winnerSelection, setWinnerSelection] = useState(null);
+  const [resultConfirmation, setResultConfirmation] = useState(null);
+  const [updatingResultMatchId, setUpdatingResultMatchId] = useState(null);
+  const [resultUpdateConfirmation, setResultUpdateConfirmation] = useState(null);
+  const [resultUpdateVersion, setResultUpdateVersion] = useState(0);
   const [showFinishTournamentConfirm, setShowFinishTournamentConfirm] = useState(false);
   const [isFinishingTournament, setIsFinishingTournament] = useState(false);
   const [showDeleteTournamentConfirm, setShowDeleteTournamentConfirm] = useState(false);
@@ -88,6 +92,7 @@ export default function Tournament() {
   const createLockRef = useRef(false);
   const startMatchLockRef = useRef(false);
   const finishMatchLockRef = useRef(false);
+  const updateResultLockRef = useRef(false);
   const finishTournamentLockRef = useRef(false);
   const deleteTournamentLockRef = useRef(false);
 
@@ -96,10 +101,13 @@ export default function Tournament() {
     setTournamentData(data);
     const firstConfiguration = data?.configurations?.[0];
     if (firstConfiguration) {
+      setOpenedConfigurationId(firstConfiguration.id);
       setDivision(firstConfiguration.division);
       setMatchType(firstConfiguration.matchType);
       setCategory(firstConfiguration.category);
-      setLevel(firstConfiguration.level);
+      if (firstConfiguration.division === "adult") setLevel(firstConfiguration.level);
+    } else {
+      setOpenedConfigurationId(null);
     }
   }, []);
 
@@ -192,12 +200,13 @@ export default function Tournament() {
     };
   }, [applyTournamentData]);
 
+  const configurationLevel = division === "adult" ? level : "all";
   const selectionKey = getSelectionKey(
     selectedTournamentId,
     division,
     matchType,
     category,
-    level,
+    configurationLevel,
   );
   const selectedIds = useMemo(
     () => selections[selectionKey] || [],
@@ -217,12 +226,18 @@ export default function Tournament() {
 
   const existingConfiguration = useMemo(() => (
     tournamentData?.configurations.find((configuration) => (
+      configuration.id === openedConfigurationId
+      && configuration.division === division
+      && configuration.matchType === matchType
+      && configuration.category === category
+      && (division !== "adult" || configuration.level === level)
+    )) || tournamentData?.configurations.find((configuration) => (
       configuration.division === division
       && configuration.matchType === matchType
       && configuration.category === category
-      && configuration.level === level
+      && (division !== "adult" || configuration.level === level)
     )) || null
-  ), [category, division, level, matchType, tournamentData]);
+  ), [category, division, level, matchType, openedConfigurationId, tournamentData]);
 
   const profileById = useMemo(
     () => new Map(profiles.map((profile) => [Number(profile.id), profile])),
@@ -243,6 +258,7 @@ export default function Tournament() {
 
   // Keeps category valid when changing between Singles and Doubles.
   const handleMatchTypeChange = (nextMatchType) => {
+    setOpenedConfigurationId(null);
     setMatchType(nextMatchType);
     const allowedCategories = options.categoriesByMatchType[nextMatchType] || [];
     if (!allowedCategories.includes(category)) setCategory("no_gender");
@@ -250,10 +266,11 @@ export default function Tournament() {
 
   // Opens a generated configuration directly from its compact event index.
   const openConfiguration = (configuration) => {
+    setOpenedConfigurationId(configuration.id);
     setDivision(configuration.division);
     setMatchType(configuration.matchType);
     setCategory(configuration.category);
-    setLevel(configuration.level);
+    if (configuration.division === "adult") setLevel(configuration.level);
   };
 
   // Switches between editable events and immutable history.
@@ -320,17 +337,20 @@ export default function Tournament() {
         division,
         matchType,
         category,
-        level,
+        configurationLevel,
       );
       if (!result.success) {
         throw new Error(result.message || "Failed to generate Tournament configuration.");
       }
       setTournamentData(result.data.tournament);
       if (result.data.configuration) {
+        setOpenedConfigurationId(result.data.configuration.id);
         setDivision(result.data.configuration.division);
         setMatchType(result.data.configuration.matchType);
         setCategory(result.data.configuration.category);
-        setLevel(result.data.configuration.level);
+        if (result.data.configuration.division === "adult") {
+          setLevel(result.data.configuration.level);
+        }
       }
       setSelections((current) => {
         const next = { ...current };
@@ -395,28 +415,58 @@ export default function Tournament() {
     }
   };
 
-  // Saves a confirmed Team A or Team B winner and refreshes standings and courts.
+  // Persists confirmed scores; the backend independently derives the winner.
   const handleFinishMatch = async () => {
-    if (finishMatchLockRef.current || !winnerSelection) return;
+    if (finishMatchLockRef.current || !resultConfirmation) return;
     finishMatchLockRef.current = true;
-    setFinishingMatchId(winnerSelection.match.id);
+    setFinishingMatchId(resultConfirmation.match.id);
     setError("");
     setNotice("");
     try {
       const result = await window.api.finishTournamentMatch(
-        winnerSelection.match.id,
-        winnerSelection.team.id,
+        resultConfirmation.match.id,
+        resultConfirmation.teamAScore,
+        resultConfirmation.teamBScore,
       );
       if (!result.success) throw new Error(result.message || "Failed to finish Tournament match.");
       setTournamentData(result.data);
       await refreshEventLists();
-      setWinnerSelection(null);
-      setNotice("Tournament winner saved and the court is available again.");
+      setResultConfirmation(null);
+      setNotice("Tournament score and winner saved. The court is available again.");
     } catch (finishError) {
       setError(getErrorMessage(finishError, "Failed to finish Tournament match."));
     } finally {
       finishMatchLockRef.current = false;
       setFinishingMatchId(null);
+    }
+  };
+
+  // Corrects an existing finished result without reopening the match or touching its court.
+  const handleUpdateMatchResult = async () => {
+    if (updateResultLockRef.current || !resultUpdateConfirmation) return;
+    updateResultLockRef.current = true;
+    setUpdatingResultMatchId(resultUpdateConfirmation.match.id);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.api.updateTournamentMatchResult(
+        resultUpdateConfirmation.match.id,
+        resultUpdateConfirmation.teamAScore,
+        resultUpdateConfirmation.teamBScore,
+      );
+      if (!result.success) {
+        throw new Error(result.message || "Failed to update Tournament match result.");
+      }
+      setTournamentData(result.data);
+      await refreshEventLists();
+      setResultUpdateConfirmation(null);
+      setResultUpdateVersion((current) => current + 1);
+      setNotice("Tournament result updated. The match remains finished.");
+    } catch (updateError) {
+      setError(getErrorMessage(updateError, "Failed to update Tournament match result."));
+    } finally {
+      updateResultLockRef.current = false;
+      setUpdatingResultMatchId(null);
     }
   };
 
@@ -572,7 +622,7 @@ export default function Tournament() {
                           type="button"
                           disabled={summary.waitingMatches > 0 || summary.playingMatches > 0}
                           onClick={() => setShowFinishTournamentConfirm(true)}
-                          className="rounded-xl bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70"
+                          className="rounded-xl bg-green-500 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:bg-green-500"
                         >
                           Finish Tournament
                         </button>
@@ -613,8 +663,12 @@ export default function Tournament() {
                           <span className="capitalize">{configuration.matchType}</span>
                           <span className="mx-1.5 text-[var(--text)]">·</span>
                           {CATEGORY_LABELS[configuration.category]}
-                          <span className="mx-1.5 text-[var(--text)]">·</span>
-                          {LEVEL_LABELS[configuration.level]}
+                          {configuration.division === "adult" && (
+                            <>
+                              <span className="mx-1.5 text-[var(--text)]">·</span>
+                              {LEVEL_LABELS[configuration.level]}
+                            </>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -630,10 +684,19 @@ export default function Tournament() {
                 options={options}
                 existingConfiguration={existingConfiguration}
                 disabled={isFinished}
-                onDivisionChange={setDivision}
+                onDivisionChange={(nextDivision) => {
+                  setOpenedConfigurationId(null);
+                  setDivision(nextDivision);
+                }}
                 onMatchTypeChange={handleMatchTypeChange}
-                onCategoryChange={setCategory}
-                onLevelChange={setLevel}
+                onCategoryChange={(nextCategory) => {
+                  setOpenedConfigurationId(null);
+                  setCategory(nextCategory);
+                }}
+                onLevelChange={(nextLevel) => {
+                  setOpenedConfigurationId(null);
+                  setLevel(nextLevel);
+                }}
               />
 
               {existingConfiguration ? (
@@ -645,15 +708,27 @@ export default function Tournament() {
                     onReset={() => setResetConfiguration(existingConfiguration)}
                   />
                   <TournamentMatchManagement
-                    key={`${existingConfiguration.id}:${isFinished ? "history" : "active"}`}
+                    key={`${existingConfiguration.id}:${isFinished ? "history" : "active"}:${resultUpdateVersion}`}
                     tournament={tournament}
                     configuration={existingConfiguration}
                     readOnly={isFinished}
                     startingMatchId={startingMatchId}
                     finishingMatchId={finishingMatchId}
+                    updatingResultMatchId={updatingResultMatchId}
                     playingPlayerById={playingPlayerById}
                     onStartMatch={handleStartMatch}
-                    onSelectWinner={(match, team) => setWinnerSelection({ match, team })}
+                    onReviewResult={(match, scoreResult) => setResultConfirmation({
+                      match,
+                      teamAScore: scoreResult.teamAScore,
+                      teamBScore: scoreResult.teamBScore,
+                      winnerTeam: scoreResult.winnerSide === "A" ? match.teamA : match.teamB,
+                    })}
+                    onReviewResultUpdate={(match, scoreResult) => setResultUpdateConfirmation({
+                      match,
+                      teamAScore: scoreResult.teamAScore,
+                      teamBScore: scoreResult.teamBScore,
+                      winnerTeam: scoreResult.winnerSide === "A" ? match.teamA : match.teamB,
+                    })}
                   />
                 </>
               ) : isFinished ? (
@@ -665,6 +740,7 @@ export default function Tournament() {
                   players={profiles}
                   selectedIds={selectedIds}
                   setSelectedIds={setSelectedIds}
+                  division={division}
                   level={level}
                   category={category}
                   matchType={matchType}
@@ -750,18 +826,131 @@ export default function Tournament() {
         onCancel={() => !isResetting && setResetConfiguration(null)}
       />
 
-      <ConfirmDialog
-        open={Boolean(winnerSelection)}
-        title="Confirm Tournament Winner"
-        message={winnerSelection
-          ? `Save ${winnerSelection.team.players.map((player) => player.name).join(" / ")} as the winner? Finished match results cannot be changed.`
-          : "Save this Tournament winner?"}
-        confirmLabel={finishingMatchId ? "Saving Winner..." : "Confirm Winner"}
-        variant="primary"
-        confirmDisabled={Boolean(finishingMatchId)}
-        onConfirm={handleFinishMatch}
-        onCancel={() => !finishingMatchId && setWinnerSelection(null)}
-      />
+      <Modal
+        open={Boolean(resultConfirmation)}
+        title="Confirm Match Result"
+        onClose={() => !finishingMatchId && setResultConfirmation(null)}
+      >
+        {resultConfirmation && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team A</p>
+                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                  {resultConfirmation.match.teamA.players.map((player) => player.name).join(" / ")}
+                </p>
+                <p className="mt-2 text-sm text-[var(--text)]">Score: <strong className="text-[var(--text-h)]">{resultConfirmation.teamAScore}</strong></p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team B</p>
+                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                  {resultConfirmation.match.teamB.players.map((player) => player.name).join(" / ")}
+                </p>
+                <p className="mt-2 text-sm text-[var(--text)]">Score: <strong className="text-[var(--text-h)]">{resultConfirmation.teamBScore}</strong></p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--success)]/40 bg-[var(--success-light)]/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--success)]">Automatic Winner</p>
+              <p className="mt-1 font-semibold text-[var(--text-h)]">
+                {resultConfirmation.winnerTeam.players.map((player) => player.name).join(" / ")}
+              </p>
+            </div>
+            <p className="text-xs text-[var(--text)]">
+              Confirming saves this one-set score and finishes the match. Corrections are available only while this Tournament remains ongoing.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={Boolean(finishingMatchId)}
+                onClick={() => setResultConfirmation(null)}
+                className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(finishingMatchId)}
+                onClick={handleFinishMatch}
+                className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"
+              >
+                {finishingMatchId ? "Saving Result..." : "Confirm Result"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={Boolean(resultUpdateConfirmation)}
+        title="Confirm Result Update"
+        onClose={() => !updatingResultMatchId && setResultUpdateConfirmation(null)}
+      >
+        {resultUpdateConfirmation && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team A</p>
+                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                  {resultUpdateConfirmation.match.teamA.players.map((player) => player.name).join(" / ")}
+                </p>
+                <p className="mt-2 text-xs text-[var(--text)]">
+                  Old Score: <strong className="text-[var(--text-h)]">
+                    {Number.isInteger(resultUpdateConfirmation.match.teamAScore)
+                      ? resultUpdateConfirmation.match.teamAScore
+                      : "Not recorded"}
+                  </strong>
+                </p>
+                <p className="mt-1 text-sm text-[var(--text)]">
+                  New Score: <strong className="text-[var(--text-h)]">{resultUpdateConfirmation.teamAScore}</strong>
+                </p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-hover)] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text)]">Team B</p>
+                <p className="mt-1 font-semibold text-[var(--text-h)]">
+                  {resultUpdateConfirmation.match.teamB.players.map((player) => player.name).join(" / ")}
+                </p>
+                <p className="mt-2 text-xs text-[var(--text)]">
+                  Old Score: <strong className="text-[var(--text-h)]">
+                    {Number.isInteger(resultUpdateConfirmation.match.teamBScore)
+                      ? resultUpdateConfirmation.match.teamBScore
+                      : "Not recorded"}
+                  </strong>
+                </p>
+                <p className="mt-1 text-sm text-[var(--text)]">
+                  New Score: <strong className="text-[var(--text-h)]">{resultUpdateConfirmation.teamBScore}</strong>
+                </p>
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--success)]/40 bg-[var(--success-light)]/40 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--success)]">New Winner</p>
+              <p className="mt-1 font-semibold text-[var(--text-h)]">
+                {resultUpdateConfirmation.winnerTeam.players.map((player) => player.name).join(" / ")}
+              </p>
+            </div>
+            <p className="text-xs text-[var(--text)]">
+              This updates the stored result without reopening the match or changing its Court. Lifetime wins and losses are corrected only if the winner changes.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={Boolean(updatingResultMatchId)}
+                onClick={() => setResultUpdateConfirmation(null)}
+                className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+              >
+                Go Back
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(updatingResultMatchId)}
+                onClick={handleUpdateMatchResult}
+                className="rounded-xl bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--primary-hover)] disabled:opacity-50"
+              >
+                {updatingResultMatchId ? "Updating Result..." : "Confirm Update"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <ConfirmDialog
         open={showDeleteTournamentConfirm}

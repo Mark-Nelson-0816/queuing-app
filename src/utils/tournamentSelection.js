@@ -1,9 +1,9 @@
 import { normalizePlayerLevel } from "./playerLevel.js";
 
-// Keeps permanent profiles matching one Tournament configuration's level and gender.
-export function getEligibleTournamentProfiles(players, level, category) {
+// Applies exact levels only to Adult; minor divisions accept every profile level.
+export function getEligibleTournamentProfiles(players, division, level, category) {
   return players.filter((player) => {
-    if (normalizePlayerLevel(player.level) !== level) return false;
+    if (division === "adult" && normalizePlayerLevel(player.level) !== level) return false;
     const gender = String(player.gender || "").toLowerCase();
     if (category === "mens") return gender === "male";
     if (category === "womens") return gender === "female";
@@ -37,22 +37,20 @@ export function validateTournamentSelection(
 ) {
   const count = selectedIds.length;
   if (matchType === "singles") {
-    if (count < 2) {
-      const missing = 2 - count;
+    if (count < 4) {
+      const missing = 4 - count;
       return {
         ready: false,
-        message: `${count} players selected. Singles requires at least 2 players. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
+        message: `This configuration requires at least 4 teams. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
+      };
+    }
+    if (count === 7) {
+      return {
+        ready: false,
+        message: "Tournament configurations with exactly 7 teams are not supported. Please add or remove participants.",
       };
     }
     return { ready: true, message: "Ready to generate." };
-  }
-
-  if (count < 4) {
-    const missing = 4 - count;
-    return {
-      ready: false,
-      message: `${count} players selected. Doubles requires at least 4 players. Add ${missing} more ${missing === 1 ? "player" : "players"}.`,
-    };
   }
 
   if (category === "mixed") {
@@ -75,6 +73,21 @@ export function validateTournamentSelection(
     return {
       ready: false,
       message: `${count} players selected. Doubles requires an even number of players. Add 1 more player.`,
+    };
+  }
+
+  const teamCount = count / 2;
+  if (teamCount < 4) {
+    const missingPlayers = (4 - teamCount) * 2;
+    return {
+      ready: false,
+      message: `This configuration requires at least 4 teams. Add ${missingPlayers} more ${missingPlayers === 1 ? "player" : "players"}.`,
+    };
+  }
+  if (teamCount === 7) {
+    return {
+      ready: false,
+      message: "Tournament configurations with exactly 7 teams are not supported. Please add or remove participants.",
     };
   }
 

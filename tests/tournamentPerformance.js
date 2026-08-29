@@ -55,6 +55,7 @@ try {
     const selectionStartedAt = performance.now();
     const eligible = getEligibleTournamentProfiles(
       profiles,
+      "adult",
       "intermediate",
       "mixed",
     );

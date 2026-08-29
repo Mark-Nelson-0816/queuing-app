@@ -9,6 +9,7 @@ import {
 import {
   finishTournamentEventMatch as finishRevisedTournamentMatch,
   startTournamentEventMatch as startRevisedTournamentMatch,
+  updateTournamentEventMatchResult as updateRevisedTournamentMatchResult,
 } from "./tournamentRevisionQueries.js";
 
 // Loads all selected player profiles in one database query.
@@ -767,26 +768,26 @@ const finishMatchTransaction = db.transaction((matchId, winnerTeamId) => {
   return loadTournamentDetails(Number(match.tournament_id));
 });
 
-// Validates the selected winner and completes a playing tournament match.
-export function finishTournamentMatch(matchId, winnerTeamId) {
+// Routes revised score finishing separately from legacy winner-only completion.
+export function finishTournamentMatch(matchId, resultValue, teamBScore) {
   try {
     const numericMatchId = Number(matchId);
-    const numericWinnerTeamId = Number(winnerTeamId);
 
     if (!Number.isInteger(numericMatchId) || numericMatchId <= 0) {
       return { success: false, message: "Tournament match not found." };
     }
 
+    const matchModel = getTournamentMatchModelStatement.get(numericMatchId);
+    if (matchModel?.configuration_id !== null && matchModel?.configuration_id !== undefined) {
+      return finishRevisedTournamentMatch(numericMatchId, resultValue, teamBScore);
+    }
+
+    const numericWinnerTeamId = Number(resultValue);
     if (!Number.isInteger(numericWinnerTeamId) || numericWinnerTeamId <= 0) {
       return {
         success: false,
         message: "The selected winner is not part of this match.",
       };
-    }
-
-    const matchModel = getTournamentMatchModelStatement.get(numericMatchId);
-    if (matchModel?.configuration_id !== null && matchModel?.configuration_id !== undefined) {
-      return finishRevisedTournamentMatch(numericMatchId, numericWinnerTeamId);
     }
 
     return {
@@ -796,6 +797,11 @@ export function finishTournamentMatch(matchId, winnerTeamId) {
   } catch (error) {
     return createFailure(error, "Failed to complete tournament match.");
   }
+}
+
+// Updates only a finished configuration-backed result; legacy matches are not editable.
+export function updateTournamentMatchResult(matchId, teamAScore, teamBScore) {
+  return updateRevisedTournamentMatchResult(matchId, teamAScore, teamBScore);
 }
 
 // Revised event-based Tournament APIs remain separate from legacy round-robin calls.

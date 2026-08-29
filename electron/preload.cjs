@@ -72,8 +72,11 @@ contextBridge.exposeInMainWorld("api", {
   startTournamentMatch: (matchId, courtId) =>
     ipcRenderer.invoke('start-tournament-match', matchId, courtId),
 
-  finishTournamentMatch: (matchId, winnerTeamId) =>
-    ipcRenderer.invoke('finish-tournament-match', matchId, winnerTeamId),
+  finishTournamentMatch: (matchId, teamAScore, teamBScore) =>
+    ipcRenderer.invoke('finish-tournament-match', matchId, teamAScore, teamBScore),
+
+  updateTournamentMatchResult: (matchId, teamAScore, teamBScore) =>
+    ipcRenderer.invoke('update-tournament-match-result', matchId, teamAScore, teamBScore),
 
   finishTournament: (tournamentId) =>
     ipcRenderer.invoke("finish-tournament", tournamentId),

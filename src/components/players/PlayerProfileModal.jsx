@@ -101,7 +101,7 @@ export default function PlayerProfileModal({
       title={mode === "edit" ? "Edit Player Profile" : "Add New Player Profile"}
       maxWidthClass="max-w-2xl"
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {/* Profile validation feedback */}
         {error && (
           <p className="rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-light)] p-3 text-sm text-[var(--danger)]">
@@ -110,7 +110,7 @@ export default function PlayerProfileModal({
         )}
 
         {/* Basic player information */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4">
           <label className="text-sm font-medium text-[var(--text-h)] md:col-span-2" htmlFor="player-full-name">
             Full Name
             <input
@@ -178,7 +178,7 @@ export default function PlayerProfileModal({
 
         {/* Level preview */}
         <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface-hover)] p-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-semibold text-[var(--text-h)]">Level preview</p>
             <p className="text-xs text-[var(--text)]">The same rank color appears throughout the app.</p>
           </div>
@@ -198,7 +198,7 @@ export default function PlayerProfileModal({
               ["Mixed", preferMixed, setPreferMixed],
               ["No Gender", preferNoGender, setPreferNoGender],
             ].map(([label, checked, setter]) => (
-              <label key={label} className="flex items-center gap-2 rounded-xl border border-[var(--border)] p-3 text-sm text-[var(--text-h)]">
+              <label key={label} className="flex items-center gap-2 whitespace-nowrap rounded-xl border border-[var(--border)] p-3 text-sm text-[var(--text-h)]">
                 <input
                   type="checkbox"
                   checked={checked}
@@ -211,19 +211,19 @@ export default function PlayerProfileModal({
         </fieldset>
 
         {/* Form actions */}
-        <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4">
           <button
             type="button"
             onClick={closeWhenIdle}
             disabled={isSaving}
-            className="rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
+            className="whitespace-nowrap rounded-xl bg-[var(--surface-hover)] px-4 py-2 text-sm font-semibold text-[var(--text)] disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            className="rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+            className="whitespace-nowrap rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             {isSaving
               ? "Saving..."
