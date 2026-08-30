@@ -49,16 +49,19 @@ export default function PublicDisplayPage() {
         if (queueResult.status === "fulfilled" && queueResult.value?.success && Array.isArray(queueMatches)) {
           const mappedQueue = queueMatches
             .filter((match) => match.source === "rotation")
-            .map((match) => ({
-              id: match.id,
-              source: match.source,
-              queuePosition: match.queuePosition,
-              name: [
-                match.teamA.map((player) => player.name).join(" / "),
-                match.teamB.map((player) => player.name).join(" / "),
-              ].join(" vs "),
-              timeJoined: formatTime(match.createdAt),
-            }));
+            .map((match) => {
+              const teamA = match.teamA.map((player) => player.name);
+              const teamB = match.teamB.map((player) => player.name);
+              return {
+                id: match.id,
+                source: match.source,
+                queuePosition: match.queuePosition,
+                teamA,
+                teamB,
+                name: [teamA.join(" / "), teamB.join(" / ")].join(" vs "),
+                timeJoined: formatTime(match.createdAt),
+              };
+            });
 
           setQueueNext(mappedQueue);
         } else {

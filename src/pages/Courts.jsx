@@ -90,41 +90,41 @@ export default function Courts() {
   const availableCount = courts.filter((c) => c.status === "available").length;
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5">
       {/* Court action feedback */}
       {message && (
-        <div className="bg-red-500 text-white px-4 py-3 rounded-xl">
+        <div className="break-words rounded-xl bg-red-500 px-4 py-3 text-white">
           {message}
         </div>
       )}
 
       {/* Add court controls */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <input
           value={courtName}
           onChange={(e) => setCourtName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleAddCourt()}
           placeholder="Enter court name"
-          className="px-4 py-2 rounded-xl border"
+          className="min-w-0 flex-1 basis-64 rounded-xl border px-4 py-2"
         />
         <button
           onClick={handleAddCourt}
           disabled={isAddingCourt}
-          className="px-5 py-2 rounded-xl bg-green-500 text-white"
+          className="shrink-0 whitespace-nowrap rounded-xl bg-green-500 px-5 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isAddingCourt ? "Adding..." : "Add Court"}
         </button>
       </div>
 
       {/* Court status summary */}
-      <div className="flex items-center gap-4 flex-wrap">
-        <div>Playing: {playingCount}</div>
-        <div>Available: {availableCount}</div>
-        <div>Total Courts: {courts.length}</div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--text)]">
+        <div className="whitespace-nowrap">Playing: {playingCount}</div>
+        <div className="whitespace-nowrap">Available: {availableCount}</div>
+        <div className="whitespace-nowrap">Total Courts: {courts.length}</div>
       </div>
 
       {/* Court cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 2xl:grid-cols-3">
         {isLoading && (
           <p className="text-sm text-[var(--text)]">Loading courts...</p>
         )}

@@ -24,11 +24,24 @@ function formatLabel(value) {
     : "";
 }
 
+// Uses the Tournament's operator-facing division labels in compact card metadata.
+function formatDivision(value) {
+  const labels = {
+    adult: "Adult",
+    u17: "17 Under",
+    u15: "15 Under",
+    u13: "13 Under",
+    u11: "11 Under",
+    u9: "9 Under",
+  };
+  return labels[value] || formatLabel(value);
+}
+
 // Displays the court's current availability status.
 function StatusBadge({ status }) {
   const style = statusStyles[status] ?? statusStyles.available;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${style.badge}`}>
+    <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${style.badge}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
       {status}
     </span>
@@ -38,12 +51,13 @@ function StatusBadge({ status }) {
 // Displays one side of the active court match.
 function Team({ team, accent = "primary", matchType }) {
   if (!team) return null;
+  const hasMultiplePlayers = team.players.length > 1;
   const sideLabel = matchType === "singles"
     ? `Player ${team.teamNumber === 1 ? "A" : "B"}`
     : `Team ${team.teamNumber}`;
 
   return (
-    <div className={`rounded-xl p-2 ${
+    <div className={`min-w-0 max-w-full rounded-xl p-2 ${
       accent === "primary"
         ? "bg-[var(--primary-light)]/40"
         : "bg-[var(--warning-light)]/40"
@@ -53,14 +67,16 @@ function Team({ team, accent = "primary", matchType }) {
       }`}>
         {sideLabel}
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5">
         {team.players.map((player) => (
           <span
             key={player.id}
-            title={getLevelLabel(player.level)}
-            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getLevelClasses(player.level)}`}
+            title={`${player.name} · ${getLevelLabel(player.level)}`}
+            className={`inline-flex min-w-0 max-w-full items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+              hasMultiplePlayers ? "sm:max-w-[calc(50%-0.1875rem)]" : ""
+            } ${getLevelClasses(player.level)}`}
           >
-            {player.name}
+            <span className="truncate">{player.name}</span>
           </span>
         ))}
       </div>
@@ -80,32 +96,31 @@ export default function CourtCard({
   const isRotationMatch = activeMatch?.source === "rotation";
 
   return (
-    <div className={`group relative bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-5 flex flex-col gap-4 ring-1 ${style.ring} transition-shadow hover:shadow-md`}>
+    <div className={`group relative min-w-0 max-w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 ring-1 ${style.ring} transition-shadow hover:shadow-md`}>
       {/* Court name, status, and removal action */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-1.5">
-          <h3 className="text-lg font-bold text-[var(--text-h)] leading-tight">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <h3 className="truncate text-lg font-bold leading-tight text-[var(--text-h)]" title={court.name}>
             {court.name}
           </h3>
-          <StatusBadge status={court.status} />
+          <span className='capitalize'><StatusBadge status={court.status}/></span>
         </div>
 
         <button
           type="button"
           onClick={() => onRemoveCourt?.(court.id)}
           aria-label="Remove court"
-          className="p-2 rounded-lg text-[var(--text)] opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-500 transition"
+          className="shrink-0 rounded-lg p-2 text-[var(--text)] opacity-0 transition hover:bg-red-500/10 hover:text-red-500 focus-visible:opacity-100 group-hover:opacity-100"
         >
           <Trash2 size={16} />
         </button>
       </div>
-
       {/* Active match or available-court state */}
-      <div className="flex-1">
+      <div className="min-w-0">
         {activeMatch ? (
           <div className="space-y-3">
-            <div>
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-h)] uppercase tracking-wide">
+            <div className="min-w-0">
+              <p className="flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--text-h)]">
                 <Users size={12} />
                 {isTournamentMatch
                   ? `Tournament - Round ${activeMatch.roundNumber}`
@@ -113,11 +128,36 @@ export default function CourtCard({
                     ? "Rotation Match"
                     : "Legacy Normal Match"}
               </p>
-              <p className="text-xs text-[var(--text)] mt-1">
-                {(isTournamentMatch || isRotationMatch)
-                  && `${formatLabel(activeMatch.category)} `}
-                {formatLabel(activeMatch.matchType)}
-              </p>
+              {isTournamentMatch && (
+                <p className="mt-1 truncate text-xs font-semibold text-[var(--text-h)]" title={activeMatch.tournamentName}>
+                  {activeMatch.tournamentName}
+                </p>
+              )}
+              <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-[var(--text)]">
+                {isTournamentMatch && activeMatch.division && (
+                  <span className="rounded-md bg-[var(--surface-hover)] px-2 py-1">
+                    {formatDivision(activeMatch.division)}
+                  </span>
+                )}
+                {(isTournamentMatch || isRotationMatch) && activeMatch.category && (
+                  <span className="rounded-md bg-[var(--surface-hover)] px-2 py-1">
+                    {formatLabel(activeMatch.category)}
+                  </span>
+                )}
+                <span className="rounded-md bg-[var(--surface-hover)] px-2 py-1">
+                  {formatLabel(activeMatch.matchType)}
+                </span>
+                {isTournamentMatch && activeMatch.division === "adult" && activeMatch.level && activeMatch.level !== "all" && (
+                  <span className="rounded-md bg-[var(--surface-hover)] px-2 py-1">
+                    {formatLabel(activeMatch.level)}
+                  </span>
+                )}
+                {isTournamentMatch && activeMatch.groupName && (
+                  <span className="rounded-md bg-[var(--surface-hover)] px-2 py-1">
+                    {activeMatch.groupName}
+                  </span>
+                )}
+              </div>
             </div>
 
             <Team team={activeMatch.teamA} accent="primary" matchType={activeMatch.matchType} />
@@ -125,26 +165,26 @@ export default function CourtCard({
             <Team team={activeMatch.teamB} accent="warning" matchType={activeMatch.matchType} />
           </div>
         ) : (
-          <div className="h-full flex items-center justify-center text-sm text-[var(--text)]/60 italic py-4">
+          <div className="flex min-h-[7rem] items-center justify-center py-4 text-sm italic text-[var(--text)]/60">
             No players assigned
           </div>
         )}
       </div>
 
       {!isAvailable && isTournamentMatch && (
-        <div className="pt-3 border-t border-[var(--border)] text-xs text-center text-[var(--text)]">
+        <div className="border-t border-[var(--border)] pt-3 text-left text-xs leading-relaxed text-[var(--text)]">
           Select the winner from the Tournament page to finish this match.
         </div>
       )}
 
       {!isAvailable && isRotationMatch && (
-        <div className="pt-3 border-t border-[var(--border)] text-xs text-center text-[var(--text)]">
+        <div className="border-t border-[var(--border)] pt-3 text-left text-xs leading-relaxed text-[var(--text)]">
           Select the winner from the Rotation Queue page to finish this match.
         </div>
       )}
 
       {!isAvailable && activeMatch?.source === "normal" && (
-        <div className="pt-3 border-t border-[var(--border)] text-xs text-center text-[var(--text)]">
+        <div className="border-t border-[var(--border)] pt-3 text-left text-xs leading-relaxed text-[var(--text)]">
           This is a legacy normal match record.
         </div>
       )}

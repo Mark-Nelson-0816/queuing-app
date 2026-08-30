@@ -60,8 +60,8 @@ function applyTheme(theme) {
 // Displays one grouped Settings section.
 function Card({ title, description, icon: Icon, children, footer, className = "" }) {
   return (
-    <section className={`flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] ${className}`}>
-      <header className="flex items-start gap-3 border-b border-[var(--border)] px-5 py-4">
+    <section className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] ${className}`}>
+      <header className="flex min-w-0 items-start gap-3 border-b border-[var(--border)] px-5 py-4">
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--primary-light)] text-[var(--primary)]">
           <Icon size={17} />
         </span>
@@ -70,8 +70,8 @@ function Card({ title, description, icon: Icon, children, footer, className = ""
           {description && <p className="mt-0.5 text-xs text-[var(--text)]">{description}</p>}
         </div>
       </header>
-      <div className="flex-1 px-5 py-4">{children}</div>
-      {footer && <footer className="border-t border-[var(--border)] bg-[var(--surface-hover)]/40 px-5 py-2.5 text-xs text-[var(--text)]">{footer}</footer>}
+      <div className="min-w-0 px-5 py-4">{children}</div>
+      {footer && <footer className="break-words border-t border-[var(--border)] bg-[var(--surface-hover)]/40 px-5 py-2.5 text-xs text-[var(--text)]">{footer}</footer>}
     </section>
   );
 }
@@ -85,11 +85,11 @@ function Stat({ label, value, icon: Icon, tone = "primary" }) {
     danger: "bg-[var(--danger-light)] text-[var(--danger)]",
   };
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow)]">
+    <div className="flex min-w-0 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-[var(--shadow)]">
       <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tones[tone]}`}><Icon size={18} /></span>
       <div className="min-w-0">
         <p className="text-xl font-bold leading-none text-[var(--text-h)]">{value ?? "—"}</p>
-        <p className="mt-1 truncate text-xs text-[var(--text)]">{label}</p>
+        <p className="mt-1 truncate text-xs text-[var(--text)]" title={label}>{label}</p>
       </div>
     </div>
   );
@@ -101,29 +101,33 @@ function ThemeOption({ label, icon: Icon, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${active ? "border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)]" : "border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-hover)]"}`}
+      className={`flex min-w-0 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${active ? "border-[var(--primary)] bg-[var(--primary-light)] text-[var(--primary)]" : "border-[var(--border)] text-[var(--text)] hover:bg-[var(--surface-hover)]"}`}
     >
-      <Icon size={16} />
-      <span>{label}</span>
-      {active && <Check size={14} />}
+      <Icon size={16} className="shrink-0" />
+      <span className="truncate">{label}</span>
+      {active && <Check size={14} className="shrink-0" />}
     </button>
   );
 }
 
 // Displays a compact group of mutually exclusive settings.
 function SegmentedControl({ label, hint, value, options, onChange }) {
+  const optionGrid = options.length === 4
+    ? "grid-cols-2 2xl:grid-cols-4"
+    : "grid-cols-2";
+
   return (
     <div className="py-3">
       <p className="text-sm font-medium text-[var(--text-h)]">{label}</p>
       {hint && <p className="mt-0.5 text-xs text-[var(--text)]">{hint}</p>}
-      <div className="mt-2 flex flex-wrap gap-1 rounded-xl bg-[var(--surface-hover)] p-1">
+      <div className={`mt-2 grid gap-1 rounded-xl bg-[var(--surface-hover)] p-1 ${optionGrid}`}>
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             disabled={option.disabled}
             onClick={() => onChange(option.value)}
-            className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${value === option.value ? "bg-[var(--primary)] text-white shadow-sm" : "text-[var(--text)] hover:text-[var(--text-h)]"}`}
+            className={`min-w-0 whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors sm:px-3 disabled:cursor-not-allowed disabled:opacity-40 ${value === option.value ? "bg-[var(--primary)] text-white shadow-sm" : "text-[var(--text)] hover:text-[var(--text-h)]"}`}
           >
             {option.label}
           </button>
@@ -136,7 +140,7 @@ function SegmentedControl({ label, hint, value, options, onChange }) {
 // Displays an accessible on-or-off setting.
 function Toggle({ checked, onChange, label, hint }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
+    <div className="flex min-w-0 items-start justify-between gap-4 py-3 sm:items-center">
       <div className="min-w-0">
         <p className="text-sm font-medium text-[var(--text-h)]">{label}</p>
         {hint && <p className="mt-0.5 text-xs text-[var(--text)]">{hint}</p>}
@@ -146,7 +150,7 @@ function Toggle({ checked, onChange, label, hint }) {
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${checked ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}
+        className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors sm:mt-0 ${checked ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`}
       >
         <span className={`h-4 w-4 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
       </button>
@@ -157,9 +161,9 @@ function Toggle({ checked, onChange, label, hint }) {
 // Displays one application information value.
 function InfoItem({ label, value, wide = false }) {
   return (
-    <div className={`rounded-xl bg-[var(--surface-hover)] px-3 py-2.5 ${wide ? "sm:col-span-2" : ""}`}>
+    <div className={`min-w-0 rounded-xl bg-[var(--surface-hover)] px-3 py-2.5 ${wide ? "sm:col-span-2" : ""}`}>
       <dt className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text)]">{label}</dt>
-      <dd className="mt-0.5 break-words text-sm font-medium text-[var(--text-h)]">{value || "Unavailable"}</dd>
+      <dd className={`mt-0.5 break-words font-medium text-[var(--text-h)] ${wide ? "font-mono text-xs [overflow-wrap:anywhere]" : "text-sm"}`}>{value || "Unavailable"}</dd>
     </div>
   );
 }
@@ -353,22 +357,22 @@ export default function Settings() {
   const appInfo = applicationInfo || {};
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {/* Settings heading */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-[var(--text-h)]">Application Settings</h1>
           <p className="mt-1 text-sm text-[var(--text)]">Preferences, operational defaults, application information, and data management.</p>
         </div>
-        <span className="flex items-center gap-2 rounded-xl bg-[var(--primary-light)] px-3 py-2 text-sm font-semibold text-[var(--primary)]"><SlidersHorizontal size={16} /> Desktop Configuration</span>
+        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl bg-[var(--primary-light)] px-3 py-2 text-sm font-semibold text-[var(--primary)]"><SlidersHorizontal size={16} /> Desktop Configuration</span>
       </div>
 
       {/* Settings feedback */}
       {error && <div role="alert" className="rounded-xl border border-[var(--danger)]/30 bg-[var(--danger-light)] px-4 py-3 text-sm text-[var(--danger)]">{error}</div>}
-      {message && <div className="flex items-center gap-2 rounded-xl border border-[var(--success)]/30 bg-[var(--success-light)] px-4 py-3 text-sm text-[var(--success)]"><Check size={16} />{message}</div>}
+      {message && <div className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--success)]/30 bg-[var(--success-light)] px-4 py-3 text-sm text-[var(--success)]"><Check size={16} className="shrink-0" /><span className="min-w-0 break-words">{message}</span></div>}
 
       {/* Live application overview */}
-      <section aria-label="Application overview" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <section aria-label="Application overview" className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
         <Stat label="Registered Players Today" value={stats.registeredToday} icon={UserCheck} />
         <Stat label="Total Player Profiles" value={stats.totalProfiles} icon={Users} tone="success" />
         <Stat label="Courts" value={stats.courts} icon={LayoutGrid} tone="warning" />
@@ -378,9 +382,9 @@ export default function Settings() {
       </section>
 
       {/* Settings sections */}
-      <div className="grid items-stretch gap-5 xl:grid-cols-2">
+      <div className="grid items-start gap-5 2xl:grid-cols-2">
         <Card title="Application" description="Choose how the desktop application looks." icon={Palette} footer={savedKey === "theme" ? "Theme saved ✓" : savedMessage}>
-          <div className="flex gap-2">
+          <div className="flex min-w-0 gap-2">
             <ThemeOption label="Light" icon={Sun} active={settings.theme === "light"} onClick={() => handleSettingChange("theme", "light")} />
             <ThemeOption label="Dark" icon={Moon} active={settings.theme === "dark"} onClick={() => handleSettingChange("theme", "dark")} />
             <ThemeOption label="System" icon={Monitor} active={settings.theme === "system"} onClick={() => handleSettingChange("theme", "system")} />
@@ -398,15 +402,15 @@ export default function Settings() {
           <div className="divide-y divide-[var(--border)]">
             <SegmentedControl label="Default Match Type" value={settings.defaultTournamentMatchType} options={[{ value: "singles", label: "Singles" }, { value: "doubles", label: "Doubles" }]} onChange={handleTournamentMatchType} />
             <SegmentedControl label="Default Category" value={settings.defaultTournamentCategory} options={[{ value: "mens", label: "Men's" }, { value: "womens", label: "Women's" }, { value: "mixed", label: "Mixed", disabled: settings.defaultTournamentMatchType === "singles" }, { value: "no_gender", label: "No Gender" }]} onChange={(value) => handleSettingChange("defaultTournamentCategory", value)} />
-            <div className="flex items-center justify-between gap-3 py-3"><div><p className="text-sm font-medium text-[var(--text-h)]">Shuffle Players Before Team Creation</p><p className="mt-0.5 text-xs text-[var(--text)]">Built into the current Tournament team generator.</p></div><span className="rounded-full bg-[var(--success-light)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--success)]">Always On</span></div>
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0 flex-1"><p className="text-sm font-medium text-[var(--text-h)]">Shuffle Players Before Team Creation</p><p className="mt-0.5 text-xs text-[var(--text)]">Built into the current Tournament team generator.</p></div><span className="shrink-0 whitespace-nowrap rounded-full bg-[var(--success-light)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--success)]">Always On</span></div>
           </div>
         </Card>
 
         <Card title="Database Management" description="Back up or maintain local application data." icon={Database}>
           <div className="divide-y divide-[var(--border)]">
-            <div className="flex items-center justify-between gap-4 py-3">
-              <div><p className="text-sm font-medium text-[var(--text-h)]">Backup Database</p><p className="mt-0.5 text-xs text-[var(--text)]">Save a consistent copy of player, Rotation, Tournament, court, and settings data.</p></div>
-              <button type="button" onClick={() => setShowBackupConfirm(true)} disabled={isBackingUp} className="shrink-0 rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50"><Download className="mr-1 inline h-3.5 w-3.5" /> Backup</button>
+            <div className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0"><p className="text-sm font-medium text-[var(--text-h)]">Backup Database</p><p className="mt-0.5 text-xs text-[var(--text)]">Save a consistent copy of player, Rotation, Tournament, court, and settings data.</p></div>
+              <button type="button" onClick={() => setShowBackupConfirm(true)} disabled={isBackingUp} className="shrink-0 self-start whitespace-nowrap rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50 sm:self-center"><Download className="mr-1 inline h-3.5 w-3.5" /> Backup</button>
             </div>
             
             {/* No need for this feature */}
@@ -415,17 +419,17 @@ export default function Settings() {
               <button type="button" onClick={() => setShowClearHistoryConfirm(true)} disabled={isClearingHistory} className="shrink-0 rounded-xl border border-[var(--danger)]/40 px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:opacity-50"><Trash2 className="mr-1 inline h-3.5 w-3.5" /> Clear History</button>
             </div> */}
 
-            <div className="flex items-center justify-between gap-4 py-3">
-              <div><p className="text-sm font-medium text-[var(--text-h)]">Reset Application Data</p><p className="mt-0.5 text-xs text-[var(--text)]">Deletes players, matches, tournaments, queue data, and courts before restoring the default courts.</p></div>
-              <button type="button" onClick={() => setShowResetConfirm(true)} className="shrink-0 rounded-xl bg-[var(--danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90"><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Reset Data</button>
+            <div className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0"><p className="text-sm font-medium text-[var(--text-h)]">Reset Application Data</p><p className="mt-0.5 text-xs text-[var(--text)]">Deletes players, matches, tournaments, queue data, and courts before restoring the default courts.</p></div>
+              <button type="button" onClick={() => setShowResetConfirm(true)} className="shrink-0 self-start whitespace-nowrap rounded-xl bg-[var(--danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90 sm:self-center"><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Reset Data</button>
             </div>
           </div>
         </Card>
 
-        <Card title="About" description="Application, runtime, and local database information." icon={Info} className="xl:col-span-2">
-          <div className="mb-4 flex items-center gap-3">
+        <Card title="About" description="Application, runtime, and local database information." icon={Info} className="2xl:col-span-2">
+          <div className="mb-4 flex min-w-0 items-center gap-3">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--primary)] text-lg font-bold text-white">BQ</span>
-            <div><p className="font-semibold text-[var(--text-h)]">{appInfo.applicationName || "Badminton Queue"}</p><p className="text-xs text-[var(--text)]">Queue, court, player, and Tournament management.</p></div>
+            <div className="min-w-0"><p className="truncate font-semibold text-[var(--text-h)]">{appInfo.applicationName || "Badminton Queue"}</p><p className="text-xs text-[var(--text)]">Queue, court, player, and Tournament management.</p></div>
           </div>
           <dl className="grid gap-2 sm:grid-cols-2">
             <InfoItem label="Version" value={appInfo.version} />
