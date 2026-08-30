@@ -29,18 +29,22 @@ assert.match(display, /grid-cols-\[minmax\(0,1fr\)_17rem\]/);
 assert.match(display, /function getCourtLayout\(activeCourtCount\)/);
 assert.match(display, /activeCourtCount === 2/);
 assert.match(display, /activeCourtCount <= 4/);
+assert.match(display, /activeCourtCount <= 6/);
+assert.match(display, /density: "dense"/);
 assert.match(display, /Math\.ceil\(activeCourtCount \/ 3\)/);
 assert.match(display, /gridTemplateRows: `repeat\(\$\{courtLayout\.rows\}, minmax\(0, 1fr\)\)`/);
 
-// Court cards use their full grid cell and compact, one-line player boxes.
+// Court cards use their full grid cell with compact, vertical per-player teams.
 assert.match(display, /title=\{court\.name\}/);
 assert.match(display, /title=\{player\.name\}/);
 assert.match(display, /flex h-full min-h-0 min-w-0 max-w-full flex-col/);
-assert.match(display, /flex min-h-0 min-w-0 flex-1 flex-col justify-center/);
-assert.match(display, /team\?\.players\.length > 1 \? "grid-cols-2" : "grid-cols-1"/);
+assert.match(display, /grid min-h-0 min-w-0 flex-1 grid-rows-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/);
+assert.match(display, /grid min-w-0 grid-cols-1/);
 assert.match(display, /min-w-0 max-w-full overflow-hidden rounded-lg/);
 assert.match(display, /overflow-hidden truncate whitespace-nowrap font-bold/);
-assert.doesNotMatch(display, /grid-cols-1 xl:grid-cols-2/);
+assert.match(display, /text-base leading-5 2xl:text-lg 2xl:leading-6/);
+assert.match(display, /text-\[clamp\(0\.9375rem,1\.1vw,1\.25rem\)\] leading-tight 2xl:text-xl 2xl:leading-6/);
+assert.doesNotMatch(display, /team\?\.players\.length > 1 \? "grid-cols-2"/);
 assert.match(display, /match\.division === "adult" \? formatLabel\(match\.level\) : null/);
 assert.match(display, /matchMetadata\.join/);
 

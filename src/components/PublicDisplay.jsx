@@ -29,39 +29,45 @@ function getCourtLayout(activeCourtCount) {
   if (activeCourtCount <= 1) return { grid: COURT_LAYOUTS.low, rows: 1, density: "low" };
   if (activeCourtCount === 2) return { grid: COURT_LAYOUTS.medium, rows: 1, density: "low" };
   if (activeCourtCount <= 4) return { grid: COURT_LAYOUTS.medium, rows: 2, density: "medium" };
-  return {
+  if (activeCourtCount <= 6) return {
     grid: COURT_LAYOUTS.high,
     rows: Math.ceil(activeCourtCount / 3),
     density: "high",
+  };
+  return {
+    grid: COURT_LAYOUTS.high,
+    rows: Math.ceil(activeCourtCount / 3),
+    density: "dense",
   };
 }
 
 // Displays one team on an active public court card.
 function PublicTeam({ team, density, accent = "primary", matchType, side }) {
   const isPrimary = accent === "primary";
+  const isDense = density === "dense";
   const isHighDensity = density === "high";
   const sideLabel = matchType === "singles"
     ? `Player ${side}`
     : `Team ${side}`;
 
   return (
-    <div className={`min-w-0 max-w-full shrink-0 rounded-xl ${isHighDensity ? "p-1" : density === "medium" ? "p-1.5" : "p-2"} ${
+    <div className={`flex h-full min-h-0 min-w-0 max-w-full flex-col justify-center rounded-xl ${isDense ? "p-1" : isHighDensity ? "p-2 2xl:p-3" : density === "medium" ? "p-1.5 2xl:p-3" : "p-3 2xl:p-4"} ${
       isPrimary
         ? "bg-[var(--primary-light)]/35"
         : "bg-[var(--warning-light)]/35"
     }`}>
-      <p className={`text-center font-semibold ${isHighDensity ? "mb-0 text-[8px] leading-3" : density === "medium" ? "mb-0.5 text-[9px] leading-3" : "mb-1 text-[10px]"} ${
+      <p className={`text-center font-semibold ${isDense ? "mb-0 text-[8px] leading-2" : isHighDensity ? "mb-1 text-xs leading-4 2xl:text-sm" : density === "medium" ? "mb-0.5 text-[10px] leading-3 2xl:mb-1 2xl:text-base 2xl:leading-5" : "mb-1.5 text-base leading-5 2xl:text-lg"} ${
         isPrimary ? "text-[var(--primary)]" : "text-[var(--warning)]"
       }`}>
         {sideLabel}
       </p>
-      <div className={`grid min-w-0 ${isHighDensity ? "gap-1" : density === "medium" ? "gap-1" : "gap-2"} ${team?.players.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+      <div className={`grid min-w-0 grid-cols-1 ${isDense ? "gap-0.5" : isHighDensity ? "gap-1.5 2xl:gap-2" : density === "medium" ? "gap-1 2xl:gap-2" : "gap-2 2xl:gap-3"}`}>
         {team?.players.map((player) => (
           <div
             key={player.id}
-            className={`min-w-0 max-w-full overflow-hidden rounded-lg bg-[var(--surface-hover)] text-center ${isHighDensity ? "px-1 py-0.5" : density === "medium" ? "px-1.5 py-0.5" : "px-2 py-1"}`}
+            className={`min-w-0 max-w-full overflow-hidden rounded-lg bg-[var(--surface-hover)] text-center ${isDense ? "px-1 py-0.5" : isHighDensity ? "px-2 py-1 2xl:px-3 2xl:py-1.5" : density === "medium" ? "px-1.5 py-0.5 2xl:px-3 2xl:py-2" : "px-3 py-2 2xl:px-4 2xl:py-3"}`}
           >
-            <p title={player.name} className={`overflow-hidden truncate whitespace-nowrap font-bold ${isHighDensity ? "text-xs leading-4" : density === "medium" ? "text-sm leading-4" : "text-xl leading-6"} ${getLevelTextClasses(player.level)}`}>
+            <p title={player.name} className={`overflow-hidden truncate whitespace-nowrap font-bold ${isDense ? "text-xs leading-4 2xl:text-sm" : isHighDensity ? "text-base leading-5 2xl:text-lg 2xl:leading-6" : density === "medium" ? "text-[clamp(0.9375rem,1.1vw,1.25rem)] leading-tight 2xl:text-xl 2xl:leading-6" : "text-xl leading-6 lg:text-2xl lg:leading-7 2xl:text-3xl 2xl:leading-8"} ${getLevelTextClasses(player.level)}`}>
               {player.name}
             </p>
           </div>
@@ -195,34 +201,34 @@ export default function PublicDisplay({
                 return (
                   <div
                     key={court.id}
-                    className={`flex h-full min-h-0 min-w-0 max-w-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)] ${courtLayout.density === "high" ? "p-1.5" : courtLayout.density === "medium" ? "p-2" : "p-3"}`}
+                    className={`flex h-full min-h-0 min-w-0 max-w-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)] ${courtLayout.density === "dense" ? "p-1.5" : courtLayout.density === "high" ? "p-2 2xl:p-3" : courtLayout.density === "medium" ? "p-1.5 2xl:p-3" : "p-3 2xl:p-5"}`}
                   >
-                    <div className={`flex shrink-0 min-w-0 items-center justify-between gap-2 ${courtLayout.density === "high" ? "mb-0.5" : courtLayout.density === "medium" ? "mb-1" : "mb-1.5"}`}>
-                      <h3 title={court.name} className={`min-w-0 truncate font-bold text-[var(--text-h)] ${courtLayout.density === "high" ? "text-sm" : courtLayout.density === "medium" ? "text-lg" : "text-xl"}`}>
+                    <div className={`flex shrink-0 min-w-0 items-center justify-between gap-2 ${courtLayout.density === "dense" ? "mb-0" : courtLayout.density === "high" ? "mb-1" : courtLayout.density === "medium" ? "mb-1" : "mb-1.5"}`}>
+                      <h3 title={court.name} className={`min-w-0 truncate font-bold text-[var(--text-h)] ${courtLayout.density === "dense" ? "text-sm" : courtLayout.density === "high" ? "text-base 2xl:text-lg" : courtLayout.density === "medium" ? "text-lg 2xl:text-xl" : "text-xl 2xl:text-2xl"}`}>
                         {court.name}
                       </h3>
-                      <span className={`flex shrink-0 items-center whitespace-nowrap rounded-full bg-[var(--success-light)] font-semibold text-[var(--success)] ${courtLayout.density === "high" ? "gap-1 px-1.5 py-0.5 text-[9px]" : courtLayout.density === "medium" ? "gap-1.5 px-2 py-0.5 text-xs" : "gap-2 px-3 py-1 text-sm"}`}>
-                        <span className={`${courtLayout.density === "high" ? "h-1.5 w-1.5" : "h-2 w-2"} rounded-full bg-[var(--success)] animate-pulse`} />
+                      <span className={`flex shrink-0 items-center whitespace-nowrap rounded-full bg-[var(--success-light)] font-semibold text-[var(--success)] ${courtLayout.density === "dense" ? "gap-1 px-1.5 py-0.5 text-[9px]" : courtLayout.density === "high" ? "gap-1.5 px-2 py-0.5 text-xs 2xl:text-sm" : courtLayout.density === "medium" ? "gap-1.5 px-2 py-0.5 text-xs 2xl:text-sm" : "gap-2 px-3 py-1 text-sm 2xl:text-base"}`}>
+                        <span className={`${courtLayout.density === "dense" ? "h-1.5 w-1.5" : "h-2 w-2"} rounded-full bg-[var(--success)] animate-pulse`} />
                         LIVE
                       </span>
                     </div>
 
-                    <div className={`min-w-0 shrink-0 text-center ${courtLayout.density === "high" ? "mb-0.5" : courtLayout.density === "medium" ? "mb-1" : "mb-1.5"}`}>
-                      <p title={isTournament ? match.tournamentName : undefined} className={`truncate font-bold text-[var(--text-h)] ${courtLayout.density === "high" ? "text-[10px]" : "text-xs"}`}>
+                    <div className={`min-w-0 shrink-0 text-center ${courtLayout.density === "dense" ? "mb-0" : courtLayout.density === "high" ? "mb-1" : courtLayout.density === "medium" ? "mb-1" : "mb-1.5"}`}>
+                      <p title={isTournament ? match.tournamentName : undefined} className={`truncate font-bold text-[var(--text-h)] ${courtLayout.density === "dense" ? "text-[10px]" : courtLayout.density === "high" ? "text-xs 2xl:text-sm" : "text-sm 2xl:text-base"}`}>
                         {isTournament
                           ? match.tournamentName
                           : isRotation
                             ? "Rotation Match"
                             : "Legacy Normal Match"}
                       </p>
-                      <p title={matchMetadata.join(" · ")} className={`truncate whitespace-nowrap leading-tight text-[var(--text)] ${courtLayout.density === "high" ? "text-[8px]" : "text-[10px]"}`}>
+                      <p title={matchMetadata.join(" · ")} className={`truncate whitespace-nowrap leading-tight text-[var(--text)] ${courtLayout.density === "dense" ? "text-[8px]" : courtLayout.density === "high" ? "text-[10px] 2xl:text-xs" : "text-xs"}`}>
                         {matchMetadata.join(" · ")}
                       </p>
                     </div>
 
-                    <div className={`flex min-h-0 min-w-0 flex-1 flex-col justify-center ${courtLayout.density === "high" ? "gap-0.5" : courtLayout.density === "medium" ? "gap-1" : "gap-2"}`}>
+                    <div className={`grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] ${courtLayout.density === "dense" ? "gap-0" : courtLayout.density === "high" ? "gap-1 2xl:gap-2" : courtLayout.density === "medium" ? "gap-1.5 2xl:gap-2" : "gap-2 2xl:gap-3"}`}>
                       <PublicTeam team={match.teamA} density={courtLayout.density} accent="primary" matchType={match.matchType} side="A" />
-                      <p className={`shrink-0 text-center font-bold text-[var(--text)]/50 ${courtLayout.density === "high" ? "text-[9px] leading-3" : courtLayout.density === "medium" ? "text-[10px] leading-3" : "text-sm"}`}>
+                      <p className={`shrink-0 self-center text-center font-bold text-[var(--text)]/50 ${courtLayout.density === "dense" ? "text-[8px] leading-2" : courtLayout.density === "high" ? "text-base leading-5 2xl:text-lg" : courtLayout.density === "medium" ? "text-lg leading-5 2xl:text-xl" : "text-xl leading-6 2xl:text-2xl"}`}>
                         VS
                       </p>
                       <PublicTeam team={match.teamB} density={courtLayout.density} accent="warning" matchType={match.matchType} side="B" />
