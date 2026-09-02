@@ -151,15 +151,15 @@ export default function RegisteredPlayersTable({
         <>
           {/* Registered players table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] table-fixed border-collapse text-sm">
+            <table className="w-full table-fixed border-collapse text-sm">
               <colgroup>
-                <col className="w-[13.5rem]" />
-                <col className="w-[9rem]" />
-                <col className="w-[8rem]" />
-                <col className="w-[6.5rem]" />
-                <col className="w-[5.5rem]" />
-                <col className="w-[12rem]" />
-                <col className="w-[8rem]" />
+                <col className="w-[21.6%]" />
+                <col className="w-[14.4%]" />
+                <col className="w-[12.8%]" />
+                <col className="w-[10.4%]" />
+                <col className="w-[8.8%]" />
+                <col className="w-[19.2%]" />
+                <col className="w-[12.8%]" />
               </colgroup>
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
                 <tr className="text-left text-xs uppercase tracking-wide text-[var(--text)] shadow-[0_1px_0_var(--border)]">

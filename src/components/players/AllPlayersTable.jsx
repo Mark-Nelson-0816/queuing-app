@@ -68,7 +68,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
             <button type="button" onClick={onOpenAdd} className="whitespace-nowrap rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white hover:bg-[var(--primary-hover)]"><UserPlus className="mr-1 inline h-3.5 w-3.5" /> Add Profile</button>
           </div>
         </div>
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(13rem,1fr)_10rem_9rem_11rem_11rem]">
+        <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
           <label className="relative min-w-0">
             <span className="sr-only">Search all player profiles</span><Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text)]" />
             <input value={search} onChange={updateFilter(setSearch)} placeholder="Search name or contact..." className="h-9 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] pl-9 pr-3 text-sm" />
@@ -96,14 +96,14 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
         <>
           {/* Player profile table */}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] table-fixed border-collapse text-sm">
+            <table className="w-full table-fixed border-collapse text-sm">
               <colgroup>
-                <col className="w-[13.5rem]" />
-                <col className="w-[9rem]" />
-                <col className="w-[15rem]" />
-                <col className="w-[7.5rem]" />
-                <col className="w-[6rem]" />
-                <col className="w-[13.5rem]" />
+                <col className="w-[21%]" />
+                <col className="w-[14%]" />
+                <col className="w-[23%]" />
+                <col className="w-[12%]" />
+                <col className="w-[9%]" />
+                <col className="w-[21%]" />
               </colgroup>
               <thead className="sticky top-0 z-10 bg-[var(--surface-hover)]">
                 <tr className="text-xs uppercase tracking-wide text-[var(--text)] shadow-[0_1px_0_var(--border)]">
@@ -128,7 +128,7 @@ export default function AllPlayersTable({ profiles, isLoading, busyPlayerId, onR
                       <td className="px-3 py-2"><p title={preferences.join(" · ") || "None"} className="truncate font-medium text-[var(--text-h)]">{preferences.join(" · ") || "None"}</p><p title={rankPreferenceLabel(player.rankPreference)} className="mt-0.5 truncate text-xs text-[var(--text)]">{rankPreferenceLabel(player.rankPreference)}</p></td>
                       <td className="px-3 py-2 text-center font-semibold text-[var(--text-h)]">{player.lifetimeMatches}</td>
                       <td className="px-3 py-2 text-center"><span className="font-semibold text-[var(--success)]">{player.lifetimeWins}</span><span className="px-1 text-[var(--text)]">/</span><span className="font-semibold text-[var(--danger)]">{player.lifetimeLosses}</span></td>
-                      <td className="whitespace-nowrap px-3 py-2"><div className="flex flex-nowrap items-center justify-end gap-1.5">
+                      <td className="px-3 py-2"><div className="flex flex-wrap items-center justify-end gap-1.5">
                         {activeToday ? <span className="whitespace-nowrap rounded-lg bg-[var(--success-light)] px-2 py-1 text-xs font-semibold text-[var(--success)]">Registered</span> : <button type="button" onClick={() => onRegister(player)} disabled={actionsDisabled} className="whitespace-nowrap rounded-lg bg-[var(--primary)] px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50">{isBusy ? "Working..." : player.todayRegistration?.isDone ? "Reactivate" : "Register"}</button>}
                         <button type="button" onClick={() => onEdit(player)} disabled={actionsDisabled} className="whitespace-nowrap rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-semibold text-[var(--text-h)] hover:bg-[var(--surface-hover)] disabled:opacity-50">Edit</button>
                         <button type="button" onClick={() => onDelete(player)} disabled={actionsDisabled || activeToday} title={activeToday ? "Mark this player done before deleting their profile." : "Delete player profile"} className="whitespace-nowrap rounded-lg border border-[var(--danger)]/40 px-2.5 py-1 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:cursor-not-allowed disabled:opacity-40">Delete</button>

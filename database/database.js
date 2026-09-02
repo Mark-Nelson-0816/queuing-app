@@ -12,5 +12,6 @@ const db = new Database(dbPath);
 
 // Enforces relationships and cascade rules declared by the schema.
 db.pragma("foreign_keys = ON");
+console.log(dbPath);
 
 export default db;

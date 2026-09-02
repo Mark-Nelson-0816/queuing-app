@@ -50,7 +50,7 @@ export default function TournamentEventNavigator({
         </div>
       </div>
 
-      <div className="grid gap-2 p-3 sm:grid-cols-2 2xl:max-h-[35rem] 2xl:block 2xl:space-y-2 2xl:overflow-y-auto">
+      <div className="grid gap-2 p-3 2xl:max-h-[35rem] 2xl:block 2xl:space-y-2 2xl:overflow-y-auto">
         {visibleEvents.length === 0 ? (
           <div className="p-8 text-center">
             <Trophy className="mx-auto h-7 w-7 text-[var(--text)]" />
