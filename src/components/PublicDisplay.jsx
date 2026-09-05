@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { getLevelTextClasses } from "../utils/playerLevel";
 
 // Converts stored match values into public-facing labels.

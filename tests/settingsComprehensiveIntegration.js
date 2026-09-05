@@ -56,7 +56,6 @@ try {
   const { getCourts } = await import("../database/courtQueries.js");
   const { getPlayerManagementData } = await import("../database/playerQueries.js");
   const { listTournamentEvents } = await import("../database/tournamentQueries.js");
-  const { resetAllData } = await import("../database/resetQueries.js");
 
   const settingsPageSource = readFileSync(
     new URL("../src/pages/Settings.jsx", import.meta.url),
@@ -68,6 +67,18 @@ try {
   );
   const mainSource = readFileSync(
     new URL("../electron/main.js", import.meta.url),
+    "utf8",
+  );
+  const appSource = readFileSync(
+    new URL("../src/App.jsx", import.meta.url),
+    "utf8",
+  );
+  const queueSource = readFileSync(
+    new URL("../src/pages/Queue.jsx", import.meta.url),
+    "utf8",
+  );
+  const tournamentSource = readFileSync(
+    new URL("../src/pages/Tournament.jsx", import.meta.url),
     "utf8",
   );
 
@@ -85,7 +96,9 @@ try {
   assert.match(settingsPageSource, /Promise\.allSettled/);
   assert.match(settingsPageSource, /showBackupConfirm/);
   assert.match(settingsPageSource, /showClearHistoryConfirm/);
-  assert.match(settingsPageSource, /showResetConfirm/);
+  assert.doesNotMatch(settingsPageSource, /showResetConfirm/);
+  assert.doesNotMatch(settingsPageSource, /window\.api\.resetAllData/);
+  assert.doesNotMatch(settingsPageSource, />Reset Application Data</);
   assert.match(settingsPageSource, /backupActionRef\.current/);
   assert.match(settingsPageSource, /clearHistoryActionRef\.current/);
   assert.match(settingsPageSource, /current\[key\] === value/);
@@ -109,6 +122,57 @@ try {
   const info = settings.getApplicationInfo();
   assert.equal(info.databaseLocation, db.name);
   assert.match(info.sqliteVersion, /^\d+\.\d+\.\d+/);
+
+  // Each known preference stays independent, and repeated saves retain one latest row.
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(settings.getAllSettings()).filter(([key]) => [
+      "theme",
+      "defaultMatchType",
+      "autoRequeue",
+      "defaultTournamentMatchType",
+      "defaultTournamentCategory",
+    ].includes(key))),
+    {
+      theme: "system",
+      defaultMatchType: "singles",
+      autoRequeue: "false",
+      defaultTournamentMatchType: "singles",
+      defaultTournamentCategory: "no_gender",
+    },
+  );
+  for (const value of ["light", "dark", "system", "dark"]) {
+    assert.equal(settings.setSetting("theme", value).success, true);
+  }
+  assert.equal(settings.getAllSettings().theme, "dark");
+  assert.equal(db.prepare("SELECT COUNT(*) FROM settings WHERE key = 'theme'").pluck().get(), 1);
+
+  // Production consumers read persisted values and apply their existing safe fallbacks.
+  assert.match(appSource, /const theme = data\.theme \|\| "light"/);
+  assert.match(appSource, /theme === "dark" \? "dark" : "light"/);
+  assert.match(queueSource, /settingsRequest\.value\.autoRequeue !== "false"/);
+  assert.match(queueSource, /\["singles", "doubles"\]\.includes\(defaultMatchType\)/);
+  assert.match(queueSource, /!hasSavedRotationDraft/);
+  assert.match(queueSource, /setDonePlayerIds\(autoRequeue \? \[\] : match\.players\.map/);
+  assert.match(tournamentSource, /defaultTournamentMatchType === "singles" \? "singles" : "doubles"/);
+  assert.match(tournamentSource, /allowedCategories\.includes\(settings\.defaultTournamentCategory\)/);
+  assert.match(tournamentSource, /: "no_gender"/);
+
+  // Unknown string keys are supported, but malformed keys and values do not create rows.
+  assert.equal(settings.setSetting("futureSetting", true).success, true);
+  assert.equal(settings.getAllSettings().futureSetting, "true");
+  const settingsCountBeforeInvalidWrites = db.prepare("SELECT COUNT(*) FROM settings").pluck().get();
+  for (const [key, value] of [
+    [null, "value"],
+    [undefined, "value"],
+    ["", "value"],
+    ["   ", "value"],
+    ["invalidNullValue", null],
+    ["invalidObjectValue", { enabled: true }],
+  ]) {
+    assert.equal(settings.setSetting(key, value).success, false);
+  }
+  assert.equal(db.prepare("SELECT COUNT(*) FROM settings").pluck().get(), settingsCountBeforeInvalidWrites);
+  assert.equal(settings.getAllSettings().theme, "dark");
 
   // Seed current data, old/recent history, an active match, a lock, and Tournament data.
   const insertPlayer = db.prepare(`
@@ -185,6 +249,7 @@ try {
   assert.deepEqual(backup.pragma("foreign_key_check"), []);
   assert.deepEqual(counts(backup), sourceBeforeBackup);
   assert.equal(backup.prepare("SELECT id FROM tournaments WHERE id = ?").get(tournamentId).id, tournamentId);
+  assert.equal(backup.prepare("SELECT value FROM settings WHERE key = 'theme'").pluck().get(), "dark");
   backup.close();
   assert.deepEqual(counts(db), sourceBeforeBackup);
   assert.ok(getCourts().find((court) => court.id === courtId)?.activeMatch);
@@ -278,17 +343,6 @@ try {
   assert.equal(maintenance.clearOldRotationHistory().data.deletedMatches, 1000);
   const cleanupElapsed = performance.now() - cleanupStarted;
 
-  // Reset is an existing Settings action: it restores default Courts and keeps settings.
-  assert.equal(resetAllData().success, true);
-  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM players").get().count, 0);
-  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM tournaments").get().count, 0);
-  assert.deepEqual(db.prepare("SELECT name, status FROM courts ORDER BY id").all(), [
-    { name: "Court 1", status: "available" },
-    { name: "Court 2", status: "available" },
-    { name: "Court 3", status: "available" },
-  ]);
-  assert.equal(settings.getAllSettings().theme, "system");
-
   // Every Settings API used by the page has a matching preload/main IPC contract.
   const contracts = [
     ["getSettings", "get-settings"],
@@ -300,7 +354,6 @@ try {
     ["updateSetting", "update-setting"],
     ["backupDatabase", "backup-database"],
     ["clearOldRotationHistory", "clear-old-rotation-history"],
-    ["resetAllData", "reset-all-data"],
   ];
   for (const [method, channel] of contracts) {
     assert.match(preloadSource, new RegExp(`${method}\\s*:`));

@@ -61,6 +61,7 @@ try {
   assert.match(courtPageSource, /No courts have been added yet\./);
   assert.match(courtPageSource, /isAddingCourt/);
   assert.match(courtPageSource, /disabled=\{isAddingCourt\}/);
+  assert.match(courtPageSource, /addCourtLockRef\.current/);
   assert.match(courtCardSource, /court\.activeMatch/);
 
   // Each preload Court method maps to a real main-process handler.

@@ -14,6 +14,7 @@ try {
   db = (await import("../database/database.js")).default;
   const settings = await import("../database/settingsQueries.js");
 
+  assert.deepEqual(settings.getAllSettings(), {});
   assert.equal(settings.setSetting("theme", "dark").success, true);
   assert.equal(settings.setSetting("defaultMatchType", "singles").success, true);
   assert.equal(settings.getAllSettings().theme, "dark");
@@ -21,6 +22,30 @@ try {
     theme: "dark",
     defaultMatchType: "singles",
   });
+
+  // Generic string keys remain supported, while malformed keys and values fail safely.
+  assert.equal(settings.setSetting("customFutureSetting", 3).success, true);
+  assert.equal(settings.getAllSettings().customFutureSetting, "3");
+  for (const [key, value] of [
+    [null, "value"],
+    [undefined, "value"],
+    ["", "value"],
+    ["   ", "value"],
+    ["invalidNullValue", null],
+    ["invalidObjectValue", { enabled: true }],
+  ]) {
+    assert.equal(settings.setSetting(key, value).success, false);
+  }
+  assert.equal(settings.getAllSettings().invalidNullValue, undefined);
+  assert.equal(settings.getAllSettings().invalidObjectValue, undefined);
+  assert.equal(settings.getAllSettings().theme, "dark");
+
+  // Repeated writes update one row and retain the latest value.
+  for (const value of ["light", "dark", "system", "light"]) {
+    assert.equal(settings.setSetting("theme", value).success, true);
+  }
+  assert.equal(settings.getAllSettings().theme, "light");
+  assert.equal(db.prepare("SELECT COUNT(*) FROM settings WHERE key = 'theme'").pluck().get(), 1);
 
   const info = settings.getApplicationInfo();
   assert.equal(typeof info.applicationName, "string");

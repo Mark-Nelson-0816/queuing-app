@@ -9,7 +9,6 @@ import {
   Moon,
   Palette,
   Play,
-  RotateCcw,
   SlidersHorizontal,
   Sun,
   Trophy,
@@ -168,7 +167,7 @@ function InfoItem({ label, value, wide = false }) {
   );
 }
 
-// Manages application preferences, metadata, and data reset controls.
+// Manages application preferences, metadata, and database maintenance controls.
 export default function Settings() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [stats, setStats] = useState(EMPTY_STATS);
@@ -176,8 +175,6 @@ export default function Settings() {
   const [savedKey, setSavedKey] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   const [showBackupConfirm, setShowBackupConfirm] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
@@ -286,24 +283,6 @@ export default function Settings() {
     handleSettingChange("defaultTournamentMatchType", value);
     if (value === "singles" && settings.defaultTournamentCategory === "mixed") {
       handleSettingChange("defaultTournamentCategory", "no_gender");
-    }
-  }
-
-  // Reset application data after confirmation and reload live statistics.
-  async function handleReset() {
-    if (isResetting) return;
-    setIsResetting(true);
-    setError("");
-    try {
-      const result = await window.api.resetAllData();
-      if (!result?.success) throw new Error("Application data could not be reset.");
-      setShowResetConfirm(false);
-      setMessage("Application data was reset successfully.");
-      await loadDashboard();
-    } catch (resetError) {
-      setError(resetError instanceof Error ? resetError.message : "Application data could not be reset.");
-    } finally {
-      setIsResetting(false);
     }
   }
 
@@ -419,10 +398,6 @@ export default function Settings() {
               <button type="button" onClick={() => setShowClearHistoryConfirm(true)} disabled={isClearingHistory} className="shrink-0 rounded-xl border border-[var(--danger)]/40 px-3 py-2 text-xs font-semibold text-[var(--danger)] hover:bg-[var(--danger-light)] disabled:opacity-50"><Trash2 className="mr-1 inline h-3.5 w-3.5" /> Clear History</button>
             </div> */}
 
-            <div className="flex min-w-0 flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0"><p className="text-sm font-medium text-[var(--text-h)]">Reset Application Data</p><p className="mt-0.5 text-xs text-[var(--text)]">Deletes players, matches, tournaments, queue data, and courts before restoring the default courts.</p></div>
-              <button type="button" onClick={() => setShowResetConfirm(true)} className="shrink-0 self-start whitespace-nowrap rounded-xl bg-[var(--danger)] px-3 py-2 text-xs font-semibold text-white hover:opacity-90 sm:self-center"><RotateCcw className="mr-1 inline h-3.5 w-3.5" /> Reset Data</button>
-            </div>
           </div>
         </Card>
 
@@ -444,10 +419,9 @@ export default function Settings() {
         </Card>
       </div>
 
-      {/* Destructive reset confirmation */}
+      {/* Database maintenance confirmations */}
       <ConfirmDialog open={showBackupConfirm} title="Backup Database" message="Create a backup copy of the current Badminton Queuing App database. The backup includes player profiles, Tournament data, Rotation history, courts, settings, and other stored records." confirmLabel={isBackingUp ? "Creating..." : "Create Backup"} variant="primary" confirmDisabled={isBackingUp} onConfirm={handleBackup} onCancel={() => !isBackingUp && setShowBackupConfirm(false)} />
       <ConfirmDialog open={showClearHistoryConfirm} title="Clear Old Rotation History?" message="This permanently deletes finished or cancelled Rotation matches older than the last 7 days. Recent history, active matches, player statistics, daily statistics, profiles, and Tournament records will be kept. This action cannot be undone." confirmLabel={isClearingHistory ? "Clearing..." : "Clear Old History"} variant="danger" confirmDisabled={isClearingHistory} onConfirm={handleClearOldHistory} onCancel={() => !isClearingHistory && setShowClearHistoryConfirm(false)} />
-      <ConfirmDialog open={showResetConfirm} title="Reset Application Data" message="Delete all application data and restore the default courts? This action cannot be undone." confirmLabel={isResetting ? "Resetting..." : "Delete Everything"} variant="danger" confirmDisabled={isResetting} onConfirm={handleReset} onCancel={() => !isResetting && setShowResetConfirm(false)} />
     </div>
   );
 }

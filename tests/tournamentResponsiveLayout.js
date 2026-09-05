@@ -21,7 +21,7 @@ const matches = readSource("src/components/tournament/TournamentMatchManagement.
 
 // Keep normal laptop widths single-column so event and match controls have room.
 assert.match(page, /2xl:grid-cols-\[18rem_minmax\(0,1fr\)\]/);
-assert.match(navigator, /sm:grid-cols-2 2xl:max-h-\[35rem\] 2xl:block/);
+assert.match(navigator, /grid gap-2 p-3 2xl:max-h-\[35rem\] 2xl:block/);
 assert.match(navigator, /2xl:sticky 2xl:top-0/);
 
 // Keep all configuration controls visible without forcing four narrow fields too early.

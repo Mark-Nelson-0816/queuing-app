@@ -77,7 +77,7 @@ try {
   // Public Display starts safely with no records and contains no mutation action.
   assert.deepEqual(getCourts(), []);
   assert.deepEqual(rotation.getRotationNextUpMatches().data.matches, []);
-  assert.match(displaySource, /No active matches/);
+  assert.match(displaySource, /No courts configured/);
   assert.match(displaySource, /Queue is empty/);
   assert.match(displaySource, /queueNext\.slice\(0, 6\)/);
   assert.doesNotMatch(pageSource, /startRotationMatch|finishRotationMatch|startTournamentMatch|finishTournamentMatch/);

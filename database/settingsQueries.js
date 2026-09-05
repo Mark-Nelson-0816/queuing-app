@@ -15,6 +15,13 @@ export function getAllSettings() {
 
 // Inserts or updates one setting value.
 export function setSetting(key, value) {
+  if (typeof key !== "string" || key.trim().length === 0) {
+    return { success: false, message: "Setting key must be a non-empty string." };
+  }
+  if (!["string", "number", "boolean"].includes(typeof value)) {
+    return { success: false, message: "Setting value must be a string, number, or boolean." };
+  }
+
   db.prepare(
     `INSERT INTO settings (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`

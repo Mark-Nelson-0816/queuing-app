@@ -26,13 +26,16 @@ assert.doesNotMatch(page, /startRotationMatch|finishRotationMatch|startTournamen
 // Keep venue-monitor content inside the renderer viewport with Next Up on the right.
 assert.match(display, /flex h-screen min-h-0 flex-col overflow-hidden/);
 assert.match(display, /grid-cols-\[minmax\(0,1fr\)_17rem\]/);
-assert.match(display, /function getCourtLayout\(activeCourtCount\)/);
-assert.match(display, /activeCourtCount === 2/);
-assert.match(display, /activeCourtCount <= 4/);
-assert.match(display, /activeCourtCount <= 6/);
-assert.match(display, /density: "dense"/);
-assert.match(display, /Math\.ceil\(activeCourtCount \/ 3\)/);
-assert.match(display, /gridTemplateRows: `repeat\(\$\{courtLayout\.rows\}, minmax\(0, 1fr\)\)`/);
+assert.match(display, /const MAX_COLUMNS = 6/);
+assert.match(display, /function getOptimalColumns\(count\)/);
+assert.match(display, /if \(count <= 2\) return count/);
+assert.match(display, /while \(Math\.ceil\(count \/ rows\) > MAX_COLUMNS\)/);
+assert.match(display, /function chunkIntoRows\(items, columns\)/);
+assert.match(display, /function getDensity\(columns, rowCount\)/);
+assert.match(display, /const \{ rows: courtRows, styles \} = useMemo/);
+assert.match(display, /courtRows\.map\(\(rowCourts, rowIndex\)/);
+assert.match(display, /rowCourts\.map\(\(court\)/);
+assert.match(display, /<AvailableCourtCard key=\{court\.id\}/);
 
 // Court cards use their full grid cell with compact, vertical per-player teams.
 assert.match(display, /title=\{court\.name\}/);

@@ -35,8 +35,9 @@ assert.match(source, /Desktop Configuration/);
 assert.match(source, /Promise\.allSettled/);
 assert.match(source, /current\[key\] === value/);
 assert.match(source, /window\.api\.backupDatabase/);
-assert.match(source, /window\.api\.resetAllData/);
 assert.match(source, /showBackupConfirm/);
-assert.match(source, /showResetConfirm/);
+assert.doesNotMatch(source, /window\.api\.resetAllData/);
+assert.doesNotMatch(source, /showResetConfirm/);
+assert.doesNotMatch(source, />Reset Application Data</);
 
 console.log("Settings responsive-layout source checks passed.");

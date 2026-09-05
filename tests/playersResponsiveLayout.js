@@ -18,19 +18,19 @@ assert.match(playersPage, /min-w-0 space-y-3/);
 assert.match(profilesTable, /min-w-0 overflow-hidden/);
 assert.match(todayTable, /min-w-0 overflow-hidden/);
 
-// Wide table content scrolls inside its card instead of compressing or widening the page.
+// Responsive fixed-column tables use their available card width and keep emergency horizontal scrolling.
 for (const tableSource of [profilesTable, todayTable]) {
   assert.match(tableSource, /overflow-x-auto/);
-  assert.match(tableSource, /table-fixed/);
+  assert.match(tableSource, /<table className="w-full table-fixed/);
   assert.match(tableSource, /<colgroup>/);
   assert.doesNotMatch(tableSource, /overflow-y-auto|max-h-\[/);
 }
-assert.match(profilesTable, /min-w-\[1080px\]/);
-assert.match(todayTable, /min-w-\[1000px\]/);
+assert.doesNotMatch(profilesTable, /min-w-\[1080px\]/);
+assert.doesNotMatch(todayTable, /min-w-\[1000px\]/);
 
-// Compact data badges and table actions remain single-line at laptop widths.
+// Compact data badges remain single-line while profile actions can wrap inside narrow columns.
 assert.match(playerBadges, /inline-flex whitespace-nowrap rounded-full/);
-assert.match(profilesTable, /flex flex-nowrap items-center justify-end/);
+assert.match(profilesTable, /flex flex-wrap items-center justify-end/);
 assert.match(profilesTable, /whitespace-nowrap rounded-lg bg-\[var\(--primary\)\]/);
 assert.match(todayTable, /whitespace-nowrap rounded-lg border/);
 

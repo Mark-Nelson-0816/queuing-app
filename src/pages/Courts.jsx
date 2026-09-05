@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CourtCard from "../components/CourtCard";
 
 // Manages courts and displays their current match assignments.
@@ -8,6 +8,7 @@ export default function Courts() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingCourt, setIsAddingCourt] = useState(false);
+  const addCourtLockRef = useRef(false);
 
   // Reload all courts from the main process.
   const loadCourts = async () => {
@@ -49,11 +50,12 @@ export default function Courts() {
 
   // Adds a named court and refreshes the list.
   const handleAddCourt = async () => {
-    if (isAddingCourt) return;
+    if (addCourtLockRef.current) return;
 
     const name = courtName.trim();
     if (!name) return;
 
+    addCourtLockRef.current = true;
     setIsAddingCourt(true);
     try {
       const result = await window.api.addCourt(name);
@@ -66,6 +68,7 @@ export default function Courts() {
     } catch {
       showMessage("Unable to add court.");
     } finally {
+      addCourtLockRef.current = false;
       setIsAddingCourt(false);
     }
   };
