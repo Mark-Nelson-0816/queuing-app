@@ -75,7 +75,6 @@ function createWindow() {
   });
 
   mainWindow.maximize();
-  mainWindow.webContents.openDevTools();
   
   if (app.isPackaged) {
     const indexPath = path.join(
